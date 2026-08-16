@@ -1,5 +1,5 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, BALANCE } from './data.js?v=r10';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r10';
 import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r10';
 
 const P = PAL.world;
@@ -16,19 +16,21 @@ export class World {
     // persistent campaign state (survives battles)
     this.save = save || {
       gold: BALANCE.startGold,
-      heroHp: 120, heroMaxHp: 120,
+      heroHp: HERO.hp, heroMaxHp: HERO.hp,
       troops: Array.from({ length: BALANCE.startTroops }, () => ({ type: 'spear' })),
       armyCap: BALANCE.armyCapBase,
       camps: WORLD.camps.map(c => ({ id: c.id, razed: false })),
       won: false,
       x: WORLD.heroStart.x, y: WORLD.heroStart.y,
       parties: null,
-      // each campaign rolls its own seed: garrisons, party comps and spawns differ per run
-      runSeed: (Math.random() * 1e9) | 0,
+      // each campaign rolls its own seed: garrisons, party comps and spawns differ per run —
+      // unless a test pinned one via scenario('world', {seed}) for reproducible test worlds
+      runSeed: game.testSeed != null ? game.testSeed : (Math.random() * 1e9) | 0,
       stats: { won: 0, kills: 0, lost: 0, playT: 0 },
       hard: !!game.hardNext,
     };
     game.hardNext = false;
+    game.testSeed = null;
     if (!this.save.stats) this.save.stats = { won: 0, kills: 0, lost: 0, playT: 0 };
     if (!this.save.runSeed) this.save.runSeed = 777;
 
@@ -303,7 +305,8 @@ export class World {
   }
 
   // brutes hit ~5x harder than a bandit; knights count double. Badges show THIS number.
-  strength(comp) { return comp.reduce((s, t) => s + (t === 'brute' ? 5 : 1), 0); }
+  // (shared with battle.js's enemyStrength/playerStrength — one formula, not two.)
+  strength(comp) { return enemyStrength(comp); }
 
   // Garrisons are rolled ONCE — when your scouts first sight the camp — and frozen.
   // Bandits don't magically reinforce because you recruited; what you scouted is what you fight.
@@ -330,7 +333,7 @@ export class World {
     return st && st.garrison ? this.strength(st.garrison) : null;
   }
   myStrength() {
-    return 3 + this.save.troops.reduce((s, t) => s + (t.type === 'knight' ? 2 : 1), 0);
+    return playerStrength(this.save.troops);
   }
 
   nearSettlement(r = 110) {
@@ -401,6 +404,24 @@ export class World {
         save.stats.kills += result.kills || 0;
         save.stats.lost += result.lost || 0;
         if (result.victory) save.stats.won++;
+        // whittle down the enemy force by exactly who died (by type, not by array
+        // position) — used below both for camp-garrison attrition and for the
+        // roaming party you disengaged from. Reused per branch since each only
+        // needs it once, but built from the same dead-type list either way.
+        const removeDead = (comp) => {
+          const dead = (result.deadTypes || []).slice();
+          return comp.filter(t => {
+            const idx = dead.indexOf(t);
+            if (idx >= 0) { dead.splice(idx, 1); return false; }
+            return true;
+          });
+        };
+        // camp garrisons no longer resurrect their dead on a failed or abandoned raid —
+        // what you killed stays dead, so attrition against a camp is real
+        if (partyMeta && partyMeta.campId && !result.victory) {
+          const st = this.save.camps.find(c => c.id === partyMeta.campId);
+          if (st && st.garrison) st.garrison = removeDead(st.garrison);
+        }
         if (result.victory) {
           save.gold += result.loot;
           save.troops = result.survivors;
@@ -417,9 +438,10 @@ export class World {
           save.troops = result.survivors;
           save.heroHp = Math.max(20, result.heroHp);
           save.toast = 'You disengage and ride clear';
-          // the enemy party you fled from stays on the map, minus its dead
-          if (partyMeta) {
-            const remaining = partyMeta.comp.slice(result.kills);
+          // the enemy party you fled from stays on the map, minus its actual dead
+          // (a camp garrison isn't a roaming party — its attrition is handled above instead)
+          if (partyMeta && !partyMeta.campId) {
+            const remaining = removeDead(partyMeta.comp);
             if (remaining.length > 0) {
               save.parties = save.parties || [];
               save.parties.push({ camp: partyMeta.camp, x: save.x + 260, y: save.y - 60, comp: remaining, home: partyMeta.home });
@@ -483,13 +505,17 @@ export class World {
       if (s.kind === 'town' && inp.pressed.has('KeyR')) this.recruit('knight');
       if (inp.pressed.has('KeyF')) {
         const healCost = s.freeHeal ? 0 : BALANCE.healCost;
-        if (this.save.gold >= healCost && this.save.heroHp < this.save.heroMaxHp) {
+        const heroHurt = this.save.heroHp < this.save.heroMaxHp;
+        const troopsHurt = this.save.troops.some(t => t.hp != null && t.hp < UNIT_TYPES[t.type].hp);
+        if (!heroHurt && !troopsHurt) this.say('Already rested');
+        else if (this.save.gold < healCost) this.say('Not enough gold');
+        else {
           this.save.gold -= healCost;
           this.save.heroHp = this.save.heroMaxHp;
           for (const t of this.save.troops) delete t.hp;
           this.game.sfx.coin();
           this.say(s.freeHeal ? 'The hot springs of Coldwell mend every wound — free of charge' : 'Warband rested and healed');
-        } else this.say(this.save.heroHp >= this.save.heroMaxHp ? 'Already rested' : 'Not enough gold');
+        }
       }
       if (s.kind === 'town' && inp.pressed.has('KeyT')) {
         const cost = 40 + (this.save.armyCap - BALANCE.armyCapBase) * 20;
@@ -559,7 +585,7 @@ export class World {
           this.save.toast = `Camp razed (${razedNow}/3)!` +
             (freed > 0 ? ` ${freed} freed captives join your warband.` : '') + remnantNote;
         }
-      }, 'camp', false, null,
+      }, 'camp', false, { campId: camp.id },
       camp.stronghold ? 'The final battle — for the realm!' : 'One of the 3 camps — raze it to reach Wolfsjaw');
       return;
     }
@@ -1092,9 +1118,9 @@ export class World {
     let lines = null;
     if (s) {
       const sc = this.costAt(s, 'spear'), ac = this.costAt(s, 'archer');
-      const healTxt = s.freeHeal ? 'F Rest & heal FREE' : 'F Rest & heal 10g';
+      const healTxt = s.freeHeal ? 'F Rest & heal FREE' : `F Rest & heal ${BALANCE.healCost}g`;
       lines = s.kind === 'town'
-        ? [`${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · R Knight 60g`, `${healTxt} · T +2 army cap ${40 + (this.save.armyCap - BALANCE.armyCapBase) * 20}g`]
+        ? [`${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · R Knight ${UNIT_TYPES.knight.cost}g`, `${healTxt} · T +2 army cap ${40 + (this.save.armyCap - BALANCE.armyCapBase) * 20}g`]
         : [`Village of ${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · ${healTxt}`];
     } else if (camp) {
       const razedC = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;

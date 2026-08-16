@@ -65,7 +65,7 @@ export const UNIT_TYPES = {
   archer: {
     name: 'Archer', icon: 'bow',
     hp: 60, dmg: 10, range: 230, speed: 95, radius: 10,
-    cooldown: 1.7, cost: 25, ranged: true, projSpeed: 340,
+    cooldown: 1.7, cost: 25, ranged: true, projSpeed: 340, keepAway: 130,
   },
   knight: {
     name: 'Knight', icon: 'helm',
@@ -121,6 +121,17 @@ export const WORLD = {
   ],
   // mountains / forests / rivers are procedurally scattered with a fixed seed in world.js
 };
+
+// Shared strength formulas — the single source of truth for "how strong is this force",
+// used by both the world map (party/garrison badges, chase/flee thresholds) and the battle
+// scene (defeat diagnosis). `comp` entries may be plain type strings (world party/garrison
+// comps) or {type} objects (battle setup.enemies) — both shapes are accepted.
+export function enemyStrength(comp) {
+  return (comp || []).reduce((s, t) => s + ((typeof t === 'string' ? t : t.type) === 'brute' ? 5 : 1), 0);
+}
+export function playerStrength(troops) {
+  return 3 + (troops || []).reduce((s, t) => s + (t.type === 'knight' ? 2 : 1), 0);
+}
 
 export const BALANCE = {
   startGold: 80,

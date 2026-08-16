@@ -46,6 +46,10 @@ export class Input {
       if (['Space', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.code)) e.preventDefault();
     });
     window.addEventListener('keyup', e => this.keys.delete(e.code));
+    // a keyup can be lost entirely if focus left the page while the key was held
+    // (alt-tab, a browser shortcut) — without this, movement/attack keys stick forever
+    window.addEventListener('blur', () => this.keys.clear());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.keys.clear(); });
     canvas.addEventListener('mousemove', e => {
       const r = canvas.getBoundingClientRect();
       this.mouse.x = (e.clientX - r.left) * (canvas.width / r.width);

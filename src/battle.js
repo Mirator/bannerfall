@@ -1,9 +1,12 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r10';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r10';
 import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r10';
 
 const BASE = Object.assign({}, PAL.battle);
-const P = PAL.battle; // mutated per-biome in the Battle constructor (one battle at a time)
+// P is battle.js's own working copy, re-tinted per biome in the constructor — never the
+// shared PAL.battle export itself, so a battle never leaves that export mutated for
+// whatever reads it next (menu, world map, a future concurrent battle).
+const P = Object.assign({}, PAL.battle);
 
 export class Battle {
   // setup: { troops:[{type}], enemies:[{type}], seed, title, onEnd(result) }
@@ -139,16 +142,18 @@ export class Battle {
     });
     this.totalEnemies = this.enemies.length;
     this.startTroops = this.troops.length;
-    // strengths on the same scale the map uses — for the defeat diagnosis
-    this.enemyStrength = (setup.enemies || []).reduce((s, e) => s + (e.type === 'brute' ? 5 : 1), 0);
-    this.playerStrength = 3 + (setup.troops || []).reduce((s, t) => s + (t.type === 'knight' ? 2 : 1), 0);
+    // strengths on the same scale the map uses (world.js's strength()/myStrength()) — for the defeat diagnosis
+    this.enemyStrength = enemyStrength(setup.enemies);
+    this.playerStrength = playerStrength(setup.troops);
     this.kills = 0;
+    this.deadEnemyTypes = [];   // exactly which enemy types died — not just how many
     this.lastAction = 0;      // sim time of the last hit dealt or taken
     this.bloodlust = false;   // stalemate breaker: survivors stop kiting and close in
     // deploy window scales with WHO holds the initiative:
     // mutual field battle = 8s (both sides form up), you storming them = 4s scramble,
     // you running down a fleeing party = 0 (you caught them), their ambush = 0 (they caught you).
     this.deployT = setup.ambush ? 0 : (setup.deploy != null ? setup.deploy : 8);
+    this.deployMax = this.deployT || 1; // the HUD bar divides by this, not a hardcoded window length
     this.assignSlots();
   }
 
@@ -240,6 +245,7 @@ export class Battle {
     this.game.sfx.hit();
     if (e.hp <= 0) {
       this.kills++;
+      this.deadEnemyTypes.push(e.type);
       const idx = this.enemies.indexOf(e);
       if (idx >= 0) this.enemies.splice(idx, 1);
       this.particles.shards(e.x, e.y, e.type === 'brute' ? P.enemyDark : P.enemy, e.type === 'brute' ? 16 : 10, this.rng);
@@ -327,12 +333,14 @@ export class Battle {
     if (this.state === 'end') {
       this.particles.update(dt);
       this.updateCamera(dt);
-      if (this.stateT > 2.6) {
+      if (this.stateT > 2.6 && !this.onEndFired) {
+        this.onEndFired = true; // onEnd must fire exactly once — this branch re-enters every frame
         const result = {
           victory: this.victory, retreated: this.retreated, loot: this.loot || 0, kills: this.kills,
           heroHp: Math.max(1, this.hero.hp),
           lost: this.startTroops - this.troops.length,
           survivors: this.troops.map(t => ({ type: t.type, hp: t.hp })),
+          deadTypes: this.deadEnemyTypes.slice(),
         };
         this.setup.onEnd && this.setup.onEnd(result);
       }
@@ -359,8 +367,9 @@ export class Battle {
       if (!ax.any) { h.vx *= Math.max(0, 1 - HERO.friction * dt); h.vy *= Math.max(0, 1 - HERO.friction * dt); }
     } else {
       h.dashT -= dt;
-      // trample
-      for (const e of this.enemies) {
+      // trample — snapshot the list: damageEnemy() splices this.enemies on a kill, and
+      // iterating the live array would skip whichever enemy slides into the vacated index
+      for (const e of [...this.enemies]) {
         if (dist2(h.x, h.y, e.x, e.y) < 30 * 30 && !e._trampled) {
           e._trampled = true;
           this.damageEnemy(e, HERO.dashDmg, h.vx * 0.4 * dt * 60, h.vy * 0.4 * dt * 60, 'hero');
@@ -592,7 +601,7 @@ export class Battle {
       for (let j = i + 1; j < all.length; j++) {
         const b = all[j];
         // same-team pairs keep extra spacing so a squad reads as countable units, not one blob
-        const sameTeam = (a.team || 'x') === (b.team || 'x') || (this.troops.includes(a) === this.troops.includes(b));
+        const sameTeam = this.troops.includes(a) === this.troops.includes(b);
         const rr = a.d.radius + b.d.radius + (sameTeam ? 13 : 7);
         const d2 = dist2(a.x, a.y, b.x, b.y);
         if (d2 < rr * rr && d2 > 0.01) {
@@ -1317,7 +1326,7 @@ export class Battle {
     ctx.fillStyle = P.hpBack;
     rrect(ctx, bx + 14, by + 24, 60, 5, 2.5); ctx.fill();
     ctx.fillStyle = P.cream;
-    const dfrac = 1 - Math.max(0, h.dashCdT) / 2.2;
+    const dfrac = 1 - Math.max(0, h.dashCdT) / HERO.dashCd;
     rrect(ctx, bx + 14, by + 24, 60 * clamp(dfrac, 0, 1), 5, 2.5); ctx.fill();
     // commands
     ctx.font = '700 13px system-ui, sans-serif';
@@ -1396,7 +1405,7 @@ export class Battle {
       ctx.fillStyle = P.hpBack;
       rrect(ctx, W / 2 - dw / 2 + 16, 96, dw - 32, 6, 3); ctx.fill();
       ctx.fillStyle = P.hero;
-      rrect(ctx, W / 2 - dw / 2 + 16, 96, (dw - 32) * (this.deployT / 8), 6, 3); ctx.fill();
+      rrect(ctx, W / 2 - dw / 2 + 16, 96, (dw - 32) * (this.deployT / this.deployMax), 6, 3); ctx.fill();
       ctx.globalAlpha = 1;
     }
 

@@ -1,8 +1,19 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=r10';
+import { PAL, WORLD } from './data.js?v=r10';
 import { Input, Camera, Sfx, makeRng, rrect, mountain } from './engine.js?v=r10';
 import { Battle } from './battle.js?v=r10';
 import { World } from './world.js?v=r10';
+
+// A save is only as good as its shape: an old-schema or hand-corrupted bf_save must
+// never reach `new World(...)`, which dereferences save.camps/save.troops unguarded.
+// Reject anything that doesn't look like a real save instead of crashing the game loop.
+function isValidSave(save) {
+  if (!save || typeof save !== 'object') return false;
+  if (typeof save.gold !== 'number' || typeof save.x !== 'number' || typeof save.y !== 'number') return false;
+  if (!Array.isArray(save.troops) || !Array.isArray(save.camps)) return false;
+  const ids = new Set(save.camps.map(c => c && c.id));
+  return WORLD.camps.every(c => ids.has(c.id));
+}
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -26,21 +37,31 @@ class Game {
     this.victoryT = 0;
     this.paused = false;
     this.saveTimer = 0;
+    // once any headless test API call drives the game (scenario/step/tap/key/mouse/click),
+    // persistence switches to a separate slot so critics/tests can never overwrite or wipe
+    // a real player's campaign save.
+    this.testMode = false;
+    this.testSeed = null; // one-shot deterministic runSeed override for scenario('world', {seed})
   }
+
+  get saveKey() { return this.testMode ? 'bf_save_test' : 'bf_save'; }
 
   // ---- campaign persistence: the run survives a refresh
   persistRun() {
     if (this.sceneName === 'world' && this.scene && this.scene.save && !this.scene.save.won) {
-      try { localStorage.setItem('bf_save', JSON.stringify(this.scene.save)); } catch (e) {}
+      try { localStorage.setItem(this.saveKey, JSON.stringify(this.scene.save)); } catch (e) {}
     }
   }
   loadRun() {
     try {
-      const raw = localStorage.getItem('bf_save');
-      return raw ? JSON.parse(raw) : null;
+      const raw = localStorage.getItem(this.saveKey);
+      if (!raw) return null;
+      const save = JSON.parse(raw);
+      if (!isValidSave(save)) { this.clearRun(); return null; }
+      return save;
     } catch (e) { return null; }
   }
-  clearRun() { try { localStorage.removeItem('bf_save'); } catch (e) {} }
+  clearRun() { try { localStorage.removeItem(this.saveKey); } catch (e) {} }
 
   startWorld(save) {
     this.scene = new World(this, save);
@@ -90,7 +111,7 @@ class Game {
         this.clearRun();
         this.hardNext = true;
         this.startWorld(null);
-      } else if (this.input.pressed.has('Enter') || this.input.mouse.clicked) {
+      } else if (this.input.pressed.has('Enter')) {
         this.sfx.horn(262);
         this.clearRun();
         this.startWorld(null);
@@ -288,13 +309,28 @@ resize();
 const DT = 1 / 60;
 let acc = 0, last = performance.now(), lastTick = 0;
 
+// A backlog cap: without it, a throttled/backgrounded tab (rAF paused, watchdog still
+// ticking at ~20Hz) accumulates real minutes of sim debt and then fast-forwards through
+// it on refocus. 0.25s is generous for normal hitches but bounds the worst case.
+const MAX_ACC = 0.25;
+
 function frame(now) {
   acc += Math.min(0.1, (now - last) / 1000);
+  acc = Math.min(acc, MAX_ACC);
   last = now;
   lastTick = now;
-  let n = 0;
-  while (acc >= DT && n++ < 5) { game.update(DT); acc -= DT; }
-  game.draw();
+  try {
+    let n = 0;
+    while (acc >= DT && n++ < 5) { game.update(DT); acc -= DT; }
+    game.draw();
+  } catch (err) {
+    // an exception here would otherwise skip the reschedule below and freeze the
+    // tab forever (and, for the watchdog, replay the same throw at 20Hz) — recover
+    // to the menu instead of dying silently. The save on disk is untouched.
+    console.error('Bannerfall: recovered from an error in the game loop', err);
+    acc = 0;
+    game.scene = null; game.sceneName = 'menu'; game.menuT = 0; game.paused = false;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -305,27 +341,39 @@ setInterval(() => {
   const now = performance.now();
   if (now - lastTick > 300) {
     acc += Math.min(0.1, (now - last) / 1000);
+    acc = Math.min(acc, MAX_ACC);
     last = now;
-    let n = 0;
-    while (acc >= DT && n++ < 3) { game.update(DT); acc -= DT; }
-    game.draw();
+    try {
+      let n = 0;
+      while (acc >= DT && n++ < 3) { game.update(DT); acc -= DT; }
+      game.draw();
+    } catch (err) {
+      console.error('Bannerfall: recovered from an error in the watchdog loop', err);
+      acc = 0;
+      game.scene = null; game.sceneName = 'menu'; game.menuT = 0; game.paused = false;
+    }
   }
 }, 50);
 
 // ---------------------------------------------------------------- test API
 window.__g = game; // raw handle for critics/debugging
+// any call through window.game flips persistence to a separate save slot (see saveKey
+// above) — a critic driving the game headlessly can never read, overwrite, or wipe a
+// real player's campaign.
+const markTest = () => { game.testMode = true; };
 window.game = {
   scene: () => game.sceneName,
   step: (seconds = DT) => {
+    markTest();
     const steps = Math.min(60 * 30, Math.round(seconds / DT));
     for (let i = 0; i < steps; i++) game.update(DT);
     game.draw();
     return game.sceneName;
   },
-  key: (code, down = true) => { game.input.injectKey(code, down); },
-  tap: (code) => { game.input.injectKey(code, true); game.update(DT); game.input.injectKey(code, false); game.draw(); },
-  mouse: (x, y, down) => { game.input.injectMouse(x, y, down); },
-  click: (x, y) => { game.input.injectMouse(x, y, true); game.update(DT); game.input.injectMouse(x, y, false); game.draw(); },
+  key: (code, down = true) => { markTest(); game.input.injectKey(code, down); },
+  tap: (code) => { markTest(); game.input.injectKey(code, true); game.update(DT); game.input.injectKey(code, false); game.draw(); },
+  mouse: (x, y, down) => { markTest(); game.input.injectMouse(x, y, down); },
+  click: (x, y) => { markTest(); game.input.injectMouse(x, y, true); game.update(DT); game.input.injectMouse(x, y, false); game.draw(); },
   shot: () => canvas.toDataURL('image/png'),
   state: () => {
     const s = { scene: game.sceneName };
@@ -348,10 +396,17 @@ window.game = {
     }
     return s;
   },
-  // jump straight into a scenario for testing
-  scenario: (name) => {
+  // jump straight into a scenario for testing. opts.seed pins the world's runSeed so
+  // camp garrisons and party comps are reproducible across test runs (world.js reads
+  // game.testSeed once and clears it, mirroring the existing hardNext handshake).
+  scenario: (name, opts) => {
+    markTest();
+    game.paused = false; // jumping to a scenario must not inherit a stale pause from prior state
     if (name === 'menu') { game.sceneName = 'menu'; game.scene = null; }
-    else if (name === 'world') game.startWorld(null);
+    else if (name === 'world') {
+      if (opts && opts.seed != null) game.testSeed = opts.seed;
+      game.startWorld(null);
+    }
     else if (name === 'battle_small') {
       game.startBattle({
         troops: [{ type: 'spear' }, { type: 'spear' }, { type: 'archer' }],

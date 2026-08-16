@@ -261,7 +261,7 @@ h4 {{ margin: 16px 0 6px; font-size: 13px; text-transform: uppercase; letter-spa
 </div>
 <script>
 function showPhase(n) {{
-  for (const i of [1, 2, 3]) {{
+  for (const i of [1, 2, 3, 4]) {{
     document.getElementById('phase' + i).style.display = i === n ? '' : 'none';
     const t = document.getElementById('tab-p' + i);
     t.classList.toggle('active', i === n);

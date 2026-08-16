@@ -25,7 +25,9 @@
 //    exposed on the test API — if data.js balance numbers change, update
 //    these mirrors too (flagged as a testability gap in the report).
 
-window.__qaResult = (function runQaSuite() {
+// The suite body is a real function, not a one-shot IIFE — window.runQaSuite() below
+// calls this again on demand, instead of replaying a cached result from paste time.
+function runQaSuiteImpl() {
   const g = window.game, G = window.__g;
   const results = [];
 
@@ -119,25 +121,43 @@ window.__qaResult = (function runQaSuite() {
     const save = G.scene.save;
     save.gold = 100;
     save.troops = [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }]; // odd count
-    const startTroopCount = save.troops.length, startGold = save.gold;
+    const startGold = save.gold;
     G.scene.startBattle(['bandit'], 'TEST DEFEAT', null);
     assert(g.scene() === 'battle', 'startBattle did not switch scene to battle');
+    // no-combat forced defeat: all 5 troops the hero rode out with survive
     G.scene.endBattle(false);
     g.step(3); // flush the end-banner hold + onEnd
     assert(g.scene() === 'world', 'did not return to world after forced defeat, scene=' + g.scene());
     const w = g.state().world;
     const expectedGold = Math.max(25, Math.round(startGold * (1 - DEFEAT_GOLD_LOSS))); // spec v2: 30% loss with a 25g comeback floor
     assert(w.gold === expectedGold, 'defeat gold penalty: expected ' + expectedGold + ' (30% loss, 25g floor), got ' + w.gold);
-    // spec v2 (phase-2 panel): defeat keeps the ACTUAL battle survivors (real survivor tracking),
-    // with a volunteer-rally floor of 2 troops. Forced defeat with no combat = all 5 survive.
-    assert(w.troops >= 2 && w.troops <= startTroopCount,
-      'defeat troop tracking: expected 2..' + startTroopCount + ' actual survivors, got ' + w.troops);
-    assert(w.troops === startTroopCount,
-      'no-combat forced defeat should keep all ' + startTroopCount + ' survivors, got ' + w.troops);
+    assert(w.troops === 5, 'no-combat forced defeat should keep all 5 survivors, got ' + w.troops);
     // spec v3 (phase-3 coherence): survivors carry you to the NEAREST settlement (from 620,1250 that is Ashford at 700,1150+80)
     assert(w.hero.x === 700 && w.hero.y === 1230,
       'defeat respawn expected nearest settlement (700,1230), got (' + w.hero.x + ',' + w.hero.y + ')');
-    return 'defeat penalties correct: gold ' + startGold + '->' + w.gold + ', troops ' + startTroopCount + '->' + w.troops + ', respawn at heroStart';
+    return 'defeat penalties correct: gold ' + startGold + '->' + w.gold + ', troops 5->' + w.troops + ', respawn at nearest settlement';
+  });
+
+  // ======================================================================
+  // 3b. Volunteer-rally floor: a defeat with only 1 actual survivor tops up to 2
+  //     (world.js's rally-floor branch is otherwise never exercised — a no-combat
+  //     forced defeat always keeps every troop, so the floor never binds)
+  // ======================================================================
+  record('defeat_volunteer_rally_floor_tops_up_to_two', () => {
+    g.scenario('world');
+    const save = G.scene.save;
+    save.gold = 100;
+    save.troops = [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }];
+    G.scene.startBattle(['bandit'], 'TEST DEFEAT FLOOR', null);
+    assert(g.scene() === 'battle', 'startBattle did not switch scene to battle');
+    // simulate real combat losses: only 1 troop rides out of this fight
+    G.scene.troops = [{ type: 'spear', hp: 10 }];
+    G.scene.endBattle(false);
+    g.step(3);
+    assert(g.scene() === 'world', 'did not return to world after forced defeat, scene=' + g.scene());
+    const w = g.state().world;
+    assert(w.troops === 2, 'expected the volunteer-rally floor to top 1 survivor up to 2, got ' + w.troops);
+    return 'volunteer-rally floor confirmed: 1 actual survivor topped up to ' + w.troops;
   });
 
   // ======================================================================
@@ -176,11 +196,16 @@ window.__qaResult = (function runQaSuite() {
     let introGuard = 0;
     while (g.state().battle.state === 'intro' && introGuard < 50) { g.step(0.1); introGuard++; }
     assert(g.state().battle.state !== 'intro', 'battle stuck in intro after ' + (introGuard * 0.1) + 's');
-    g.tap('Digit1'); const c1 = g.state().battle.command;
+    // command starts at 'follow' by default, so tap charge/hold FIRST — otherwise a
+    // Digit1 -> follow check right at battle start passes even if the binding is deleted,
+    // since it's just reading the untouched initial value, not a real transition.
+    g.tap('Digit3'); const c3a = g.state().battle.command;
+    assert(c3a === 'hold', 'Digit3 expected command=hold, got ' + c3a);
     g.tap('Digit2'); const c2 = g.state().battle.command;
-    g.tap('Digit3'); const c3 = g.state().battle.command;
-    assert(c1 === 'follow', 'Digit1 expected command=follow, got ' + c1);
     assert(c2 === 'charge', 'Digit2 expected command=charge, got ' + c2);
+    g.tap('Digit1'); const c1 = g.state().battle.command;
+    assert(c1 === 'follow', 'Digit1 expected command=follow, got ' + c1);
+    g.tap('Digit3'); const c3 = g.state().battle.command;
     assert(c3 === 'hold', 'Digit3 expected command=hold, got ' + c3);
     const troops = G.scene.troops;
     assert(troops.length > 0, 'no troops to check hold positions on');
@@ -258,7 +283,7 @@ window.__qaResult = (function runQaSuite() {
   // 8. World: winning a party battle decreases parties.length by exactly 1
   // ======================================================================
   record('world_party_battle_decreases_party_count_by_one', () => {
-    g.scenario('world');
+    g.scenario('world', { seed: 424242 }); // pinned: reproducible party spawns across runs
     const scene = G.scene;
     const before = scene.parties.length;
     assert(before > 0, 'no parties spawned to test collision against');
@@ -280,7 +305,7 @@ window.__qaResult = (function runQaSuite() {
   // 9. World: camp raid razes camp + grants captives (and respects cap)
   // ======================================================================
   record('world_camp_raid_razes_camp_and_grants_captives', () => {
-    g.scenario('world');
+    g.scenario('world', { seed: 424242 }); // pinned: reproducible garrison rolls across runs
     const scene = G.scene;
     const campState = scene.save.camps.find(c => c.id === 'c1');
     assert(campState && !campState.razed, 'camp c1 expected un-razed at fresh world start');
@@ -306,7 +331,7 @@ window.__qaResult = (function runQaSuite() {
   });
 
   record('world_camp_raid_captives_capped_at_army_cap', () => {
-    g.scenario('world');
+    g.scenario('world', { seed: 424242 }); // pinned: reproducible garrison rolls across runs
     const scene = G.scene;
     scene.save.armyCap = 4;
     scene.save.troops = [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }]; // already at cap
@@ -343,7 +368,7 @@ window.__qaResult = (function runQaSuite() {
   // the battle-return, which blocks ALL party engagement regardless of
   // grace, so only the timer's own decay is being observed below.
   record('world_grace_timer_active_after_battle_then_decays', () => {
-    g.scenario('world');
+    g.scenario('world', { seed: 424242 }); // pinned: reproducible party spawns across runs
     const scene = G.scene;
     let target = null;
     for (const p of scene.parties) { if (!scene.inSafeZone(p.x, p.y)) { target = p; break; } }
@@ -378,7 +403,7 @@ window.__qaResult = (function runQaSuite() {
   // 11. World: spawned party strength always stays within [2, 24]
   // ======================================================================
   record('world_party_strength_stays_in_2_24_band', () => {
-    g.scenario('world');
+    g.scenario('world', { seed: 424242 }); // pinned: reproducible rng stream across runs
     const scene = G.scene;
     const fakeCamp = { id: '__test_camp__', x: 1000, y: 1000 };
     const bands = [0.0001, 0.5, 1.0, 5, 100]; // extremes + normal, to probe the clamp(2,24)
@@ -441,7 +466,7 @@ window.__qaResult = (function runQaSuite() {
       { px: 2350, py: 1150, hx: 1750, hy: 1150 }, // pursuit route passes through Highmere's safe zone
     ];
     for (const c of cases) {
-      g.scenario('world');
+      g.scenario('world', { seed: 424242 }); // pinned: reproducible across runs
       const w = G.scene;
       w.grace = 0;
       w.hero.x = c.hx; w.hero.y = c.hy;
@@ -464,13 +489,14 @@ window.__qaResult = (function runQaSuite() {
   const passed = results.filter(r => r.ok).length;
   const failed = results.length - passed;
   return { passed, failed, results };
-})();
+}
 
 window.runQaSuite = function () {
-  // re-runnable entry point without re-pasting the whole file: not redefined
-  // here to keep this file idempotent as a single pasted block; use the IIFE
-  // above (re-paste this file) to re-run. Exposed for readability/discovery.
+  // actually re-runs the suite against the game's current (possibly edited) code,
+  // instead of returning whatever __qaResult held from the last paste.
+  window.__qaResult = runQaSuiteImpl();
   return window.__qaResult;
 };
 
+window.__qaResult = runQaSuiteImpl();
 window.__qaResult;
