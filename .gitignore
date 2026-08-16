@@ -1,0 +1,11 @@
+# Copyrighted reference screenshots (Thronefall, Bannerlord, Bad North) — never publish
+references/
+
+# Dev-loop artifacts (large, regenerable)
+shots/
+progress.html
+progress.json
+
+# Local tooling
+.claude/
+__pycache__/
