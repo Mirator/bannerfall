@@ -475,6 +475,23 @@ export class World {
             return true;
           });
         };
+        const restoreRoamingParty = () => {
+          // A roaming encounter is removed before battle entry. Reinsert only its
+          // surviving composition at the encounter point; defeat changes save.x/y
+          // to the recovery village, so those coordinates must come from metadata.
+          if (!partyMeta || partyMeta.campId) return;
+          const remaining = removeDead(partyMeta.comp);
+          if (remaining.length === 0) return;
+          save.parties = save.parties || [];
+          save.parties.push({
+            camp: partyMeta.camp,
+            x: partyMeta.x,
+            y: partyMeta.y,
+            comp: remaining,
+            home: { ...partyMeta.home },
+            waryT: partyMeta.waryT || 0,
+          });
+        };
         // camp garrisons no longer resurrect their dead on a failed or abandoned raid —
         // what you killed stays dead, so attrition against a camp is real
         if (partyMeta && partyMeta.campId && !result.victory) {
@@ -497,15 +514,8 @@ export class World {
           save.troops = result.survivors;
           save.heroHp = Math.max(20, result.heroHp);
           save.toast = 'You disengage and ride clear';
-          // the enemy party you fled from stays on the map, minus its actual dead
-          // (a camp garrison isn't a roaming party — its attrition is handled above instead)
-          if (partyMeta && !partyMeta.campId) {
-            const remaining = removeDead(partyMeta.comp);
-            if (remaining.length > 0) {
-              save.parties = save.parties || [];
-              save.parties.push({ camp: partyMeta.camp, x: save.x + 260, y: save.y - 60, comp: remaining, home: partyMeta.home });
-            }
-          }
+          // The enemy party you fled from stays at the encounter, minus its actual dead.
+          restoreRoamingParty();
         } else {
           // defeat: your surviving men carry you to the NEAREST village, not magically home
           save.gold = Math.max(25, Math.round(save.gold * (1 - BALANCE.defeatGoldLoss)));
@@ -527,6 +537,9 @@ export class World {
           } else {
             save.toast = `Your men carry you to ${nearest.name} — the survivors regroup`;
           }
+          // Defeat also leaves surviving roaming enemies in the world. This must run
+          // after the teleport so restoration cannot accidentally use the new hero position.
+          restoreRoamingParty();
         }
         this.game.startWorld(save);
       },
@@ -758,7 +771,7 @@ export class World {
         this.startBattle(p.comp,
           ambushed ? 'AMBUSHED!' : caughtThem ? 'RUN THEM DOWN!' : 'BANDIT SKIRMISH',
           null, null, ambushed,
-          { camp: p.camp, comp: p.comp, home: p.home },
+          { camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT },
           caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress');
         return;
       }

@@ -130,14 +130,18 @@ errors, weaken assertions, or raise performance budgets to make CI green.
 | Final stronghold victory enters the victory scene and clears the run save | browser E2E | pass |
 | AUDIT-02 autosave captures live hero and roaming-party positions | browser E2E | pass (explicit save, timed autosave, reload/Continue) |
 | AUDIT-05 battle entry persists a coherent transaction | browser E2E | pass (active-battle checkpoint, schema, removed party, reload/Continue) |
-| AUDIT-03 defeat restores the surviving roaming party | browser E2E | expected failure until ordinary defeat restores the party |
+| AUDIT-03 defeat restores the surviving roaming party | browser E2E | pass (survivors return to the encounter location; fully wiped parties stay removed) |
 
-AUDIT-03 is the only remaining active expected failure for a confirmed defect.
-Its body runs on every `npm test`; Playwright treats a future pass as an
-unexpected pass. The production fix and removal of its `test.fail` annotation
-must ship in the same change. AUDIT-05 is now a normal regression and must stay
-that way. Do not change an expected failure to `skip`/`fixme`, weaken its
-assertion, or leave its annotation after the source behavior is fixed.
+Roaming-party lifecycle invariant: removing a party for a battle is temporary
+unless every enemy dies. Retreat and ordinary defeat both restore exactly the
+surviving enemy types at the original encounter coordinates, preserving the
+party's camp/home identity; camp garrisons use their separate attrition path.
+The AUDIT-03 regression and its fully-wiped control cover this invariant. Run
+`npx playwright test tests/e2e/campaign-persistence.spec.js` when changing
+battle results, party behavior, or recovery/teleport rules. AUDIT-05 is a normal
+regression and must stay that way. Do not change an expected failure to
+`skip`/`fixme`, weaken its assertion, or leave its annotation after the source
+behavior is fixed.
 
 The setup distinction is intentional: `window.game` is appropriate for
 deterministic scenario-driver checks and writes `bf_save_test` after its first
