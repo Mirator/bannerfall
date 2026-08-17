@@ -82,6 +82,29 @@ Use the focused command when diagnosing a failure locally, then rerun the
 same test without changing its retry behavior. Do not quarantine a flaky test,
 increase retries, or weaken its assertion to make CI green.
 
+## Release cache-token check
+
+The static browser graph is cache-busted with one token derived from the
+normalized contents of the reachable src/*.js modules (including canonical
+LF line endings). Normalizing the version query values makes the digest
+independent of its own token while
+still changing it whenever deployable JavaScript changes. The checker follows
+the module script in index.html and every static import/export-from edge, so
+transitive modules cannot silently retain an older generation.
+
+After changing deployable JavaScript, run:
+
+    npm run release:cache
+    npm run test:release
+
+Review the resulting query-token changes in index.html and src/ as part of the
+release commit. The updater rewrites only recognized version-query locations
+and fails on missing, dynamic, non-relative, or otherwise unsupported module
+references. CI runs test:release in check-only mode; it must pass before the
+browser suite. The local no-cache server avoids local debugging ambiguity,
+while Pages' short response max-age is why all graph edges still need one
+consistent token in a deployed release.
+
 `tests/e2e/campaign-persistence.spec.js` owns real-player campaign transition
 coverage. It uses a fresh Playwright context per test, the raw `window.__g`
 handle for controlled setup, real scene/input/damage paths, and the isolated
