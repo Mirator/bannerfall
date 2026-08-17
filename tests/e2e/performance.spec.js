@@ -172,6 +172,13 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
 
 test('party replans are staggered and reuse goal visibility', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
+  // This structural test drives simulation with direct fixed-timestep calls below. Hold the
+  // production watchdog before boot so a slow CI frame cannot advance navT while the fixture
+  // is being assembled; this does not alter the World timers or the behavior under test.
+  await page.addInitScript(() => {
+    window.requestAnimationFrame = () => 0;
+    window.setInterval = () => 0;
+  });
   await startWorld(page, 424242);
   await page.evaluate(() => {
     for (let seed = 424242; seed < 424300 && window.__g.scene.parties.length < 6; seed++) {
