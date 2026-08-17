@@ -13,6 +13,16 @@ existing Python server, checks browser/runtime errors, verifies all 17 record
 names, and proves that running QA preserves `bf_save` while using
 `bf_save_test`.
 
+`tests/e2e/campaign-persistence.spec.js` owns real-player campaign transition
+coverage. It uses a fresh Playwright context per test, the raw `window.__g`
+handle for controlled setup, real scene/input/damage paths, and the isolated
+`bf_save` slot. Run it directly while changing persistence, battle results,
+party behavior, or the stronghold flow:
+
+```text
+npx playwright test tests/e2e/campaign-persistence.spec.js
+```
+
 ## Legacy check inventory
 
 The 17 deterministic records cover:
@@ -54,6 +64,33 @@ Expected failures are reserved for already-confirmed defects. Use Playwright
 `test.fail` with a finding/plan reference, never `skip` or `fixme`; remove the
 annotation in the same change that fixes the defect. Do not suppress console
 errors, weaken assertions, or raise performance budgets to make CI green.
+
+## Campaign coverage matrix
+
+| Test | Layer | Expected status |
+|------|-------|-----------------|
+| Current-schema player save round-trips through Continue | browser E2E | pass |
+| Retreat restores the engaged party minus actual dead enemy types | browser E2E | pass |
+| Hard-mode defeat retains exactly one fallback squire | browser E2E | pass |
+| Final stronghold victory enters the victory scene and clears the run save | browser E2E | pass |
+| AUDIT-02 autosave captures live hero and roaming-party positions | browser E2E | expected failure until live autosave synchronization is fixed |
+| AUDIT-05 battle entry persists a coherent transaction | browser E2E | expected failure until battle-entry checkpoint persistence is fixed |
+| AUDIT-03 defeat restores the surviving roaming party | browser E2E | expected failure until ordinary defeat restores the party |
+
+The three expected failures are active defect tracking, not skipped debt. Their
+bodies run on every `npm test`; Playwright treats a future pass as an
+unexpected pass. The production fix and removal of the matching `test.fail`
+annotation must ship in the same change. Do not change an expected failure to
+`skip`/`fixme`, weaken its assertion, or leave the annotation after the source
+behavior is fixed.
+
+The setup distinction is intentional: `window.game` is appropriate for
+deterministic scenario-driver checks and writes `bf_save_test` after its first
+driver call. Real persistence/lifecycle tests may use `window.__g` only inside
+their isolated Playwright context, and must never touch a developer's normal
+browser profile. Prefer real keyboard input, world collision, damage, and
+scene-transition paths for the behavior under assertion; direct mutation is
+limited to small deterministic fixtures such as a unique roaming party.
 
 ## Troubleshooting
 
