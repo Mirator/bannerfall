@@ -85,9 +85,15 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
     let beginPath = 0;
     const original = CanvasRenderingContext2D.prototype.beginPath;
     CanvasRenderingContext2D.prototype.beginPath = function (...args) { beginPath++; return original.apply(this, args); };
-    battle.troops[0].hp = battle.troops[0].maxHp * 0.5;
+    for (const unit of [...battle.troops, ...battle.enemies]) unit.hp = unit.maxHp * 0.5;
     battle.enemies[0].windupT = 1;
     window.__g.draw();
+    const capacity = {
+      draw: battle._drawEntries.length,
+      wounded: battle._woundedEntries.length,
+      bars: battle._drawnBars.length,
+      alerts: battle._alerts.length,
+    };
     const refs = {
       alerts: battle._alerts,
       drawEntries: battle._drawEntries,
@@ -99,6 +105,9 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
       drawEntry: battle._drawEntries[0],
       woundedEntry: battle._woundedEntries[0],
       barEntry: battle._drawnBars[0],
+      drawEntryPool: battle._drawEntries.slice(),
+      woundedEntryPool: battle._woundedEntries.slice(),
+      barEntryPool: battle._drawnBars.slice(),
     };
     window.__g.draw();
     const sameEntries = {
@@ -107,12 +116,28 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
       wounded: refs.woundedEntry === battle._woundedEntries[0],
       bar: refs.barEntry === battle._drawnBars[0],
     };
-    const removedTroop = battle.troops.pop();
-    const removedEnemy = battle.enemies.pop();
-    const removedObstacle = battle.obstacles.pop();
-    for (let i = 0; i < 20; i++) window.__g.draw();
+    const removedTroops = battle.troops.splice(-3);
+    const removedEnemies = battle.enemies.splice(-3);
+    const removedObstacles = battle.obstacles.splice(-3);
+    for (const unit of [...battle.troops, ...battle.enemies]) unit.hp = unit.maxHp;
+    battle._alertCount = 0;
+    window.__g.draw();
+    const shrink = {
+      capacityRetained: battle._drawEntries.length === capacity.draw && battle._woundedEntries.length === capacity.wounded && battle._drawnBars.length === capacity.bars,
+      drawInactive: battle._drawEntries.length - battle._drawEntriesActive,
+      woundedInactive: battle._woundedEntries.length - battle._woundedEntriesActive,
+      barsInactive: battle._drawnBars.length - battle._drawnBarsActive,
+      drawRefsCleared: battle._drawEntries.slice(battle._drawEntriesActive).every(entry => entry.ref === null),
+      woundedRefsCleared: battle._woundedEntries.slice(battle._woundedEntriesActive).every(entry => entry.u === null),
+      barsCleared: battle._drawnBars.slice(battle._drawnBarsActive).every(entry => entry.x === 0 && entry.y === 0),
+    };
+    battle.troops.push(...removedTroops);
+    battle.enemies.push(...removedEnemies);
+    battle.obstacles.push(...removedObstacles);
+    for (const unit of [...battle.troops, ...battle.enemies]) unit.hp = unit.maxHp * 0.5;
+    battle.enemies[0].windupT = 1;
+    window.__g.draw();
     CanvasRenderingContext2D.prototype.beginPath = original;
-    const activeDrawCount = battle.obstacles.length + battle.troops.length + battle.enemies.length + 1;
     return {
       beginPath,
       same: Object.fromEntries(Object.entries(refs).filter(([k]) => ['alerts', 'drawEntries', 'woundedEntries', 'drawnBars', 'static', 'allUnits'].includes(k)).map(([k, v]) => [k, v === (k === 'static' ? (battle._staticLayer || battle._staticPaths) : battle['_' + k])])),
@@ -120,18 +145,28 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
       drawFound: !!refs.drawEntry && battle._drawEntries.includes(refs.drawEntry),
       teams: [...battle.troops].every(t => t.team === 'friendly') && [...battle.enemies].every(e => e.team === 'enemy'),
       counts: { troops: battle.troops.length, enemies: battle.enemies.length },
-      staleDrawRefs: battle._drawEntries.slice(activeDrawCount).every(entry => entry.ref === null),
-      activeRemovedRefs: battle._drawEntries.slice(0, activeDrawCount).every(entry => entry.ref !== removedTroop && entry.ref !== removedEnemy && entry.ref !== removedObstacle),
-      staleWoundedRefs: battle._woundedEntries.every(entry => entry.u !== removedTroop && entry.u !== removedEnemy),
+      shrink,
+      regrowDrawIdentity: battle._drawEntries.slice(0, battle._drawEntriesActive).every(entry => refs.drawEntryPool.includes(entry)),
+      regrowWoundedIdentity: battle._woundedEntries.slice(0, battle._woundedEntriesActive).every(entry => refs.woundedEntryPool.includes(entry)),
+      regrowBarIdentity: battle._drawnBars.slice(0, battle._drawnBarsActive).every(entry => refs.barEntryPool.includes(entry)),
+      regrowActive: battle._drawEntriesActive > 0 && battle._woundedEntriesActive > 0 && battle._drawnBarsActive > 0,
     };
   });
   expect(result.beginPath).toBeLessThan(9000);
   expect(Object.values(result.same).every(Boolean)).toBeTruthy();
   expect(Object.values(result.sameEntries).every(Boolean)).toBeTruthy();
   expect(result.teams).toBeTruthy();
-  expect(result.staleDrawRefs).toBeTruthy();
-  expect(result.activeRemovedRefs).toBeTruthy();
-  expect(result.staleWoundedRefs).toBeTruthy();
+  expect(result.shrink.capacityRetained).toBeTruthy();
+  expect(result.shrink.drawInactive).toBeGreaterThan(0);
+  expect(result.shrink.woundedInactive).toBeGreaterThan(0);
+  expect(result.shrink.barsInactive).toBeGreaterThan(0);
+  expect(result.shrink.drawRefsCleared).toBeTruthy();
+  expect(result.shrink.woundedRefsCleared).toBeTruthy();
+  expect(result.shrink.barsCleared).toBeTruthy();
+  expect(result.regrowActive).toBeTruthy();
+  expect(result.regrowDrawIdentity).toBeTruthy();
+  expect(result.regrowWoundedIdentity).toBeTruthy();
+  expect(result.regrowBarIdentity).toBeTruthy();
   expect(runtimeErrors).toEqual([]);
 });
 

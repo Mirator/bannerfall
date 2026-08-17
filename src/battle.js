@@ -8,6 +8,24 @@ const BASE = Object.assign({}, PAL.battle);
 // whatever reads it next (menu, world map, a future concurrent battle).
 const P = Object.assign({}, PAL.battle);
 
+function sortDrawPrefix(entries, count) {
+  for (let i = 1; i < count; i++) {
+    const value = entries[i];
+    let j = i - 1;
+    while (j >= 0 && entries[j].y > value.y) { entries[j + 1] = entries[j]; j--; }
+    entries[j + 1] = value;
+  }
+}
+
+function sortWoundedPrefix(entries, count) {
+  for (let i = 1; i < count; i++) {
+    const value = entries[i], valueRatio = value.u.hp / value.u.maxHp;
+    let j = i - 1;
+    while (j >= 0 && entries[j].u.hp / entries[j].u.maxHp > valueRatio) { entries[j + 1] = entries[j]; j--; }
+    entries[j + 1] = value;
+  }
+}
+
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
   p.moveTo(x + r, y); p.lineTo(x + w - r, y); p.quadraticCurveTo(x + w, y, x + w, y + r);
@@ -41,8 +59,11 @@ export class Battle {
     this._alerts = new Array(0);
     this._alertCount = 0;
     this._drawEntries = [];
+    this._drawEntriesActive = 0;
     this._woundedEntries = [];
+    this._woundedEntriesActive = 0;
     this._drawnBars = [];
+    this._drawnBarsActive = 0;
     this._groups = Object.create(null);
     this._enemyGroups = Object.create(null);
 
@@ -847,13 +868,14 @@ export class Battle {
     const heroEntry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
     heroEntry.y = h.y; heroEntry.kind = 3; heroEntry.ref = h; drawCount++;
     for (let i = drawCount; i < oldDrawLength; i++) draws[i].ref = null;
-    draws.length = drawCount;
-    draws.sort((a, b) => a.y - b.y);
+    this._drawEntriesActive = drawCount;
+    sortDrawPrefix(draws, drawCount);
     // shadows first
     for (const t of this.troops) shadow(ctx, t.x, t.y + 2, t.d.radius, 12, P.groundShade);
     for (const e of this.enemies) shadow(ctx, e.x, e.y + 2, e.d.radius, 12, P.groundShade);
     shadow(ctx, h.x, h.y + 4, 15, 16, P.groundShade);
-    for (const d of draws) {
+    for (let i = 0; i < drawCount; i++) {
+      const d = draws[i];
       if (d.kind === 0) this.drawObstacle(ctx, d.ref);
       else if (d.kind === 1) this.drawTroop(ctx, d.ref);
       else if (d.kind === 2) this.drawEnemy(ctx, d.ref);
@@ -894,13 +916,14 @@ export class Battle {
       const entry = wounded[woundedCount] || (wounded[woundedCount] = { u: null, w: 0, fill: null });
       entry.u = e; entry.w = e.type === 'brute' ? 38 : 24; entry.fill = P.hp; woundedCount++;
     }
-    wounded.length = woundedCount;
-    wounded.sort((a, b) => a.u.hp / a.u.maxHp - b.u.hp / b.u.maxHp);
+    this._woundedEntriesActive = woundedCount;
+    sortWoundedPrefix(wounded, woundedCount);
     // regional overlay budget: max 3 bars per ~120px region — past that a cluster is a
     // single wounded MASS, not individually-tracked units (Thronefall's hierarchy rule)
     const drawnBars = this._drawnBars;
     let barCount = 0;
-    for (const { u, w, fill } of wounded) {
+    for (let wi = 0; wi < woundedCount; wi++) {
+      const { u, w, fill } = wounded[wi];
       const bx = u.x, by = u.y - u.d.radius * 3;
       let overlap = false, regionCount = 0;
       for (let i = 0; i < barCount; i++) {
@@ -915,7 +938,8 @@ export class Battle {
       barCount++;
       hpBar(ctx, bx, by, w, u.hp / u.maxHp, P.hpBack, fill);
     }
-    drawnBars.length = barCount;
+    for (let i = barCount; i < drawnBars.length; i++) { drawnBars[i].x = 0; drawnBars[i].y = 0; }
+    this._drawnBarsActive = barCount;
 
     // squad balloons: one per unit type cluster (centroid)
     this.drawBalloons(ctx);
