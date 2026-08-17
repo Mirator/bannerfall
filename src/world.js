@@ -38,7 +38,7 @@ export class World {
     this.hero = { x: this.save.x, y: this.save.y, vx: 0, vy: 0, facing: 0, bob: 0 };
     this.grace = save ? BALANCE.battleGrace : 0;   // ambush immunity after a battle
     // world randomness evolves across the campaign AND differs per run
-    this.rng = makeRng((this.save.runSeed || 777) + (this.save.battleCount || 0) * 7919);
+    this.rng = makeRng((this.save.runSeed ?? 777) + (this.save.battleCount ?? 0) * 7919);
     if (this.save.toast) { this.say(this.save.toast, 3.5); this.save.toast = null; }
 
     // scenery (deterministic)
@@ -370,7 +370,7 @@ export class World {
   // Bandits don't magically reinforce because you recruited; what you scouted is what you fight.
   rollGarrison(camp) {
     const mine = this.myStrength();
-    const R = makeRng(camp.x * 31 + camp.y * 7 + mine * 13 + (this.save.runSeed || 0));
+    const R = makeRng(camp.x * 31 + camp.y * 7 + mine * 13 + (this.save.runSeed ?? 0));
     const hardMul = this.save.hard ? 1.25 : 1;
     const target = Math.max(camp.size + 2, Math.round(mine * (camp.tier || 1) * hardMul));
     const bruteCap = camp.stronghold ? 3 : mine >= 12 ? 2 : mine >= 8 ? 1 : 0;
@@ -457,6 +457,7 @@ export class World {
       approach: this.pendingApproach || 'E',
       // (pending* are per-battle one-shots)
       heroHp: save.heroHp,
+      heroMaxHp: save.heroMaxHp,
       onEnd: (result) => {
         this.pendingDeploy = undefined; this.pendingApproach = undefined;
         save.stats = save.stats || { won: 0, kills: 0, lost: 0, playT: 0 };

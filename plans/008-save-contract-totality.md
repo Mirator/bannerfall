@@ -1,6 +1,6 @@
 # Plan 008: Make the Save Contract Total and Battle-Stat Safe
 
-**Status:** READY
+**Status:** DONE
 **Priority:** High
 **Effort:** M
 **Risk:** Medium
@@ -77,3 +77,16 @@ Verify `SAVE_VERSION`, `migrateSave`, current validators, `World.startBattle`, a
 
 Revert the commit. Because this introduces a new on-disk version, do not partially roll back only the reader or only the writer.
 
+## Completion Notes
+
+- `SAVE_VERSION` is now 2. Unversioned (v0) and version-1 saves migrate through
+  the same canonical validator; v1 parties without `home` derive it from the
+  matching production camp. Current v2 parties require a valid finite home and
+  non-empty enemy composition.
+- Hero maximum/current HP is validated and propagated into battle setup, and
+  world/battle seed defaults preserve valid zero values with nullish selection.
+- Focused browser coverage now includes migration, malformed v2 rejection,
+  zero-seed persistence, and upgraded hero maximum HP in battle.
+- Verification: `npx playwright test tests/e2e/save-schema.spec.js`,
+  `npx playwright test tests/e2e/campaign-persistence.spec.js`, `npm test`, and
+  `git diff --check`.
