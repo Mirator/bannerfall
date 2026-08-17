@@ -1,6 +1,6 @@
 # Plan 010: Fail CI on Flaky Playwright Results
 
-**Status:** READY
+**Status:** DONE
 **Priority:** Medium
 **Effort:** S
 **Risk:** Low
@@ -29,7 +29,7 @@ Keep one CI retry for diagnostic value while making any retry-dependent pass fai
 
 - `playwright.config.js`
 - `package.json`
-- `.github/workflows/ci.yml`
+- `.github/workflows/qa.yml`
 - a small Node configuration-contract test under `tests/tooling/`
 - `tests/README.md`
 - `AGENTS.md`
@@ -59,6 +59,15 @@ npm test
 git diff --check
 ```
 
+## Completion Notes
+
+- Added one explicit CI predicate shared by `retries` and
+  `failOnFlakyTests`; local runs remain at zero retries.
+- Added `tests/tooling/config-contract.test.js` and `npm run test:tooling` so
+  the retry/flakiness matrix is checked without launching Chromium.
+- CI runs the contract before `npm test`; contributor guidance is recorded in
+  `AGENTS.md` and `tests/README.md`.
+
 ## Drift Check
 
 Verify the CI workflow still invokes `npm test`, Playwright still derives retries from `process.env.CI`, and no flaky-failure policy already exists. Expected test changes from earlier DONE plans must be preserved.
@@ -66,4 +75,3 @@ Verify the CI workflow still invokes `npm test`, Playwright still derives retrie
 ## Rollback
 
 Revert the commit; no runtime or saved-data behavior changes.
-
