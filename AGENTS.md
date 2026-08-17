@@ -159,3 +159,31 @@ AUDIT-03 is the only remaining active `test.fail` annotation. When fixing that
 defect, remove its matching annotation in the same change. An unexpected pass
 is useful drift that signals the test debt is ready to retire; never weaken the
 assertion or add a skip to make the gate green.
+
+## Steam-ready platform boundary
+
+Game code must use the capability object created by `src/platform/` and the
+initialized `SaveRepository` in `src/persistence/`. Direct `localStorage`,
+filesystem, IPC, Electron, Steamworks, and lifecycle-global access do not belong
+in `Game`, `World`, `Battle`, `Sfx`, or the simulation phases. The web adapter
+maps semantic slots (`campaign`, `testCampaign`, `settings`) to browser storage;
+the future desktop adapter will map the same contract to atomic per-user files
+and a native quit handshake. Repository reads are hydrated before Game exists;
+the fixed loop only uses its synchronous in-memory cache, while writes are ordered,
+flushable, and observable on error. Real and test campaign slots remain isolated.
+There are no synchronous storage escape hatches or adapter rereads from Game;
+browser fixtures must seed storage before bootstrap/reload.
+
+Gameplay consumes named actions from `src/input-actions.js` through `Input`; it
+must not inspect raw key-code sets. New controller or Steam Input support feeds
+that action layer and keeps device glyphs/UI separate from simulation. The
+existing Canvas, WebAudio, native-module, deterministic RNG, and World/Battle
+phase boundaries remain unchanged. Steamworks APIs belong behind a future
+desktop adapter and may consume domain outcomes, but never run inside update
+phases or save migrations.
+
+Before any desktop release, add the shell/preload security boundary, atomic
+files/backups and Steam Cloud paths, controller/glyph QA, fullscreen and
+multi-monitor QA, signed builds, crash-safe quit/flush, overlay tests, and Steam
+Deck validation. Run `npm run release:cache` and `npm run test:release` after
+every `src/` edit.

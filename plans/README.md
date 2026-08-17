@@ -6,9 +6,11 @@ the audit of `c07be05` and are complete. Plans 003-005 were reconciled against
 #4, #2, and #5 respectively. Plan 006 was reconciled against `eecb14b` and
 consolidates all five vetted performance findings into one phased change. Plans
 007-015 were written from the follow-up audit of `eaf282c`; they cover every
-high/medium finding plus explicitly selected scalability finding #9. Execute
-READY plans in the order below. Each executor must read its plan fully, honor
-its STOP conditions, and update its status row when done.
+high/medium finding plus explicitly selected scalability finding #9. Plan 016
+was written against `7ad0a00` to prepare the architecture for a future Steam
+desktop release without adding a desktop runtime prematurely. Execute READY
+plans in the order below. Each executor must read its plan fully, honor its STOP
+conditions, and update its status row when done.
 
 ## Execution order and status
 
@@ -29,6 +31,7 @@ its STOP conditions, and update its status row when done.
 | 013 | Isolate gameplay and presentation randomness | Medium | M | 011 | DONE |
 | 014 | Establish maintainable World and Battle simulation seams | Medium | L | 009, 011, 013 | DONE |
 | 015 | Bound battle simulation scaling with spatial broad phases | Medium* | L | 014 | DONE |
+| 016 | Introduce a Steam-ready platform and input boundary | P2 | L | 001-015 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -70,12 +73,15 @@ explicitly selected because its impact becomes high when battle populations grow
   RNG domains before rearranging high-churn update code.
 - Plan 015 deliberately lands last so its algorithm changes target the phase
   seams characterized by Plan 014.
+- Plan 016 comes after the completed correctness, QA, deterministic-rendering,
+  and simulation-seam work. It introduces only the host-facing persistence,
+  lifecycle, and action boundaries; the Electron shell and Steamworks SDK remain
+  explicitly deferred until desktop packaging is scheduled.
 
 ## Deferred audit findings
 
-- Menu save parsing on every menu frame is the only low-priority follow-up audit
-  finding not selected. It remains bounded by a tiny localStorage payload and is
-  intentionally deferred unless save payloads or menu complexity grow.
+- None. Plan 016 resolved the remaining low-priority menu save-parsing finding
+  by hydrating validated saves once and serving menu reads from memory.
 
 ## Findings considered and rejected
 

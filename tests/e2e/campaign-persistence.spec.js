@@ -13,11 +13,16 @@ function assertNoRuntimeErrors(runtimeErrors) {
 async function openPlayerGame(page, runtimeErrors) {
   await page.goto('/');
   await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.evaluate(() => {
-    localStorage.removeItem('bf_save');
-    localStorage.removeItem('bf_save_test');
-    window.__g.testMode = false;
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('qa-clear-campaign') !== '1') {
+      localStorage.removeItem('bf_save');
+      localStorage.removeItem('bf_save_test');
+      sessionStorage.setItem('qa-clear-campaign', '1');
+    }
   });
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.evaluate(() => { window.__g.testMode = false; });
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('menu');
   assertNoRuntimeErrors(runtimeErrors);
 }
@@ -94,7 +99,7 @@ test('current-schema player save round-trips through Continue', async ({ page })
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, { seed: 901 });
 
-  await page.evaluate(({ partyCamp, home }) => {
+  await page.evaluate(async ({ partyCamp, home }) => {
     const world = window.__g.scene;
     const save = world.save;
     save.gold = 731;
@@ -117,6 +122,7 @@ test('current-schema player save round-trips through Continue', async ({ page })
     }];
     world.persistParties();
     window.__g.persistRun();
+    await window.__g.saves.flush();
   }, { partyCamp: 'c1', home: PARTY_HOME });
 
   await page.reload();
@@ -238,7 +244,7 @@ test('AUDIT-02 autosave captures live hero and roaming-party positions', async (
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, { seed: 905 });
-  const explicitLive = await page.evaluate(({ partyCamp, home }) => {
+  const explicitLive = await page.evaluate(async ({ partyCamp, home }) => {
     const world = window.__g.scene;
     world.hero.x = 1400;
     world.hero.y = 700;
@@ -247,6 +253,7 @@ test('AUDIT-02 autosave captures live hero and roaming-party positions', async (
       wander: { ...home }, wanderT: 999, waryT: 0,
     }];
     window.__g.persistRun();
+    await window.__g.saves.flush();
     return { hero: { x: world.hero.x, y: world.hero.y }, party: { x: 1875, y: 1005 } };
   }, { partyCamp: PARTY_KEY, home: PARTY_HOME });
   const explicitStored = await page.evaluate(() => {

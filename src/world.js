@@ -1,7 +1,8 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r2de3fd5a3de7';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r2de3fd5a3de7';
-import { SAVE_VERSION } from './save.js?v=r2de3fd5a3de7';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=ra95157210ae5';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=ra95157210ae5';
+import { SAVE_VERSION } from './save.js?v=ra95157210ae5';
+import { ACTIONS } from './input-actions.js?v=ra95157210ae5';
 
 const P = PAL.world;
 
@@ -659,11 +660,10 @@ export class World {
   updateSettlementInteractions(inp) {
     const s = this.nearSettlement();
     if (s) {
-      if (inp.pressed.has('KeyQ')) this.recruit('spear');
-      if (inp.pressed.has('KeyW2')) {} // reserved
-      if (inp.pressed.has('KeyE')) this.recruit('archer');
-      if (s.kind === 'town' && inp.pressed.has('KeyR')) this.recruit('knight');
-      if (inp.pressed.has('KeyF')) {
+      if (inp.pressedAction(ACTIONS.RECRUIT_SPEAR)) this.recruit('spear');
+      if (inp.pressedAction(ACTIONS.WORLD_PRIMARY)) this.recruit('archer');
+      if (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) this.recruit('knight');
+      if (inp.pressedAction(ACTIONS.HEAL)) {
         const healCost = s.freeHeal ? 0 : BALANCE.healCost;
         const heroHurt = this.save.heroHp < this.save.heroMaxHp;
         const troopsHurt = this.save.troops.some(t => t.hp != null && t.hp < UNIT_TYPES[t.type].hp);
@@ -677,7 +677,7 @@ export class World {
           this.say(s.freeHeal ? 'The hot springs of Coldwell mend every wound — free of charge' : 'Warband rested and healed');
         }
       }
-      if (s.kind === 'town' && inp.pressed.has('KeyT')) {
+      if (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY)) {
         const cost = 40 + (this.save.armyCap - BALANCE.armyCapBase) * 20;
         if (this.save.gold >= cost) {
           this.save.gold -= cost; this.save.armyCap += 2;
@@ -701,7 +701,7 @@ export class World {
 
   updateCampInteraction(inp, settlement) {
     const camp = this.nearCamp();
-    if (!camp || !inp.pressed.has('KeyE') || settlement) return false;
+    if (!camp || !inp.pressedAction(ACTIONS.WORLD_PRIMARY) || settlement) return false;
     const razedCount = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     if (camp.stronghold && razedCount < 3) {
       this.say(`Wolfsjaw won't fall while its camps still feed it — cut the supply lines (${razedCount}/3)`);

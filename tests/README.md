@@ -94,6 +94,30 @@ must never be used to hide an unexplained regression. Visual checks supplement
 semantic QA; keep both the focused `npm run test:visual` and the full `npm test`
 gate green.
 
+## Platform and Steam boundary
+
+`src/platform/platform-contract.js` is the only host-facing contract. The web
+adapter owns browser lifecycle and localStorage details; `Game`, `World`,
+`Battle`, and `Sfx` must use `SaveRepository` and named actions instead of
+touching storage, lifecycle globals, or raw key codes. `SaveRepository` hydrates
+campaign/test/settings slots before `window.__g` is exposed, serves synchronous
+reads from memory, serializes writes in order, and provides `flush()` for
+suspend/desktop quit. Storage errors are observable through the game's concise
+save-warning state and never include save contents.
+
+The dependency-free `tests/tooling/platform-contract.test.js` covers semantic
+slot mapping, delayed hydration, ordered delayed writes/removals, invalid-save
+cleanup, flush/error behavior, lifecycle unsubscribe, and surfaced errors.
+`tests/e2e/platform-boundary.spec.js` covers suspend deduplication and the
+player-visible storage-failure warning. `tests/e2e/input-actions.spec.js`
+compares deterministic keyboard and injected named-action outcomes for movement,
+combat commands, pause, mute, and abandon. Future Gamepad/Steam Input tests should inject named actions through
+`window.game.action(name, down)` and compare canonical state with the existing
+keyboard path; do not add controller polling to simulation tests. The future
+Electron shell must implement the same contract through a context-isolated,
+Node-disabled preload bridge and must keep atomic save files and Steam Cloud
+configuration outside the renderer.
+
 ## Randomness domains
 
 Runtime random draws are intentionally split into named streams. `simRng` is
