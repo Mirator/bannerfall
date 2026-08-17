@@ -9,3 +9,9 @@ progress.json
 # Local tooling
 .claude/
 __pycache__/
+
+# Browser QA artifacts (large, regenerable)
+node_modules/
+test-results/
+playwright-report/
+blob-report/

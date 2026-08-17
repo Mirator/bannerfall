@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bannerfall QA runner</title>
+  <style>
+    body { margin: 0; background: #1e2a4a; color: #f2e3c1; font: 14px system-ui, sans-serif; }
+    #game { display: none; }
+    #qa-status { margin: 24px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <pre id="qa-status">Loading QA suite…</pre>
+  <script type="module">
+    const status = document.getElementById('qa-status');
+    try {
+      await import('../src/main.js');
+      await import('./qa_suite.js');
+      status.textContent = JSON.stringify(window.__qaResult, null, 2);
+    } catch (error) {
+      status.textContent = error && error.stack ? error.stack : String(error);
+      throw error;
+    }
+  </script>
+</body>
+</html>

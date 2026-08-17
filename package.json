@@ -1,0 +1,17 @@
+{
+  "name": "bannerfall",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:qa": "playwright test tests/e2e/qa.spec.js",
+    "test:headed": "playwright test --headed",
+    "serve": "python scripts/serve.py"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}
