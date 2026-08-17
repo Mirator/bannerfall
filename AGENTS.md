@@ -56,6 +56,23 @@ rendering, collision, navigation, and movement bonuses cannot diverge.
 Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
 
+Simulation ownership: `World.update()` is the ordered campaign pipeline. Hero
+movement/terrain runs first, settlement and scouting interactions run second,
+camp assault input runs third, roaming-party AI owns navigation and encounter
+handoff, then party spawning and camera/effects maintenance finish the tick.
+Keep campaign arrays (`parties`, `save.troops`, `save.camps`) and their timers in
+those world phases; do not add a second map snapshot boundary.
+
+`Battle.update()` owns the ordered fight pipeline. `updateSceneState()` handles
+intro/end gates, `updateActivePhases()` runs live commands, hero, troop/enemy,
+separation, and stalemate work, `updateProjectilePhase()` resolves landings,
+and `resolveBattleResult()` is the single terminal/retreat decision point.
+Keep future mechanics in the narrow phase that owns their state and preserve
+projectile-before-result ordering. Battle palette data is frozen and owned by
+each `Battle` instance; never mutate `PAL.battle` or introduce module-global
+palette state. These seams are intentionally methods, not generic managers or
+an ECS, so adding a cross-phase context object requires a new design review.
+
 Canvas visual QA lives in `tests/e2e/visual-regression.spec.js` and runs in CI
 on every pull request as part of `npm test`; use `npm run test:visual` for the
 focused suite. It uses seeded scenarios,
