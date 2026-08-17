@@ -170,6 +170,73 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
   expect(runtimeErrors).toEqual([]);
 });
 
+test('battle spatial queries match the legacy nearest-target semantics', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await page.goto('/');
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.evaluate(() => window.game.scenario('battle_big'));
+  const result = await page.evaluate(() => {
+    const battle = window.__g.scene;
+    const enemies = battle.enemies;
+    enemies.forEach((e, i) => { e.x = 90 + (i * 173) % 1060; e.y = 80 + (i * 97) % 700; });
+    battle._enemyGrid.rebuild(enemies);
+    const points = [
+      [battle.hero.x, battle.hero.y], [100, 100], [625, 440], [1180, 820],
+      [enemies[0].x + 24, enemies[0].y - 11],
+    ];
+    const checks = points.map(([x, y]) => {
+      let expected = null, best = 1e18;
+      for (const e of enemies) {
+        const d = (x - e.x) ** 2 + (y - e.y) ** 2;
+        if (d < best) { best = d; expected = e; }
+      }
+      const actual = battle.nearestEnemy(x, y);
+      return expected === actual;
+    });
+    const tieA = enemies[0], tieB = enemies[1];
+    tieA.x = 500; tieA.y = 400; tieB.x = 700; tieB.y = 400;
+    for (let i = 2; i < enemies.length; i++) { enemies[i].x = 1100; enemies[i].y = 820; }
+    battle._enemyGrid.rebuild(enemies);
+    const tieResult = battle.nearestEnemy(600, 400) === tieA;
+    return { checks, tieResult };
+  });
+  expect(result.checks.every(Boolean)).toBeTruthy();
+  expect(result.tieResult).toBeTruthy();
+  expect(runtimeErrors).toEqual([]);
+});
+
+test('battle spatial broad phases keep distributed candidate work subquadratic', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await page.goto('/');
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.evaluate(() => window.game.scenario('battle_big'));
+  const result = await page.evaluate(() => {
+    const battle = window.__g.scene;
+    const measurements = [];
+    for (const size of [400, 1000]) {
+      const units = [];
+      for (let i = 0; i < size; i++) {
+        const x = 30 + ((i * 83) % 1190);
+        const y = 30 + ((i * 47) % 820);
+        units.push({ x, y, d: { radius: 12 }, team: i % 2 ? 'enemy' : 'friendly' });
+      }
+      battle._unitGrid.clearStats();
+      battle._unitGrid.rebuild(units);
+      for (const unit of units) {
+        const count = battle._unitGrid.queryOrdered(unit.x, unit.y, 65);
+        for (let i = 0; i < count; i++) battle._unitGrid.noteCandidate();
+      }
+      const checks = battle._unitGrid.stats.candidateChecks;
+      measurements.push({ size, checks, naive: size * (size - 1) / 2, fraction: checks / (size * size) });
+    }
+    return measurements;
+  });
+  expect(result[0].fraction).toBeLessThan(0.25);
+  expect(result[1].fraction).toBeLessThan(0.20);
+  expect(result[1].checks).toBeLessThan(result[1].naive * 0.5);
+  expect(runtimeErrors).toEqual([]);
+});
+
 test('party replans are staggered and reuse goal visibility', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   // This structural test drives simulation with direct fixed-timestep calls below. Hold the

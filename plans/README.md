@@ -28,7 +28,7 @@ its STOP conditions, and update its status row when done.
 | 012 | Enforce release cache-token integrity | Medium | S | 010 | DONE |
 | 013 | Isolate gameplay and presentation randomness | Medium | M | 011 | DONE |
 | 014 | Establish maintainable World and Battle simulation seams | Medium | L | 009, 011, 013 | DONE |
-| 015 | Bound battle simulation scaling with spatial broad phases | Medium* | L | 014 | READY |
+| 015 | Bound battle simulation scaling with spatial broad phases | Medium* | L | 014 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).

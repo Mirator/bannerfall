@@ -1,6 +1,6 @@
 # Plan 015: Bound Battle Simulation Scaling with Spatial Broad Phases
 
-**Status:** READY
+**Status:** DONE
 **Priority:** Medium (explicit audit item #9; high future impact)
 **Effort:** L
 **Risk:** High
@@ -74,5 +74,16 @@ Inspect the live phase seams from Plan 014 and inventory all full active-array s
 
 ## Rollback
 
-Revert the commit. Keep stress fixtures only if they remain valid against the pre-optimization implementation and do not make the standard suite impractical.
+Revert the commit. Keep stress fixtures only if they remain valid against the
+pre-optimization implementation and do not make the standard suite impractical.
 
+## Completion Notes
+
+- Added reusable 128px `SpatialGrid` buckets for enemy/friendly target queries,
+  unit separation, and static obstacles. Rebuilds occur after each movement
+  phase and after removals so queries never retain dead entities.
+- Preserved strict-distance and source-order tie behavior; separation still
+  processes each unordered pair once in legacy order. Added allocation-free
+  reusable query and merge-sort scratch storage.
+- Added browser equivalence and 400/1000-unit structural scaling checks in
+  `tests/e2e/performance.spec.js`; visual baselines were unchanged.
