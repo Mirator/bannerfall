@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors } from './test-helpers.js';
 
 const DT = 1 / 60;
-const PARTY_KEY = 'qa_defeat_party';
+const PARTY_KEY = 'c1';
 const PARTY_HOME = { x: 1600, y: 900 };
 const PARTY_COMP = ['bandit', 'bandit', 'raider'];
 
@@ -117,7 +117,7 @@ test('current-schema player save round-trips through Continue', async ({ page })
     }];
     world.persistParties();
     window.__g.persistRun();
-  }, { partyCamp: 'qa_roundtrip_party', home: PARTY_HOME });
+  }, { partyCamp: 'c1', home: PARTY_HOME });
 
   await page.reload();
   await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
@@ -135,6 +135,8 @@ test('current-schema player save round-trips through Continue', async ({ page })
       troops: save.troops.map(t => t.type),
       hero: { x: window.__g.scene.hero.x, y: window.__g.scene.hero.y },
       parties: save.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: p.comp, waryT: p.waryT })),
+      version: save.version,
+      storedVersion: JSON.parse(localStorage.getItem('bf_save')).version,
     };
   });
   expect(restored).toEqual({
@@ -145,7 +147,9 @@ test('current-schema player save round-trips through Continue', async ({ page })
     stats: { won: 2, kills: 19, lost: 3, playT: expect.any(Number) },
     troops: ['spear', 'archer', 'knight'],
     hero: { x: 1711, y: 944 },
-    parties: [{ camp: 'qa_roundtrip_party', x: 1811, y: 984, comp: ['bandit', 'wolf'], waryT: 8 }],
+    parties: [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], waryT: 8 }],
+    version: 1,
+    storedVersion: 1,
   });
   expect(restored.stats.playT).toBeGreaterThanOrEqual(47);
   assertNoRuntimeErrors(runtimeErrors);
@@ -169,7 +173,7 @@ test('retreat restores the engaged party minus actual dead enemy types', async (
 
   const party = await page.evaluate(() => {
     if (window.__g.sceneName !== 'world') throw new Error('fixture setup: retreat did not return to world');
-    return window.__g.scene.parties.filter(p => p.camp === 'qa_defeat_party')
+    return window.__g.scene.parties.filter(p => p.camp === 'c1')
       .map(p => ({ camp: p.camp, comp: [...p.comp].sort() }));
   });
   expect(party).toEqual([{ camp: PARTY_KEY, comp: ['bandit', 'raider'] }]);
@@ -292,7 +296,7 @@ test('AUDIT-03 defeat restores the surviving roaming party', async ({ page }) =>
   await rawStep(page, 3.2);
   const parties = await page.evaluate(() => {
     if (window.__g.sceneName !== 'world') throw new Error('fixture setup: defeat did not return to world');
-    return window.__g.scene.parties.filter(p => p.camp === 'qa_defeat_party')
+    return window.__g.scene.parties.filter(p => p.camp === 'c1')
       .map(p => ({ camp: p.camp, comp: [...p.comp].sort() }));
   });
   assertNoRuntimeErrors(runtimeErrors);

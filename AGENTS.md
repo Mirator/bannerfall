@@ -50,6 +50,13 @@ real-player setup.
 See `tests/README.md` for the harness architecture, test placement, isolation
 rules, and expected-failure policy.
 
+Any save-field change must deliberately increment or migrate the schema in
+`src/save.js`, update both fresh-save defaults and validation, and add legacy,
+current, and malformed fixtures. Preserve `bf_save`/`bf_save_test` isolation.
+Run `npx playwright test tests/e2e/save-schema.spec.js` and
+`npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
+the required `npm test` gate.
+
 The campaign spec contains active `test.fail` annotations for AUDIT-02,
 AUDIT-03, and AUDIT-05. When fixing one of those defects, remove its matching
 annotation in the same change. An unexpected pass is useful drift that signals
