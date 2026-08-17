@@ -46,15 +46,29 @@ npx playwright test tests/e2e/campaign-persistence.spec.js
 ## Save schema and migration
 
 `src/save.js` is the authoritative save boundary. Unversioned browser saves
-are treated as version 0 and migrated to the current version 1 shape with
-documented legacy defaults. Unknown future versions, unknown production IDs,
-malformed nested values, and out-of-range numbers are rejected and the active
-save slot is cleared before `World` sees the payload.
+are treated as version 0 and version-1 browser saves are migrated to the
+current version 2 shape with documented legacy defaults. Version-1 roaming
+parties missing `home` receive the matching canonical camp coordinate during
+migration; current-version parties must carry a finite, valid `home`. Unknown
+future versions, unknown production IDs, malformed nested values, impossible
+HP/max-HP relationships, and out-of-range numbers are rejected and the active
+save slot is cleared before `World` sees the payload. The validator returns a
+detached canonical object, so accepted saves are safe for immediate world and
+battle construction.
 
 Run the focused schema coverage with:
 
 ```text
 npx playwright test tests/e2e/save-schema.spec.js
+```
+
+The focused schema suite covers v0/v1 migration, current-version round trips,
+zero-seed preservation, battle maximum-HP propagation, malformed fixtures, and
+save-slot clearing. Run it together with campaign coverage after changing
+`src/save.js`, `src/world.js`, or `src/battle.js`:
+
+```text
+npx playwright test tests/e2e/save-schema.spec.js tests/e2e/campaign-persistence.spec.js
 ```
 
 Construct fixtures from current `WORLD.camps`, `UNIT_TYPES`, and

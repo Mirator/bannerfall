@@ -148,8 +148,8 @@ test('current-schema player save round-trips through Continue', async ({ page })
     troops: ['spear', 'archer', 'knight'],
     hero: { x: 1711, y: 944 },
     parties: [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], waryT: 8 }],
-    version: 1,
-    storedVersion: 1,
+    version: 2,
+    storedVersion: 2,
   });
   expect(restored.stats.playT).toBeGreaterThanOrEqual(47);
   assertNoRuntimeErrors(runtimeErrors);
@@ -322,7 +322,7 @@ test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) =
   });
   assertNoRuntimeErrors(runtimeErrors);
   expect(snapshot.scene).toBe('battle');
-  expect(snapshot.memory.version).toBe(1);
+  expect(snapshot.memory.version).toBe(2);
   expect(snapshot.stored.version).toBe(snapshot.memory.version);
   expect(snapshot.stored.x).toBe(snapshot.memory.x);
   expect(snapshot.stored.y).toBe(snapshot.memory.y);

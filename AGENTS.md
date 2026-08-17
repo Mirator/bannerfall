@@ -90,7 +90,12 @@ battle-result or party-restoration code.
 
 Any save-field change must deliberately increment or migrate the schema in
 `src/save.js`, update both fresh-save defaults and validation, and add legacy,
-current, and malformed fixtures. Preserve `bf_save`/`bf_save_test` isolation.
+current, and malformed fixtures. The current save schema is version 2;
+unversioned (v0) and version-1 saves migrate deterministically, including
+deriving a missing legacy roaming-party `home` from its canonical camp. Current
+version parties must have a finite valid `home`, and accepted saves must be
+safe for immediate world/battle construction. Preserve `bf_save`/`bf_save_test`
+isolation.
 Run `npx playwright test tests/e2e/save-schema.spec.js` and
 `npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
 the required `npm test` gate.

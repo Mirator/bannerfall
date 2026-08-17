@@ -37,18 +37,18 @@ async function rejectRealSave(page, payload) {
   }, payload);
 }
 
-test('fresh run stores version 1', async ({ page }) => {
+test('fresh run stores version 2', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1101);
 
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('bf_save')));
-  expect(stored.version).toBe(1);
+  expect(stored.version).toBe(2);
   expect(stored.camps.map(camp => camp.id)).toEqual(['c1', 'c2', 'c3', 'strong']);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('valid unversioned save migrates defaults and is rewritten as version 1', async ({ page }) => {
+test('valid unversioned save migrates defaults and is rewritten as version 2', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1102);
@@ -68,7 +68,7 @@ test('valid unversioned save migrates defaults and is rewritten as version 1', a
   await page.reload();
   await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
   const migratedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
-  expect(migratedBeforeContinue.version).toBe(1);
+  expect(migratedBeforeContinue.version).toBe(2);
   expect(migratedBeforeContinue.parties).toBe(null);
   expect(migratedBeforeContinue.heroHp).toBe(120);
   expect(migratedBeforeContinue.heroMaxHp).toBe(120);
@@ -79,7 +79,7 @@ test('valid unversioned save migrates defaults and is rewritten as version 1', a
     save: structuredClone(window.__g.scene.save),
     stored: JSON.parse(localStorage.getItem('bf_save')),
   }));
-  expect(migrated.save.version).toBe(1);
+  expect(migrated.save.version).toBe(2);
   expect(migrated.save.heroHp).toBe(120);
   expect(migrated.save.heroMaxHp).toBe(120);
   expect(migrated.save.armyCap).toBe(12);
@@ -89,16 +89,35 @@ test('valid unversioned save migrates defaults and is rewritten as version 1', a
   expect(migrated.save.stats).toEqual({ won: 0, kills: 0, lost: 0, playT: expect.any(Number) });
   expect(migrated.save.hard).toBe(false);
   expect(migrated.save.battleCount).toBe(0);
-  expect(migrated.stored.version).toBe(1);
+  expect(migrated.stored.version).toBe(2);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('complete version-1 save round-trips nested state without losing fields', async ({ page }) => {
+test('version-1 roaming parties migrate a missing home from their canonical camp', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1109);
+  const legacy = await currentSave(page);
+  legacy.version = 1;
+  legacy.parties = [{ camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], waryT: 2 }];
+  await page.evaluate(value => localStorage.setItem('bf_save', JSON.stringify(value)), legacy);
+
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  const migrated = await page.evaluate(() => window.__g.loadRun());
+  expect(migrated.version).toBe(2);
+  expect(migrated.parties).toEqual([{
+    camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], home: { x: 1050, y: 1500 }, waryT: 2,
+  }]);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('complete version-2 save round-trips nested state without losing fields', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1103);
   const save = await currentSave(page);
-  save.version = 1;
+  save.version = 2;
   save.gold = 731;
   save.heroHp = 87;
   save.heroMaxHp = 140;
@@ -127,7 +146,7 @@ test('complete version-1 save round-trips nested state without losing fields', a
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
 
   const restored = await page.evaluate(() => structuredClone(window.__g.scene.save));
-  expect(restored.version).toBe(1);
+  expect(restored.version).toBe(2);
   expect(restored.gold).toBe(731);
   expect(restored.heroHp).toBe(87);
   expect(restored.heroMaxHp).toBe(140);
@@ -147,6 +166,36 @@ test('complete version-1 save round-trips nested state without losing fields', a
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('zero run seed survives load and battle entry', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 0);
+  expect(await page.evaluate(() => window.__g.scene.save.runSeed)).toBe(0);
+  await page.evaluate(() => {
+    const world = window.__g.scene;
+    world.startBattle(['bandit'], 'ZERO SEED CHECK', null, 'road');
+  });
+  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('battle');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('bf_save')).runSeed)).toBe(0);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('validated hero maximum HP is used by battle and current HP is clamped', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1110);
+  await page.evaluate(() => {
+    const world = window.__g.scene;
+    world.save.heroMaxHp = 200;
+    world.save.heroHp = 175;
+    world.startBattle(['bandit'], 'HP CONTRACT CHECK', null, 'road');
+  });
+  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('battle');
+  await expect.poll(() => page.evaluate(() => ({ hp: window.__g.scene.hero.hp, maxHp: window.__g.scene.hero.maxHp })))
+    .toEqual({ hp: 175, maxHp: 200 });
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('malformed JSON is cleared and cannot Continue', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
@@ -160,7 +209,7 @@ test('unknown future version is cleared and cannot Continue', async ({ page }) =
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1105);
   const save = await currentSave(page);
-  save.version = 2;
+  save.version = 3;
   const result = await rejectRealSave(page, save);
   expect(result).toEqual({ loaded: null, stored: null });
   assertNoRuntimeErrors(runtimeErrors);
@@ -214,6 +263,8 @@ test('invalid nested shapes and numeric ranges are rejected', async ({ page }) =
     ['party coordinate', value => { value.parties = [{ camp: 'c1', x: -1, y: 100, comp: ['bandit'] }]; }],
     ['negative counter', value => { value.stats.kills = -1; }],
     ['hero hp above max', value => { value.heroHp = value.heroMaxHp + 1; }],
+    ['party missing home', value => { value.parties = [{ camp: 'c1', x: 100, y: 100, comp: ['bandit'] }]; }],
+    ['hero maximum too large', value => { value.heroMaxHp = 10001; }],
     ['invalid troop hp', value => { value.troops[0].hp = UNIT_MAX_HP + 1; }],
     ['invalid party home', value => { value.parties = [{ camp: 'c1', x: 100, y: 100, comp: ['bandit'], home: { x: 100, y: 2201 } }]; }],
   ];

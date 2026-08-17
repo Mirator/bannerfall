@@ -40,7 +40,7 @@ export class Battle {
   constructor(game, setup) {
     this.game = game;
     this.setup = setup;
-    this.rng = makeRng(setup.seed || 1);
+    this.rng = makeRng(setup.seed ?? 1);
     this.particles = new Particles();
     this.W = 1250; this.H = 880;
     this.zoom = 1; this.zoomT = 1;
@@ -77,9 +77,11 @@ export class Battle {
     const cx0 = this.W / 2, cy0 = this.H / 2;
 
     // hero
+    const heroMaxHp = Number.isFinite(setup.heroMaxHp) && setup.heroMaxHp > 0 ? setup.heroMaxHp : HERO.hp;
+    const heroHp = Number.isFinite(setup.heroHp) ? Math.min(heroMaxHp, Math.max(0, setup.heroHp)) : heroMaxHp;
     this.hero = {
       x: cx0 - adx * this.W * 0.24, y: cy0 - ady * this.H * 0.26, vx: 0, vy: 0, facing: 0,
-      hp: setup.heroHp != null ? setup.heroHp : HERO.hp, maxHp: HERO.hp,
+      hp: heroHp, maxHp: heroMaxHp,
       swingT: 0, dashT: 0, dashCdT: 0, hurtT: 0, bob: 0, iframesT: 0,
     };
 

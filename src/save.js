@@ -1,11 +1,14 @@
 // Campaign save schema — the pure boundary between localStorage and World.
 import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r10';
 
-export const SAVE_VERSION = 1;
+// Version 2 makes party.home a runtime invariant. Version 0 is the original
+// unversioned shape; version 1 is the first explicitly versioned shape.
+export const SAVE_VERSION = 2;
 
 const CAMP_IDS = new Set(WORLD.camps.map(c => c.id));
 const UNIT_IDS = new Set(Object.keys(UNIT_TYPES));
 const ENEMY_IDS = new Set(Object.keys(ENEMY_TYPES));
+const MAX_HERO_HP = 10000;
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const plain = value => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -77,7 +80,12 @@ function buildCamps(raw) {
   return result;
 }
 
-function buildParties(raw) {
+function canonicalCampHome(campId) {
+  const camp = WORLD.camps.find(candidate => candidate.id === campId);
+  return camp ? { x: camp.x, y: camp.y } : null;
+}
+
+function buildParties(raw, migrateLegacyHomes) {
   if (raw === null) return null;
   if (!Array.isArray(raw)) return undefined;
   const result = [];
@@ -85,11 +93,17 @@ function buildParties(raw) {
     if (!plain(party) || typeof party.camp !== 'string' || !CAMP_IDS.has(party.camp) ||
         !coordinate(party.x, WORLD.w) || !coordinate(party.y, WORLD.h)) return undefined;
     const comp = buildEnemyComp(party.comp);
-    if (!comp) return undefined;
+    if (!comp || comp.length === 0) return undefined;
     const next = { camp: party.camp, x: party.x, y: party.y, comp };
     if (hasOwn(party, 'home')) {
       if (!validPoint(party.home)) return undefined;
       next.home = { x: party.home.x, y: party.home.y };
+    } else if (migrateLegacyHomes) {
+      const home = canonicalCampHome(party.camp);
+      if (!home) return undefined;
+      next.home = home;
+    } else {
+      return undefined;
     }
     if (hasOwn(party, 'waryT')) {
       if (!nonNegative(party.waryT)) return undefined;
@@ -125,8 +139,10 @@ function buildV1(candidate, legacy) {
   if (!troops) return null;
   const camps = buildCamps(candidate.camps);
   if (!camps) return null;
-  const heroMaxHp = readNumber(candidate, 'heroMaxHp', HERO.hp, value => finite(value) && value > 0, legacy);
-  const heroHp = readNumber(candidate, 'heroHp', HERO.hp, value => finite(value) && value >= 0, legacy);
+  const heroMaxHp = readNumber(candidate, 'heroMaxHp', HERO.hp,
+    value => finite(value) && value > 0 && value <= MAX_HERO_HP, legacy);
+  const heroHp = readNumber(candidate, 'heroHp', HERO.hp,
+    value => finite(value) && value >= 0 && value <= MAX_HERO_HP, legacy);
   if (heroMaxHp === undefined || heroHp === undefined || heroHp > heroMaxHp) return null;
 
   let armyCap;
@@ -142,7 +158,9 @@ function buildV1(candidate, legacy) {
   const won = readBoolean(candidate, 'won', false, legacy);
   const hard = readBoolean(candidate, 'hard', false, legacy);
   if (won === undefined || hard === undefined) return null;
-  const parties = hasOwn(candidate, 'parties') ? buildParties(candidate.parties) : (legacy ? null : undefined);
+  const parties = hasOwn(candidate, 'parties')
+    ? buildParties(candidate.parties, legacy)
+    : (legacy ? null : undefined);
   if (parties === undefined) return null;
   const runSeed = readNumber(candidate, 'runSeed', 777, nonNegativeInteger, legacy);
   const battleCount = readNumber(candidate, 'battleCount', 0, nonNegativeInteger, legacy);
@@ -175,14 +193,17 @@ function buildV1(candidate, legacy) {
 }
 
 /**
- * Migrate an object from the unversioned legacy format or current schema.
+ * Migrate an object from a supported legacy format or the current schema.
  * The returned object is always detached from the candidate.
  */
 export function migrateSave(candidate) {
   if (!plain(candidate)) return null;
   const version = hasOwn(candidate, 'version') ? candidate.version : 0;
   if (!integer(version) || version < 0 || version > SAVE_VERSION) return null;
-  return buildV1(candidate, version === 0);
+  if (version === SAVE_VERSION) return buildV1(candidate, false);
+  // Both legacy shapes are normalized through the same current validator. A
+  // version-1 party may predate the home field, so derive it from WORLD.camps.
+  return buildV1(candidate, true);
 }
 
 /** Parse localStorage text and return a canonical, detached save or null. */
