@@ -58,6 +58,14 @@ presentation, and input state stays out of the save. Persistence tests must
 cover both explicit `persistRun()` and the timed autosave boundary, followed by
 a reload/Continue assertion.
 
+Every world-to-battle transition must finish all map-side mutations, including
+encounter removal and battle-count updates, then call `Game.persistRun()` once
+while the scene is still `world`, before switching to `battle`. This writes a
+coherent map checkpoint; it does not serialize or resume an in-progress battle.
+Adding resumable battles or pending encounters requires an explicit versioned
+save-schema design, migration, and dedicated coverage rather than expanding
+this checkpoint casually.
+
 Any save-field change must deliberately increment or migrate the schema in
 `src/save.js`, update both fresh-save defaults and validation, and add legacy,
 current, and malformed fixtures. Preserve `bf_save`/`bf_save_test` isolation.
@@ -65,8 +73,8 @@ Run `npx playwright test tests/e2e/save-schema.spec.js` and
 `npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
 the required `npm test` gate.
 
-The campaign spec has AUDIT-02 as a normal passing regression. AUDIT-03 and
-AUDIT-05 remain active `test.fail` annotations. When fixing one of those
-defects, remove its matching annotation in the same change. An unexpected pass
+The campaign spec has AUDIT-02 and AUDIT-05 as normal passing regressions.
+AUDIT-03 is the only remaining active `test.fail` annotation. When fixing that
+defect, remove its matching annotation in the same change. An unexpected pass
 is useful drift that signals the test debt is ready to retire; never weaken the
 assertion or add a skip to make the gate green.

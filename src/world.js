@@ -392,6 +392,7 @@ export class World {
     save.x = this.hero.x; save.y = this.hero.y;
     save.battleCount = (save.battleCount || 0) + 1;
     this.persistParties();
+    this.game.persistRun();
     this.game.sfx.horn(147);
     this.game.startBattle({
       troops: save.troops.map(t => ({ type: t.type, hp: t.hp })),
