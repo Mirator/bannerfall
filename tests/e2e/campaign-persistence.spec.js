@@ -301,7 +301,6 @@ test('AUDIT-02 autosave captures live hero and roaming-party positions', async (
 });
 
 test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) => {
-  test.fail(true, 'AUDIT-05: remove when battle entry flushes the coherent memory/storage checkpoint');
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, { seed: 906 });
@@ -310,7 +309,9 @@ test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) =
     const save = window.__g._lastSave;
     const stored = JSON.parse(localStorage.getItem('bf_save'));
     return {
+      scene: window.__g.sceneName,
       memory: {
+        version: save.version,
         x: save.x,
         y: save.y,
         battleCount: save.battleCount,
@@ -320,10 +321,37 @@ test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) =
     };
   });
   assertNoRuntimeErrors(runtimeErrors);
+  expect(snapshot.scene).toBe('battle');
+  expect(snapshot.memory.version).toBe(1);
+  expect(snapshot.stored.version).toBe(snapshot.memory.version);
   expect(snapshot.stored.x).toBe(snapshot.memory.x);
   expect(snapshot.stored.y).toBe(snapshot.memory.y);
   expect(snapshot.stored.battleCount).toBe(snapshot.memory.battleCount);
   expect(snapshot.stored.parties).toEqual(snapshot.memory.parties);
+  expect(snapshot.memory.parties).toEqual([]);
+
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => window.__g.sceneName === 'world');
+  const restored = await page.evaluate(() => {
+    const world = window.__g.scene;
+    return {
+      scene: window.__g.sceneName,
+      version: world.save.version,
+      hero: { x: world.hero.x, y: world.hero.y },
+      battleCount: world.save.battleCount,
+      parties: world.save.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home })),
+    };
+  });
+  expect(restored).toEqual({
+    scene: 'world',
+    version: snapshot.memory.version,
+    hero: { x: snapshot.memory.x, y: snapshot.memory.y },
+    battleCount: snapshot.memory.battleCount,
+    parties: snapshot.memory.parties,
+  });
+  assertNoRuntimeErrors(runtimeErrors);
 });
 
 test('AUDIT-03 defeat restores the surviving roaming party', async ({ page }) => {

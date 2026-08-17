@@ -15,7 +15,7 @@ status row when done.
 | 002 | Cover persistence and non-victory campaign transitions | P1 | M | 001 | DONE |
 | 003 | Version, validate, and migrate campaign saves | P1 | M | 002 | DONE |
 | 004 | Synchronize live world state before every save | P1 | S | 003 | DONE |
-| 005 | Persist a coherent checkpoint before entering battle | P1 | S | 004 | TODO |
+| 005 | Persist a coherent checkpoint before entering battle | P1 | S | 004 | DONE |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
