@@ -13,6 +13,26 @@ existing Python server, checks browser/runtime errors, verifies all 17 record
 names, and proves that running QA preserves `bf_save` while using
 `bf_save_test`.
 
+## Performance coverage
+
+`tests/e2e/performance.spec.js` is the focused structural performance gate.
+Run it with `npm run test:perf` after scheduler, Canvas, battle-loop, or party
+navigation changes. It drives fixed steps and seeded scenarios; it does not
+use sleeps or machine-specific millisecond assertions. The four tests cover
+144 Hz scheduler coalescing and hidden-watchdog suppression, world static path
+reuse/culling, battle static/scratch reuse and team tags, and seeded party
+replan staggering with cached goal visibility.
+
+The scheduler renders after a fixed update or explicit invalidation only. The
+watchdog never renders hidden documents. World caches are reusable `Path2D`
+geometry and culling; battle caches are bounded to the arena and must not grow
+into a full-map bitmap. Scratch buffers belong to their scene instance, reset
+logical lengths, and clear stale references. Unit `team` tags must remain
+immutable. Replanning must stay seeded and exact: never trade river/bridge
+collision correctness for an approximate cache. Structural budgets are
+intentionally fixed (`<10000` world and `<9000` battle `beginPath` calls over
+20 draws); never raise or weaken them to make CI green.
+
 `tests/e2e/campaign-persistence.spec.js` owns real-player campaign transition
 coverage. It uses a fresh Playwright context per test, the raw `window.__g`
 handle for controlled setup, real scene/input/damage paths, and the isolated

@@ -8,6 +8,15 @@ const BASE = Object.assign({}, PAL.battle);
 // whatever reads it next (menu, world map, a future concurrent battle).
 const P = Object.assign({}, PAL.battle);
 
+function roundedPath(x, y, w, h, r) {
+  const p = new Path2D();
+  p.moveTo(x + r, y); p.lineTo(x + w - r, y); p.quadraticCurveTo(x + w, y, x + w, y + r);
+  p.lineTo(x + w, y + h - r); p.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  p.lineTo(x + r, y + h); p.quadraticCurveTo(x, y + h, x, y + h - r);
+  p.lineTo(x, y + r); p.quadraticCurveTo(x, y, x + r, y); p.closePath();
+  return p;
+}
+
 export class Battle {
   // setup: { troops:[{type}], enemies:[{type}], seed, title, onEnd(result) }
   constructor(game, setup) {
@@ -28,6 +37,13 @@ export class Battle {
     this.commandFlash = { text: '', t: 0 };
     this.projectiles = [];
     this.time = 0;
+    this._allUnits = [];
+    this._alerts = new Array(0);
+    this._drawEntries = [];
+    this._woundedEntries = [];
+    this._drawnBars = [];
+    this._groups = Object.create(null);
+    this._enemyGroups = Object.create(null);
 
     // the fight keeps your real map orientation: you enter from the way you rode in,
     // enemies are ahead, and retreat means literally riding back the way you came
@@ -124,6 +140,34 @@ export class Battle {
       }
       this.regions.push(pts);
     }
+    this._staticPaths = {
+      blotches: new Path2D(), regions: new Path2D(), light: new Path2D(), shade: new Path2D(),
+      islandInk: roundedPath(-46, -34, this.W + 92, this.H + 92, 60),
+      islandGround: roundedPath(-30, -30, this.W + 60, this.H + 60, 46),
+      islandBorder: roundedPath(4, 4, this.W - 8, this.H - 8, 34),
+    };
+    for (const list of [this.blotches, this.regions]) {
+      const path = list === this.blotches ? this._staticPaths.blotches : this._staticPaths.regions;
+      for (const b of list) {
+        path.moveTo(b[0][0], b[0][1]);
+        for (const pt of b) path.lineTo(pt[0], pt[1]);
+        path.closePath();
+      }
+    }
+    const light = this._staticPaths.light, shade = this._staticPaths.shade;
+    light.moveTo(this.W * 0.05, -30); light.lineTo(this.W * 0.55, -30); light.lineTo(this.W * 0.95, this.H + 30); light.lineTo(this.W * 0.45, this.H + 30); light.closePath();
+    shade.moveTo(this.W + 30, -30); shade.lineTo(this.W - 340, -30); shade.lineTo(this.W + 30, 300); shade.closePath();
+    shade.moveTo(-30, this.H + 30); shade.lineTo(340, this.H + 30); shade.lineTo(-30, this.H - 300); shade.closePath();
+    shade.moveTo(this.W + 30, -30); shade.lineTo(this.W - 500, -30); shade.lineTo(this.W + 30, 440); shade.closePath();
+    shade.moveTo(-30, this.H + 30); shade.lineTo(500, this.H + 30); shade.lineTo(-30, this.H - 440); shade.closePath();
+
+    // Props which never animate are rendered once into a bounded arena-sized layer.
+    // Fire, mill motion, and bridge water remain on the dynamic pass below.
+    this._staticLayer = document.createElement('canvas');
+    this._staticLayer.width = this.W + 128; this._staticLayer.height = this.H + 128;
+    const staticCtx = this._staticLayer.getContext('2d');
+    staticCtx.translate(64, 64);
+    this.drawProps(staticCtx, false);
 
     // troops
     this.troops = [];
@@ -160,7 +204,7 @@ export class Battle {
   spawnTroop(type, hp) {
     const d = UNIT_TYPES[type];
     this.troops.push({
-      type, d, x: this.hero.x - 60 - this.rng() * 80, y: this.hero.y + (this.rng() - 0.5) * 160,
+      type, team: 'friendly', d, x: this.hero.x - 60 - this.rng() * 80, y: this.hero.y + (this.rng() - 0.5) * 160,
       vx: 0, vy: 0, hp: hp != null ? hp : d.hp, maxHp: d.hp, cd: this.rng() * d.cooldown,
       facing: 0, slot: null, target: null, lunge: 0, bob: this.rng() * TAU, holdX: null, holdY: null, flash: 0,
     });
@@ -168,7 +212,7 @@ export class Battle {
   spawnEnemy(type, x, y) {
     const d = ENEMY_TYPES[type];
     this.enemies.push({
-      type, d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
+      type, team: 'enemy', d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
       cd: 0.5 + this.rng() * d.cooldown, windupT: 0, facing: Math.PI,
       target: null, lunge: 0, bob: this.rng() * TAU, flash: 0, slamT: 0,
     });
@@ -593,7 +637,8 @@ export class Battle {
     }
 
     // ---- separation (units + hero + obstacles)
-    const all = [];
+    const all = this._allUnits;
+    all.length = 0;
     for (const t of this.troops) all.push(t);
     for (const e of this.enemies) all.push(e);
     for (let i = 0; i < all.length; i++) {
@@ -601,7 +646,7 @@ export class Battle {
       for (let j = i + 1; j < all.length; j++) {
         const b = all[j];
         // same-team pairs keep extra spacing so a squad reads as countable units, not one blob
-        const sameTeam = this.troops.includes(a) === this.troops.includes(b);
+        const sameTeam = a.team === b.team;
         const rr = a.d.radius + b.d.radius + (sameTeam ? 13 : 7);
         const d2 = dist2(a.x, a.y, b.x, b.y);
         if (d2 < rr * rr && d2 > 0.01) {
@@ -720,7 +765,7 @@ export class Battle {
 
   // ------------------------------------------------------------- drawing
   draw(ctx) {
-    this._alerts = []; // per-frame alert cluster-cull registry
+    this._alerts.length = 0; // per-frame alert cluster-cull registry
     // paint the whole screen in the biome's shade tone FIRST — the battle sits on
     // continuous terrain, never on a floating "arena card" over the canvas default
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -742,47 +787,34 @@ export class Battle {
     }
     // island: ink cliff base, then ground on top
     ctx.fillStyle = P.ink;
-    rrect(ctx, -46, -34, this.W + 92, this.H + 92, 60); ctx.fill();
+    ctx.fill(this._staticPaths.islandInk);
     ctx.fillStyle = P.ground;
-    rrect(ctx, -30, -30, this.W + 60, this.H + 60, 46); ctx.fill();
+    ctx.fill(this._staticPaths.islandGround);
     ctx.strokeStyle = P.groundShade; ctx.lineWidth = 8;
-    rrect(ctx, 4, 4, this.W - 8, this.H - 8, 34); ctx.stroke();
+    ctx.stroke(this._staticPaths.islandBorder);
     // large second-tone regions: strong enough to read as landform, with a hard darker
     // edge on the light-away side so the patch reads as carved elevation, not a smudge
     ctx.save();
     ctx.globalAlpha = 0.62;
     ctx.fillStyle = P.groundShade;
-    for (const b of this.regions) {
-      ctx.beginPath(); ctx.moveTo(b[0][0], b[0][1]);
-      for (const pt of b) ctx.lineTo(pt[0], pt[1]);
-      ctx.closePath(); ctx.fill();
-    }
+    ctx.fill(this._staticPaths.regions);
     ctx.restore(); // no edge stroke at all: a line across same-biome ground is a seam, not art
     // per-scene light grading: one broad diagonal LIGHT band across the field (the sun falls
     // somewhere) + stepped shade wedges in the far corners — scene lighting, drawn flat
     ctx.save();
     ctx.globalAlpha = 0.10;
     ctx.fillStyle = '#FFF6E0';
-    ctx.beginPath();
-    ctx.moveTo(this.W * 0.05, -30); ctx.lineTo(this.W * 0.55, -30);
-    ctx.lineTo(this.W * 0.95, this.H + 30); ctx.lineTo(this.W * 0.45, this.H + 30);
-    ctx.closePath(); ctx.fill();
+    ctx.fill(this._staticPaths.light);
     ctx.fillStyle = P.ink;
     ctx.globalAlpha = 0.10;
-    ctx.beginPath(); ctx.moveTo(this.W + 30, -30); ctx.lineTo(this.W - 340, -30); ctx.lineTo(this.W + 30, 300); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-30, this.H + 30); ctx.lineTo(340, this.H + 30); ctx.lineTo(-30, this.H - 300); ctx.closePath(); ctx.fill();
     ctx.globalAlpha = 0.07;
-    ctx.beginPath(); ctx.moveTo(this.W + 30, -30); ctx.lineTo(this.W - 500, -30); ctx.lineTo(this.W + 30, 440); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-30, this.H + 30); ctx.lineTo(500, this.H + 30); ctx.lineTo(-30, this.H - 440); ctx.closePath(); ctx.fill();
+    ctx.fill(this._staticPaths.shade);
     ctx.restore();
     // blotches
     ctx.fillStyle = P.groundShade;
-    for (const b of this.blotches) {
-      ctx.beginPath(); ctx.moveTo(b[0][0], b[0][1]);
-      for (const pt of b) ctx.lineTo(pt[0], pt[1]);
-      ctx.closePath(); ctx.fill();
-    }
-    this.drawProps(ctx);
+    ctx.fill(this._staticPaths.blotches);
+    ctx.drawImage(this._staticLayer, -64, -64);
+    this.drawProps(ctx, true);
 
     // hold banner
     if (this.command === 'hold' && this.holdPoint) {
@@ -794,17 +826,24 @@ export class Battle {
     }
 
     // depth sort drawables
-    const draws = [];
-    for (const o of this.obstacles) draws.push({ y: o.y, f: () => this.drawObstacle(ctx, o) });
-    for (const t of this.troops) draws.push({ y: t.y, f: () => this.drawTroop(ctx, t) });
-    for (const e of this.enemies) draws.push({ y: e.y, f: () => this.drawEnemy(ctx, e) });
-    draws.push({ y: h.y, f: () => this.drawHero(ctx) });
+    const draws = this._drawEntries;
+    for (const entry of draws) entry.ref = null;
+    draws.length = 0;
+    for (const o of this.obstacles) draws.push({ y: o.y, kind: 0, ref: o });
+    for (const t of this.troops) draws.push({ y: t.y, kind: 1, ref: t });
+    for (const e of this.enemies) draws.push({ y: e.y, kind: 2, ref: e });
+    draws.push({ y: h.y, kind: 3, ref: h });
     draws.sort((a, b) => a.y - b.y);
     // shadows first
     for (const t of this.troops) shadow(ctx, t.x, t.y + 2, t.d.radius, 12, P.groundShade);
     for (const e of this.enemies) shadow(ctx, e.x, e.y + 2, e.d.radius, 12, P.groundShade);
     shadow(ctx, h.x, h.y + 4, 15, 16, P.groundShade);
-    for (const d of draws) d.f();
+    for (const d of draws) {
+      if (d.kind === 0) this.drawObstacle(ctx, d.ref);
+      else if (d.kind === 1) this.drawTroop(ctx, d.ref);
+      else if (d.kind === 2) this.drawEnemy(ctx, d.ref);
+      else this.drawHero(ctx);
+    }
     // the commander is never buried: while hurt (and at the death moment) he draws above the pile
     if (h.hurtT > 0 || h.hp <= 0) this.drawHero(ctx);
 
@@ -829,17 +868,24 @@ export class Battle {
     // scrum readability: slimmer bars, and only for meaningfully wounded units (<90%)
     // density-gated: most-wounded units draw first, then any bar landing within 20px of an
     // already-drawn bar is skipped — packed melees show a few meaningful bars, not a bar wall
-    const wounded = [];
+    const wounded = this._woundedEntries;
+    for (const entry of wounded) entry.u = null;
+    wounded.length = 0;
     for (const t of this.troops) if (t.hp / t.maxHp < 0.9) wounded.push({ u: t, w: 24, fill: P.hp });
     for (const e of this.enemies) if (e.hp / e.maxHp < 0.9) wounded.push({ u: e, w: e.type === 'brute' ? 38 : 24, fill: P.hp });
     wounded.sort((a, b) => a.u.hp / a.u.maxHp - b.u.hp / b.u.maxHp);
     // regional overlay budget: max 3 bars per ~120px region — past that a cluster is a
     // single wounded MASS, not individually-tracked units (Thronefall's hierarchy rule)
-    const drawnBars = [];
+    const drawnBars = this._drawnBars;
+    drawnBars.length = 0;
     for (const { u, w, fill } of wounded) {
       const bx = u.x, by = u.y - u.d.radius * 3;
-      if (drawnBars.some(([px, py]) => Math.abs(px - bx) < 26 && Math.abs(py - by) < 14)) continue;
-      const regionCount = drawnBars.filter(([px, py]) => Math.abs(px - bx) < 120 && Math.abs(py - by) < 120).length;
+      let overlap = false, regionCount = 0;
+      for (const [px, py] of drawnBars) {
+        if (Math.abs(px - bx) < 26 && Math.abs(py - by) < 14) overlap = true;
+        if (Math.abs(px - bx) < 120 && Math.abs(py - by) < 120) regionCount++;
+      }
+      if (overlap) continue;
       if (regionCount >= 3) continue;
       drawnBars.push([bx, by]);
       hpBar(ctx, bx, by, w, u.hp / u.maxHp, P.hpBack, fill);
@@ -876,14 +922,17 @@ export class Battle {
     // at mass-battle zoom: ONE badge per side (dominant type) — the silhouettes carry unit
     // identity now, and a stack of per-type badges over a melee drowns the fight it labels
     const massZoom = this.game.camera.zoom < 0.95 || (this.troops.length + this.enemies.length) > 12;
-    const groups = {};
-    for (const t of this.troops) (groups[t.type] = groups[t.type] || []).push(t);
-    const eg = {};
-    for (const e of this.enemies) (eg[e.type] = eg[e.type] || []).push(e);
+    const groups = this._groups, eg = this._enemyGroups;
+    for (const type in UNIT_TYPES) { if (!groups[type]) groups[type] = []; else groups[type].length = 0; }
+    for (const type in ENEMY_TYPES) { if (!eg[type]) eg[type] = []; else eg[type].length = 0; }
+    for (const t of this.troops) groups[t.type].push(t);
+    for (const e of this.enemies) eg[e.type].push(e);
     if (massZoom) {
-      const dom = (g) => Object.keys(g).sort((a, b) => g[b].length - g[a].length)[0];
-      if (this.troops.length) centroidBalloon(this.troops, UNIT_TYPES[dom(groups)].icon, P.ink, P.cream, 56);
-      if (this.enemies.length) centroidBalloon(this.enemies, ENEMY_TYPES[dom(eg)].icon, P.enemyDark, P.enemyAccent, 58);
+      let td = null, ed = null;
+      for (const type in groups) if (groups[type].length && (!td || groups[type].length > groups[td].length)) td = type;
+      for (const type in eg) if (eg[type].length && (!ed || eg[type].length > eg[ed].length)) ed = type;
+      if (td) centroidBalloon(this.troops, UNIT_TYPES[td].icon, P.ink, P.cream, 56);
+      if (ed) centroidBalloon(this.enemies, ENEMY_TYPES[ed].icon, P.enemyDark, P.enemyAccent, 58);
     } else {
       let ti = 0;
       for (const type in groups) centroidBalloon(groups[type], UNIT_TYPES[type].icon, P.ink, P.cream, 56 + (ti++) * 28);
@@ -898,8 +947,10 @@ export class Battle {
     else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot);
   }
 
-  drawProps(ctx) {
+  drawProps(ctx, dynamicOnly = false) {
     for (const p of this.props) {
+      const dynamic = p.kind === 'fire' || p.kind === 'mill' || p.kind === 'river';
+      if (dynamicOnly !== dynamic) continue;
       if (p.kind === 'river') {
         const bx = this.bridge.x;
         ctx.fillStyle = P.water;

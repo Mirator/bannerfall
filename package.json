@@ -8,6 +8,7 @@
   "scripts": {
     "test": "playwright test",
     "test:qa": "playwright test tests/e2e/qa.spec.js",
+    "test:perf": "playwright test tests/e2e/performance.spec.js",
     "test:headed": "playwright test --headed",
     "serve": "python scripts/serve.py"
   },

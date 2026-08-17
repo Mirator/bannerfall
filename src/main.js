@@ -11,7 +11,7 @@ const ctx = canvas.getContext('2d');
 function resize() {
   canvas.width = window.innerWidth || 1280;
   canvas.height = window.innerHeight || 720;
-  if (game) { game.camera.w = canvas.width; game.camera.h = canvas.height; }
+  if (game) { game.camera.w = canvas.width; game.camera.h = canvas.height; game.invalidate(); }
 }
 window.addEventListener('resize', resize);
 
@@ -32,7 +32,10 @@ class Game {
     // a real player's campaign save.
     this.testMode = false;
     this.testSeed = null; // one-shot deterministic runSeed override for scenario('world', {seed})
+    this.renderDirty = true;
   }
+
+  invalidate() { this.renderDirty = true; }
 
   get saveKey() { return this.testMode ? 'bf_save_test' : 'bf_save'; }
 
@@ -58,6 +61,7 @@ class Game {
     this._lastSave = this.scene.save;
     this.camera.zoom = 1;
     this.camera.x = this.scene.hero.x; this.camera.y = this.scene.hero.y;
+    this.invalidate();
     this.persistRun();
   }
   startBattle(setup) {
@@ -65,28 +69,31 @@ class Game {
     this.sceneName = 'battle';
     this.camera.zoom = 1;
     this.camera.x = this.scene.hero.x; this.camera.y = this.scene.hero.y;
+    this.invalidate();
   }
   startVictory(save) {
     this.scene = null;
     this.sceneName = 'victory';
     this.victoryT = 0;
     this.finalSave = save;
+    this.invalidate();
     this.clearRun(); // the campaign is over — next Enter starts a genuinely fresh run
     this.sfx.victory();
   }
 
   update(dt) {
     // mute toggle works everywhere
-    if (this.input.pressed.has('KeyM')) { this.sfx.setMuted(!this.sfx.muted); this.muteToastT = 2.5; }
+    if (this.input.pressed.has('KeyM')) { this.sfx.setMuted(!this.sfx.muted); this.muteToastT = 2.5; this.invalidate(); }
     if (this.muteToastT > 0) this.muteToastT -= dt;
     // pause: any active scene, Escape or P
     if ((this.input.pressed.has('Escape') || this.input.pressed.has('KeyP')) &&
         (this.sceneName === 'world' || this.sceneName === 'battle')) {
       this.paused = !this.paused;
       if (this.paused) this.persistRun();
+      this.invalidate();
     }
     if (this.paused) {
-      if (this.input.pressed.has('KeyR')) { this.paused = false; this.clearRun(); this.sceneName = 'menu'; this.menuT = 0; this.scene = null; }
+      if (this.input.pressed.has('KeyR')) { this.paused = false; this.clearRun(); this.sceneName = 'menu'; this.menuT = 0; this.scene = null; this.invalidate(); }
       this.input.endFrame();
       return;
     }
@@ -108,7 +115,7 @@ class Game {
     } else if (this.sceneName === 'victory') {
       this.victoryT += dt;
       if (this.victoryT > 1.5 && (this.input.pressed.has('Enter') || this.input.mouse.clicked)) {
-        this.sceneName = 'menu'; this.menuT = 0;
+        this.sceneName = 'menu'; this.menuT = 0; this.invalidate();
       }
     } else if (this.scene) {
       this.scene.update(dt);
@@ -137,6 +144,7 @@ class Game {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('🔇 muted', canvas.width - 55, canvas.height - 27);
     }
+    this.renderDirty = false;
   }
 
   drawPause() {
@@ -311,7 +319,7 @@ function frame(now) {
   try {
     let n = 0;
     while (acc >= DT && n++ < 5) { game.update(DT); acc -= DT; }
-    game.draw();
+    if (n > 0 || game.renderDirty) game.draw();
   } catch (err) {
     // an exception here would otherwise skip the reschedule below and freeze the
     // tab forever (and, for the watchdog, replay the same throw at 20Hz) — recover
@@ -335,7 +343,7 @@ setInterval(() => {
     try {
       let n = 0;
       while (acc >= DT && n++ < 3) { game.update(DT); acc -= DT; }
-      game.draw();
+      if (!document.hidden && (n > 0 || game.renderDirty)) game.draw();
     } catch (err) {
       console.error('Bannerfall: recovered from an error in the watchdog loop', err);
       acc = 0;
