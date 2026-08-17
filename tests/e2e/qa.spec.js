@@ -50,6 +50,8 @@ test('QA preserves a real player save and uses the test slot', async ({ page }) 
   });
 
   await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__g && window.__g.menuPanel === 'new');
+  await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__g && window.__g.sceneName === 'world');
   const realSaveRaw = await page.evaluate(async () => {
     const game = window.__g;

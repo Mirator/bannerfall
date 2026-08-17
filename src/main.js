@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=ra95157210ae5';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=ra95157210ae5';
-import { Battle } from './battle.js?v=ra95157210ae5';
-import { World } from './world.js?v=ra95157210ae5';
-import { ACTIONS } from './input-actions.js?v=ra95157210ae5';
-import { createWebPlatform } from './platform/web-platform.js?v=ra95157210ae5';
-import { SaveRepository } from './persistence/save-repository.js?v=ra95157210ae5';
+import { PAL } from './data.js?v=raf847f688e24';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=raf847f688e24';
+import { Battle } from './battle.js?v=raf847f688e24';
+import { World } from './world.js?v=raf847f688e24';
+import { ACTIONS } from './input-actions.js?v=raf847f688e24';
+import { createWebPlatform } from './platform/web-platform.js?v=raf847f688e24';
+import { SaveRepository } from './persistence/save-repository.js?v=raf847f688e24';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -28,6 +28,10 @@ class Game {
     this.scene = null;
     this.sceneName = 'menu';
     this.menuT = 0;
+    this.menuPanel = 'root';
+    this.menuIndex = 0;
+    this.menuHitRegions = [];
+    this.pendingHard = false;
     this.victoryT = 0;
     this.paused = false;
     this.saveTimer = 0;
@@ -66,6 +70,129 @@ class Game {
   }
   clearRun() {
     this.saves.removeCampaign(this.testMode).catch(error => this.reportSaveFailure(error));
+  }
+
+  enterMenu(panel = 'root') {
+    this.scene = null;
+    this.sceneName = 'menu';
+    this.menuT = 0;
+    this.menuPanel = panel;
+    this.menuIndex = 0;
+    this.menuHitRegions = [];
+    this.pendingHard = false;
+    this.paused = false;
+    this.invalidate();
+  }
+
+  menuItems() {
+    const save = this.loadRun();
+    if (this.menuPanel === 'new') return [
+      { id: 'normal', label: 'NORMAL CAMPAIGN', meta: 'Balanced camps · volunteers may join' },
+      { id: 'hard', label: 'HARD CAMPAIGN', meta: 'Stronger camps · no volunteers' },
+      { id: 'back', label: 'BACK' },
+    ];
+    if (this.menuPanel === 'confirm') return [
+      { id: 'cancel', label: 'KEEP CURRENT CAMPAIGN' },
+      { id: 'replace', label: `START NEW ${this.pendingHard ? 'HARD ' : ''}CAMPAIGN` },
+    ];
+    if (this.menuPanel === 'settings') return [
+      { id: 'mute', label: 'SOUND', meta: this.sfx.muted ? 'Muted' : 'On' },
+      { id: 'back', label: 'BACK' },
+    ];
+    if (this.menuPanel === 'credits') return [{ id: 'back', label: 'BACK' }];
+    const items = [];
+    if (save) {
+      const seconds = Math.max(0, Math.floor(save.stats?.playT || 0));
+      const time = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+      items.push({
+        id: 'continue', label: 'CONTINUE CAMPAIGN',
+        meta: `${save.hard ? 'Hard' : 'Normal'} · ${save.troops.length} troops · ${time}`,
+      });
+    }
+    items.push(
+      { id: 'new', label: 'NEW CAMPAIGN' },
+      { id: 'settings', label: 'SETTINGS' },
+      { id: 'credits', label: 'CREDITS' },
+    );
+    return items;
+  }
+
+  setMenuPanel(panel) {
+    this.menuPanel = panel;
+    this.menuIndex = 0;
+    this.menuHitRegions = [];
+    this.invalidate();
+  }
+
+  startNewCampaign(hard) {
+    this.sfx.horn(hard ? 147 : 262);
+    this.clearRun();
+    this.hardNext = !!hard;
+    this.startWorld(null);
+  }
+
+  requestNewCampaign(hard) {
+    this.pendingHard = !!hard;
+    if (this.loadRun()) this.setMenuPanel('confirm');
+    else this.startNewCampaign(this.pendingHard);
+  }
+
+  activateMenuItem(id) {
+    if (id === 'continue') {
+      const save = this.loadRun();
+      if (save) { this.sfx.horn(262); this.startWorld(save); }
+    } else if (id === 'new') this.setMenuPanel('new');
+    else if (id === 'normal') this.requestNewCampaign(false);
+    else if (id === 'hard') this.requestNewCampaign(true);
+    else if (id === 'settings') this.setMenuPanel('settings');
+    else if (id === 'credits') this.setMenuPanel('credits');
+    else if (id === 'mute') {
+      this.sfx.setMuted(!this.sfx.muted).catch(error => this.reportSaveFailure(error));
+      this.invalidate();
+    } else if (id === 'replace') this.startNewCampaign(this.pendingHard);
+    else if (id === 'cancel') this.setMenuPanel('new');
+    else if (id === 'back') this.setMenuPanel('root');
+  }
+
+  updateMenu(dt) {
+    this.menuT += dt;
+    const items = this.menuItems();
+    this.menuIndex = Math.min(this.menuIndex, Math.max(0, items.length - 1));
+
+    if (this.menuPanel === 'root' && this.input.pressedAction(ACTIONS.CONTINUE_RUN) && this.loadRun()) {
+      this.activateMenuItem('continue');
+      return;
+    }
+    if (this.menuPanel === 'root' && this.input.pressedAction(ACTIONS.NEW_HARD_RUN)) {
+      this.requestNewCampaign(true);
+      return;
+    }
+
+    const hovered = this.menuHitRegions.find(region =>
+      this.input.mouse.x >= region.x && this.input.mouse.x <= region.x + region.w &&
+      this.input.mouse.y >= region.y && this.input.mouse.y <= region.y + region.h);
+    if (hovered && (this.input.mouse.moved || this.input.mouse.clicked)) {
+      const hoverIndex = items.findIndex(item => item.id === hovered.id);
+      if (hoverIndex >= 0 && hoverIndex !== this.menuIndex) {
+        this.menuIndex = hoverIndex;
+        this.invalidate();
+      }
+    }
+
+    if (this.input.pressedAction(ACTIONS.MENU_UP)) {
+      this.menuIndex = (this.menuIndex + items.length - 1) % items.length;
+      this.invalidate();
+    } else if (this.input.pressedAction(ACTIONS.MENU_DOWN)) {
+      this.menuIndex = (this.menuIndex + 1) % items.length;
+      this.invalidate();
+    } else if (this.input.pressedAction(ACTIONS.MENU_BACK)) {
+      if (this.menuPanel === 'confirm') this.setMenuPanel('new');
+      else if (this.menuPanel !== 'root') this.setMenuPanel('root');
+    } else if (this.input.pressedAction(ACTIONS.CONFIRM)) {
+      this.activateMenuItem(items[this.menuIndex].id);
+    } else if (this.input.mouse.clicked && hovered) {
+      this.activateMenuItem(hovered.id);
+    }
   }
 
   startWorld(save) {
@@ -109,29 +236,16 @@ class Game {
       this.invalidate();
     }
     if (this.paused) {
-      if (this.input.pressedAction(ACTIONS.ABANDON_RUN)) { this.paused = false; this.clearRun(); this.sceneName = 'menu'; this.menuT = 0; this.scene = null; this.invalidate(); }
+      if (this.input.pressedAction(ACTIONS.ABANDON_RUN)) { this.clearRun(); this.enterMenu(); }
       this.input.endFrame();
       return;
     }
     if (this.sceneName === 'menu') {
-      this.menuT += dt;
-      if (this.input.pressedAction(ACTIONS.CONTINUE_RUN) && this.loadRun()) {
-        this.sfx.horn(262);
-        this.startWorld(this.loadRun());
-      } else if (this.input.pressedAction(ACTIONS.NEW_HARD_RUN)) {
-        this.sfx.horn(147);
-        this.clearRun();
-        this.hardNext = true;
-        this.startWorld(null);
-      } else if (this.input.pressedAction(ACTIONS.CONFIRM)) {
-        this.sfx.horn(262);
-        this.clearRun();
-        this.startWorld(null);
-      }
+      this.updateMenu(dt);
     } else if (this.sceneName === 'victory') {
       this.victoryT += dt;
       if (this.victoryT > 1.5 && (this.input.pressedAction(ACTIONS.CONFIRM) || this.input.mouse.clicked)) {
-        this.sceneName = 'menu'; this.menuT = 0; this.invalidate();
+        this.enterMenu();
       }
     } else if (this.scene) {
       this.scene.update(dt);
@@ -240,34 +354,51 @@ class Game {
     ctx.font = '600 17px system-ui, sans-serif';
     ctx.fillStyle = P.ink;
     ctx.fillText('Raise a warband. Raze the camps. Take Wolfsjaw Hold.', W / 2, H * 0.3 + Math.min(70, W * 0.05) * 1.45);
-    // action chips on ink pills so they never fight the mountain art behind them
-    // one shared pill width: visual weight must track priority, not text length
-    const chip = (text, y, font, primary) => {
-      ctx.font = font;
-      // shared width band with real padding; every pill gets a separating stroke so it can
-      // never fuse with same-color background art
-      const tw = Math.max(primary ? 420 : 380, ctx.measureText(text).width + 44);
-      ctx.fillStyle = P.ink;
-      rrect(ctx, W / 2 - tw / 2, y - 15, tw, 30, 15); ctx.fill();
-      ctx.strokeStyle = primary ? P.hero : P.cream; // SOLID stroke: antialiasing is not a border
-      ctx.lineWidth = 2.5;
-      rrect(ctx, W / 2 - tw / 2, y - 15, tw, 30, 15); ctx.stroke();
-      ctx.fillStyle = P.cream;
-      ctx.fillText(text, W / 2, y + 1);
+    const headings = {
+      new: ['CHOOSE YOUR CAMPAIGN', 'Difficulty cannot be changed after departure.'],
+      confirm: ['REPLACE SAVED CAMPAIGN?', 'Your current campaign will be permanently replaced.'],
+      settings: ['SETTINGS', 'WASD ride · mouse aim · LMB swing · Space dash · 1/2/3 troop orders'],
+      credits: ['CREDITS', 'Designed and built for the Bannerfall campaign.'],
     };
-    if (Math.sin(this.menuT * 4) > -0.3) chip('Press ENTER to ride', H * 0.52, '800 20px system-ui, sans-serif', true);
-    if (this.loadRun()) chip('C — continue your saved campaign', H * 0.585, '700 15px system-ui, sans-serif', false);
-    chip('H — ride out on HARD (stronger camps, no volunteers)', H * 0.645, '700 14px system-ui, sans-serif', false);
-    // controls panel (drawn last, on its own ink card so it never fights the art)
-    const lines = [
-      'WASD ride  ·  mouse aim  ·  LMB swing  ·  SPACE dash  ·  1/2/3 troop orders',
-    ];
-    const pw = 560, ph = lines.length * 26 + 24, px = W / 2 - pw / 2, py = H * 0.78;
+    const heading = headings[this.menuPanel];
+    if (heading) {
+      ctx.fillStyle = P.ink;
+      ctx.font = '900 19px system-ui, sans-serif';
+      ctx.fillText(heading[0], W / 2, H * 0.445);
+      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.fillText(heading[1], W / 2, H * 0.475);
+      if (this.menuPanel === 'credits') {
+        ctx.fillText('Art direction: flat-shaded campaign maps, banners, and tiny warbands.', W / 2, H * 0.505);
+      }
+    }
+
+    const items = this.menuItems();
+    const pw = Math.min(520, W - 48), rowH = 42, gap = 8;
+    const startY = heading ? H * (this.menuPanel === 'credits' ? 0.55 : 0.515) : H * 0.47;
+    this.menuHitRegions = [];
+    items.forEach((item, index) => {
+      const x = W / 2 - pw / 2, y = startY + index * (rowH + gap);
+      const selected = index === this.menuIndex;
+      ctx.fillStyle = selected ? P.cream : P.ink;
+      rrect(ctx, x, y, pw, rowH, 8); ctx.fill();
+      ctx.strokeStyle = selected ? P.hero : P.cream;
+      ctx.lineWidth = selected ? 3 : 1.5;
+      rrect(ctx, x, y, pw, rowH, 8); ctx.stroke();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = selected ? P.ink : P.cream;
+      ctx.font = '800 15px system-ui, sans-serif';
+      ctx.fillText(`${selected ? '▸  ' : '   '}${item.label}`, x + 18, y + rowH / 2 + 1);
+      if (item.meta) {
+        ctx.textAlign = 'right';
+        ctx.font = '600 11px system-ui, sans-serif';
+        ctx.fillText(item.meta, x + pw - 16, y + rowH / 2 + 1);
+      }
+      this.menuHitRegions.push({ id: item.id, x, y, w: pw, h: rowH });
+    });
+    ctx.textAlign = 'center';
     ctx.fillStyle = P.ink;
-    rrect(ctx, px, py, pw, ph, 12); ctx.fill();
-    ctx.fillStyle = P.cream;
-    ctx.font = '600 14px system-ui, sans-serif';
-    lines.forEach((l, i) => ctx.fillText(l, W / 2, py + 25 + i * 26));
+    ctx.font = '700 12px system-ui, sans-serif';
+    ctx.fillText(`${this.menuPanel === 'root' ? '↑↓ / WASD  Navigate' : '↑↓  Navigate'}    ·    ENTER  Select${this.menuPanel === 'root' ? '' : '    ·    ESC  Back'}    ·    M  Mute`, W / 2, H - 24);
   }
 
   drawVictory() {
@@ -342,7 +473,7 @@ function frame(now) {
     // to the menu instead of dying silently. The save on disk is untouched.
     console.error('Bannerfall: recovered from an error in the game loop', err);
     acc = 0;
-    game.scene = null; game.sceneName = 'menu'; game.menuT = 0; game.paused = false;
+    game.enterMenu();
   }
   requestAnimationFrame(frame);
 }
@@ -363,7 +494,7 @@ setInterval(() => {
     } catch (err) {
       console.error('Bannerfall: recovered from an error in the watchdog loop', err);
       acc = 0;
-      game.scene = null; game.sceneName = 'menu'; game.menuT = 0; game.paused = false;
+      game.enterMenu();
     }
   }
 }, 50);
@@ -393,6 +524,16 @@ window.game = {
   state: () => {
     const s = { scene: game.sceneName };
     const sc = game.scene;
+    if (game.sceneName === 'menu') {
+      const items = game.menuItems();
+      s.menu = {
+        panel: game.menuPanel,
+        index: game.menuIndex,
+        selected: items[game.menuIndex]?.id ?? null,
+        items: items.map(item => ({ id: item.id, label: item.label, meta: item.meta ?? null })),
+        pendingHard: game.pendingHard,
+      };
+    }
     if (game.sceneName === 'battle' && sc) {
       s.battle = {
         state: sc.state, command: sc.command,
@@ -417,7 +558,7 @@ window.game = {
   scenario: (name, opts) => {
     markTest();
     game.paused = false; // jumping to a scenario must not inherit a stale pause from prior state
-    if (name === 'menu') { game.sceneName = 'menu'; game.scene = null; }
+    if (name === 'menu') game.enterMenu();
     else if (name === 'world') {
       if (opts && opts.seed != null) game.testSeed = opts.seed;
       game.startWorld(null);
@@ -454,6 +595,8 @@ window.game = {
     return game.sceneName;
   },
 };
+window.render_game_to_text = () => JSON.stringify(window.game.state());
+window.advanceTime = (milliseconds = 0) => window.game.step(Math.max(0, milliseconds) / 1000);
 }
 
 async function bootstrap() {

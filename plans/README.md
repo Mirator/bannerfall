@@ -32,6 +32,7 @@ conditions, and update its status row when done.
 | 014 | Establish maintainable World and Battle simulation seams | Medium | L | 009, 011, 013 | DONE |
 | 015 | Bound battle simulation scaling with spatial broad phases | Medium* | L | 014 | DONE |
 | 016 | Introduce a Steam-ready platform and input boundary | P2 | L | 001-015 | DONE |
+| 017 | Replace title-screen shortcuts with safe menu navigation | P0 | M | 016 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).

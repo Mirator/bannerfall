@@ -64,8 +64,10 @@ function runQaSuiteImpl() {
     g.scenario('menu');
     assert(g.scene() === 'menu', 'scenario(menu) -> scene=' + g.scene());
     g.tap('Enter');
-    assert(g.scene() === 'world', 'Enter from menu -> scene=' + g.scene());
-    return 'menu -> world on Enter confirmed';
+    assert(g.scene() === 'menu' && G.menuPanel === 'new', 'first Enter should open campaign choice');
+    g.tap('Enter');
+    assert(g.scene() === 'world', 'Enter on Normal campaign -> scene=' + g.scene());
+    return 'menu -> campaign choice -> world on Enter confirmed';
   });
 
   // ======================================================================
