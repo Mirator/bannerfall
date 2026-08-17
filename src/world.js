@@ -54,6 +54,7 @@ export class World {
     const S = WORLD.settlements;
     const roadPairs = [[0, 1], [0, 2], [1, 3], [2, 3], [0, 3]];
     this.roadSegs = roadPairs.map(([a, b]) => [S[a].x, S[a].y, S[b].x, S[b].y]);
+    this._staticPaths = this.buildStaticPaths();
     this.solids = this.scenery.filter(it => it.kind === 'mtn' || it.kind === 'rock')
       .map(it => ({ x: it.x, y: it.y - (it.kind === 'mtn' ? it.s * 0.25 : 0), r: it.kind === 'mtn' ? it.s * 0.72 : it.s * 1.1 }))
       // bridge mouths must be open: no solid may sit within reach of a crossing
@@ -94,6 +95,10 @@ export class World {
         }
       }
     }
+    this._navScratch = {
+      start: new Float64Array(N), toGoal: new Float64Array(N), dist: new Float64Array(N),
+      first: new Int32Array(N), done: new Uint8Array(N),
+    };
 
     // roaming parties: restore persisted ones, or spawn the initial set
     this.parties = [];
@@ -102,6 +107,8 @@ export class World {
         this.parties.push({
           camp: p.camp, x: p.x, y: p.y, vx: 0, vy: 0, facing: 0, bob: this.rng() * TAU,
           comp: p.comp, home: p.home, wander: null, wanderT: 0, waryT: p.waryT || 0,
+          navT: this.rng() * 0.3, navGoal: null, navFor: null,
+          _navGoalVisibility: new Float64Array(N), _navGoalX: NaN, _navGoalY: NaN,
         });
       }
     } else {
@@ -189,24 +196,33 @@ export class World {
     return true;
   }
   // next waypoint toward `goal` from (x,y): direct if visible, else Dijkstra over the nav graph
-  pathGoal(x, y, goal) {
+  pathGoal(x, y, goal, party = null) {
     if (this.lineClear(x, y, goal.x, goal.y)) return goal;
     const N = this.navNodes.length;
-    const start = [], toGoal = [];
+    const scratch = this._navScratch;
+    const start = scratch.start;
+    const toGoal = party ? party._navGoalVisibility : scratch.toGoal;
+    const goalChanged = !party || !Number.isFinite(party._navGoalX) ||
+      Math.hypot(party._navGoalX - goal.x, party._navGoalY - goal.y) > 140;
+    if (goalChanged) {
+      for (let i = 0; i < N; i++) {
+        toGoal[i] = this.lineClear(this.navNodes[i].x, this.navNodes[i].y, goal.x, goal.y)
+          ? Math.hypot(goal.x - this.navNodes[i].x, goal.y - this.navNodes[i].y) : Infinity;
+      }
+      if (party) { party._navGoalX = goal.x; party._navGoalY = goal.y; }
+    }
     for (let i = 0; i < N; i++) {
-      start.push(this.lineClear(x, y, this.navNodes[i].x, this.navNodes[i].y)
-        ? Math.hypot(x - this.navNodes[i].x, y - this.navNodes[i].y) : Infinity);
-      toGoal.push(this.lineClear(this.navNodes[i].x, this.navNodes[i].y, goal.x, goal.y)
-        ? Math.hypot(goal.x - this.navNodes[i].x, goal.y - this.navNodes[i].y) : Infinity);
+      start[i] = this.lineClear(x, y, this.navNodes[i].x, this.navNodes[i].y)
+        ? Math.hypot(x - this.navNodes[i].x, y - this.navNodes[i].y) : Infinity;
     }
     // Dijkstra from the virtual start over ≤9 nodes
-    const dist = start.slice(), first = start.map((d, i) => (d < Infinity ? i : -1));
-    const done = new Array(N).fill(false);
+    const dist = scratch.dist, first = scratch.first, done = scratch.done;
+    for (let i = 0; i < N; i++) { dist[i] = start[i]; first[i] = start[i] < Infinity ? i : -1; done[i] = 0; }
     for (let iter = 0; iter < N; iter++) {
       let u = -1, ud = Infinity;
       for (let i = 0; i < N; i++) if (!done[i] && dist[i] < ud) { ud = dist[i]; u = i; }
       if (u < 0) break;
-      done[u] = true;
+      done[u] = 1;
       for (const [v, w] of this.navEdges[u]) {
         if (dist[u] + w < dist[v]) { dist[v] = dist[u] + w; first[v] = first[u]; }
       }
@@ -216,6 +232,39 @@ export class World {
       if (dist[i] + toGoal[i] < bd) { bd = dist[i] + toGoal[i]; best = i; }
     }
     return best >= 0 ? this.navNodes[first[best]] : null;
+  }
+
+  buildStaticPaths() {
+    const paths = { blotches: new Path2D(), light: new Path2D(), shade: new Path2D(), roads: new Path2D(), rivers: [] };
+    for (const b of this.blotches) {
+      paths.blotches.moveTo(b[0][0], b[0][1]);
+      for (const pt of b) paths.blotches.lineTo(pt[0], pt[1]);
+      paths.blotches.closePath();
+    }
+    paths.light.moveTo(this.W * 0.10, -40); paths.light.lineTo(this.W * 0.45, -40);
+    paths.light.lineTo(this.W * 0.90, this.H + 40); paths.light.lineTo(this.W * 0.55, this.H + 40); paths.light.closePath();
+    paths.shade.moveTo(this.W + 40, -40); paths.shade.lineTo(this.W - 900, -40); paths.shade.lineTo(this.W + 40, 800); paths.shade.closePath();
+    paths.shade.moveTo(-40, this.H + 40); paths.shade.lineTo(900, this.H + 40); paths.shade.lineTo(-40, this.H - 800); paths.shade.closePath();
+    const S = WORLD.settlements;
+    for (const [a, b] of [[S[0], S[1]], [S[0], S[2]], [S[1], S[3]], [S[2], S[3]]]) {
+      const mx = (a.x + b.x) / 2 + (a.y < b.y ? 60 : -60), my = (a.y + b.y) / 2 + 40;
+      paths.roads.moveTo(a.x, a.y); paths.roads.quadraticCurveTo(mx, my, b.x, b.y);
+    }
+    for (const r of this.rivers) {
+      const path = new Path2D();
+      path.moveTo(r.pts[0][0], r.pts[0][1]);
+      for (let i = 1; i < r.pts.length - 1; i++) {
+        const [x1, y1] = r.pts[i], [x2, y2] = r.pts[i + 1];
+        path.quadraticCurveTo(x1, y1, (x1 + x2) / 2, (y1 + y2) / 2);
+      }
+      paths.rivers.push(path);
+    }
+    return paths;
+  }
+
+  visible(x, y, radius = 100) {
+    const cam = this.game.camera, hw = cam.w / cam.zoom / 2, hh = cam.h / cam.zoom / 2;
+    return x > cam.x - hw - radius && x < cam.x + hw + radius && y > cam.y - hh - radius && y < cam.y + hh + radius;
   }
   // move with axis-separated sliding so terrain deflects instead of gluing you in place.
   // CRITICAL: an entity already standing in an invalid spot (spawned or teleported there)
@@ -308,7 +357,8 @@ export class World {
       x: px, y: py,
       vx: 0, vy: 0, facing: 0, bob: R() * TAU,
       comp, home: { x: camp.x, y: camp.y },
-      wander: null, wanderT: 0,
+      wander: null, wanderT: 0, navT: R() * 0.3, navGoal: null, navFor: null,
+      _navGoalVisibility: new Float64Array(this.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
     });
   }
 
@@ -637,11 +687,14 @@ export class World {
       // navigation: route to the next visible waypoint (bridge gates, stagings, grid) when
       // the straight line is walled off — cached per party, replanned every ~0.6s
       {
-        p.navT = (p.navT || 0) - dt;
-        if (p.navT <= 0 || !p.navGoal || len(goal.x - (p.navFor ? p.navFor.x : 0), goal.y - (p.navFor ? p.navFor.y : 0)) > 140) {
-          p.navGoal = this.pathGoal(p.x, p.y, goal);
-          p.navFor = { x: goal.x, y: goal.y };
-          p.navT = 0.6;
+        if (!p._navGoalVisibility) { p._navGoalVisibility = new Float64Array(this.navNodes.length); p._navGoalX = NaN; p._navGoalY = NaN; }
+        p.navT = (p.navT == null ? 0 : p.navT) - dt;
+        const goalChanged = !!p.navFor && len(goal.x - p.navFor.x, goal.y - p.navFor.y) > 140;
+        if (p.navT <= 0 || goalChanged) {
+          p.navGoal = this.pathGoal(p.x, p.y, goal, p);
+          if (!p.navFor) p.navFor = { x: goal.x, y: goal.y };
+          else { p.navFor.x = goal.x; p.navFor.y = goal.y; }
+          p.navT = 0.5 + this.rng() * 0.2;
         }
         const wp = p.navGoal;
         if (wp) goal = wp;
@@ -764,41 +817,27 @@ export class World {
 
     // ground blotches — cooler earth tone WITH the same hard ink edge every other shape
     // class carries (the battle terrain got this; the world map must speak the same language)
-    for (const b of this.blotches) {
-      ctx.beginPath(); ctx.moveTo(b[0][0], b[0][1]);
-      for (const pt of b) ctx.lineTo(pt[0], pt[1]);
-      ctx.closePath();
-      ctx.fillStyle = '#C4873B'; ctx.fill();
-    }
+    ctx.fillStyle = '#C4873B'; ctx.fill(this._staticPaths.blotches);
 
     // world light grading: the same sun that lights every object sweeps one broad band
     // across the land; far corners fall into stepped shade — a lit world, not a color fill
     ctx.save();
     ctx.globalAlpha = 0.07;
     ctx.fillStyle = '#FFF6E0';
-    ctx.beginPath();
-    ctx.moveTo(this.W * 0.10, -40); ctx.lineTo(this.W * 0.45, -40);
-    ctx.lineTo(this.W * 0.90, this.H + 40); ctx.lineTo(this.W * 0.55, this.H + 40);
-    ctx.closePath(); ctx.fill();
+    ctx.fill(this._staticPaths.light);
     ctx.fillStyle = P.ink;
     ctx.globalAlpha = 0.06;
-    ctx.beginPath(); ctx.moveTo(this.W + 40, -40); ctx.lineTo(this.W - 900, -40); ctx.lineTo(this.W + 40, 800); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-40, this.H + 40); ctx.lineTo(900, this.H + 40); ctx.lineTo(-40, this.H - 800); ctx.closePath(); ctx.fill();
+    ctx.fill(this._staticPaths.shade);
     ctx.restore();
 
     // rivers with bridges
-    for (const r of this.rivers) {
+    for (let ri = 0; ri < this.rivers.length; ri++) {
+      const r = this.rivers[ri];
       ctx.strokeStyle = P.water; ctx.lineWidth = 34; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(r.pts[0][0], r.pts[0][1]);
-      for (let i = 1; i < r.pts.length - 1; i++) {
-        const [x1, y1] = r.pts[i], [x2, y2] = r.pts[i + 1];
-        ctx.quadraticCurveTo(x1, y1, (x1 + x2) / 2, (y1 + y2) / 2);
-      }
-      ctx.stroke();
+      ctx.stroke(this._staticPaths.rivers[ri]);
       ctx.strokeStyle = '#7FD9E6'; ctx.lineWidth = 5;
       ctx.setLineDash([12, 26]);
-      ctx.stroke();
+      ctx.stroke(this._staticPaths.rivers[ri]);
       ctx.setLineDash([]);
       for (const [bx, by] of r.bridges) {
         ctx.save();
@@ -817,16 +856,13 @@ export class World {
     ctx.globalAlpha = 0.32;
     const S = WORLD.settlements;
     // gentle sag through a jittered midpoint: trails worn by travel, not ruler-drawn debug lines
-    const road = (a, b) => {
-      const mx = (a.x + b.x) / 2 + (a.y < b.y ? 60 : -60), my = (a.y + b.y) / 2 + 40;
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(mx, my, b.x, b.y); ctx.stroke();
-    };
     // no redundant diagonals: roads that crisscross at odd angles read as debug lines
-    road(S[0], S[1]); road(S[0], S[2]); road(S[1], S[3]); road(S[2], S[3]);
+    ctx.stroke(this._staticPaths.roads);
     ctx.setLineDash([]); ctx.globalAlpha = 1;
 
     // scenery below entities
     for (const it of this.scenery) {
+      if (!this.visible(it.x, it.y, it.kind === 'mtn' ? it.s * 1.5 : it.s * 2.2)) continue;
       if (it.kind === 'mtn') mountain(ctx, it.x, it.y, it.s, P.ink, P.cream);
       // deep green pines: vegetation must never share a hue family with hostile POI markers
       else if (it.kind === 'tree') tree(ctx, it.x, it.y, it.s, '#4F7231', '#3A5624', P.groundShade);
@@ -845,15 +881,15 @@ export class World {
     }
 
     // settlements
-    for (const s of WORLD.settlements) this.drawSettlement(ctx, s);
+    for (const s of WORLD.settlements) if (this.visible(s.x, s.y, 140)) this.drawSettlement(ctx, s);
     // camps
     for (const c of WORLD.camps) {
       const st = this.save.camps.find(x => x.id === c.id);
-      this.drawCamp(ctx, c, st.razed);
+      if (this.visible(c.x, c.y, 140)) this.drawCamp(ctx, c, st.razed);
     }
 
     // parties
-    for (const p of this.parties) this.drawParty(ctx, p);
+    for (const p of this.parties) if (this.visible(p.x, p.y, 100)) this.drawParty(ctx, p);
 
     // hero party
     this.drawHero(ctx);

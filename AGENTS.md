@@ -16,12 +16,27 @@ npm ci
 npx playwright install chromium
 python scripts/serve.py
 npm run test:qa
+npm run test:perf
 npm test
 ```
 
 `npm test` is the required full gate before and after gameplay or test changes.
 Use `npm run test:headed` when a visible Chromium session is useful for
 debugging. Playwright starts the server automatically for test commands.
+
+Performance QA: run `npm run test:perf` after scheduler, Canvas rendering,
+battle-loop, or party-navigation changes. The fixed-timestep scheduler may
+skip a render only when no simulation update or explicit invalidation occurred;
+resize, boot, scene changes, and visible UI changes invalidate the frame. The
+watchdog must never draw while `document.hidden`, and direct test API calls
+remain synchronous. Static world geometry uses bounded `Path2D` caches plus
+camera culling; battle static props use an arena-sized layer. Never introduce
+a full-map bitmap. Scratch arrays/entries are instance-owned, clear logical
+lengths, and null stale references when shrinking. Battle units carry immutable
+`team` tags for constant-time separation classification. Party replans use
+seeded staggering and exact river collision/visibility; do not approximate or
+quantize collision answers. Structural Canvas budgets are machine-independent
+and must never be raised or bypassed to obtain green CI.
 
 After persistence, battle-result, save, party-AI, or stronghold changes, also
 run the focused campaign coverage:

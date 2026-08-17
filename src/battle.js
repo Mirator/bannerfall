@@ -8,6 +8,33 @@ const BASE = Object.assign({}, PAL.battle);
 // whatever reads it next (menu, world map, a future concurrent battle).
 const P = Object.assign({}, PAL.battle);
 
+function sortDrawPrefix(entries, count) {
+  for (let i = 1; i < count; i++) {
+    const value = entries[i];
+    let j = i - 1;
+    while (j >= 0 && entries[j].y > value.y) { entries[j + 1] = entries[j]; j--; }
+    entries[j + 1] = value;
+  }
+}
+
+function sortWoundedPrefix(entries, count) {
+  for (let i = 1; i < count; i++) {
+    const value = entries[i], valueRatio = value.u.hp / value.u.maxHp;
+    let j = i - 1;
+    while (j >= 0 && entries[j].u.hp / entries[j].u.maxHp > valueRatio) { entries[j + 1] = entries[j]; j--; }
+    entries[j + 1] = value;
+  }
+}
+
+function roundedPath(x, y, w, h, r) {
+  const p = new Path2D();
+  p.moveTo(x + r, y); p.lineTo(x + w - r, y); p.quadraticCurveTo(x + w, y, x + w, y + r);
+  p.lineTo(x + w, y + h - r); p.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  p.lineTo(x + r, y + h); p.quadraticCurveTo(x, y + h, x, y + h - r);
+  p.lineTo(x, y + r); p.quadraticCurveTo(x, y, x + r, y); p.closePath();
+  return p;
+}
+
 export class Battle {
   // setup: { troops:[{type}], enemies:[{type}], seed, title, onEnd(result) }
   constructor(game, setup) {
@@ -28,6 +55,17 @@ export class Battle {
     this.commandFlash = { text: '', t: 0 };
     this.projectiles = [];
     this.time = 0;
+    this._allUnits = [];
+    this._alerts = new Array(0);
+    this._alertCount = 0;
+    this._drawEntries = [];
+    this._drawEntriesActive = 0;
+    this._woundedEntries = [];
+    this._woundedEntriesActive = 0;
+    this._drawnBars = [];
+    this._drawnBarsActive = 0;
+    this._groups = Object.create(null);
+    this._enemyGroups = Object.create(null);
 
     // the fight keeps your real map orientation: you enter from the way you rode in,
     // enemies are ahead, and retreat means literally riding back the way you came
@@ -124,6 +162,34 @@ export class Battle {
       }
       this.regions.push(pts);
     }
+    this._staticPaths = {
+      blotches: new Path2D(), regions: new Path2D(), light: new Path2D(), shadeNear: new Path2D(), shadeFar: new Path2D(),
+      islandInk: roundedPath(-46, -34, this.W + 92, this.H + 92, 60),
+      islandGround: roundedPath(-30, -30, this.W + 60, this.H + 60, 46),
+      islandBorder: roundedPath(4, 4, this.W - 8, this.H - 8, 34),
+    };
+    for (const list of [this.blotches, this.regions]) {
+      const path = list === this.blotches ? this._staticPaths.blotches : this._staticPaths.regions;
+      for (const b of list) {
+        path.moveTo(b[0][0], b[0][1]);
+        for (const pt of b) path.lineTo(pt[0], pt[1]);
+        path.closePath();
+      }
+    }
+    const light = this._staticPaths.light, shadeNear = this._staticPaths.shadeNear, shadeFar = this._staticPaths.shadeFar;
+    light.moveTo(this.W * 0.05, -30); light.lineTo(this.W * 0.55, -30); light.lineTo(this.W * 0.95, this.H + 30); light.lineTo(this.W * 0.45, this.H + 30); light.closePath();
+    shadeNear.moveTo(this.W + 30, -30); shadeNear.lineTo(this.W - 340, -30); shadeNear.lineTo(this.W + 30, 300); shadeNear.closePath();
+    shadeNear.moveTo(-30, this.H + 30); shadeNear.lineTo(340, this.H + 30); shadeNear.lineTo(-30, this.H - 300); shadeNear.closePath();
+    shadeFar.moveTo(this.W + 30, -30); shadeFar.lineTo(this.W - 500, -30); shadeFar.lineTo(this.W + 30, 440); shadeFar.closePath();
+    shadeFar.moveTo(-30, this.H + 30); shadeFar.lineTo(500, this.H + 30); shadeFar.lineTo(-30, this.H - 440); shadeFar.closePath();
+
+    // Props which never animate are rendered once into a bounded arena-sized layer.
+    // Fire, mill motion, and bridge water remain on the dynamic pass below.
+    this._staticLayer = document.createElement('canvas');
+    this._staticLayer.width = this.W + 128; this._staticLayer.height = this.H + 128;
+    const staticCtx = this._staticLayer.getContext('2d');
+    staticCtx.translate(64, 64);
+    this.drawProps(staticCtx, false);
 
     // troops
     this.troops = [];
@@ -160,7 +226,7 @@ export class Battle {
   spawnTroop(type, hp) {
     const d = UNIT_TYPES[type];
     this.troops.push({
-      type, d, x: this.hero.x - 60 - this.rng() * 80, y: this.hero.y + (this.rng() - 0.5) * 160,
+      type, team: 'friendly', d, x: this.hero.x - 60 - this.rng() * 80, y: this.hero.y + (this.rng() - 0.5) * 160,
       vx: 0, vy: 0, hp: hp != null ? hp : d.hp, maxHp: d.hp, cd: this.rng() * d.cooldown,
       facing: 0, slot: null, target: null, lunge: 0, bob: this.rng() * TAU, holdX: null, holdY: null, flash: 0,
     });
@@ -168,7 +234,7 @@ export class Battle {
   spawnEnemy(type, x, y) {
     const d = ENEMY_TYPES[type];
     this.enemies.push({
-      type, d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
+      type, team: 'enemy', d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
       cd: 0.5 + this.rng() * d.cooldown, windupT: 0, facing: Math.PI,
       target: null, lunge: 0, bob: this.rng() * TAU, flash: 0, slamT: 0,
     });
@@ -593,7 +659,8 @@ export class Battle {
     }
 
     // ---- separation (units + hero + obstacles)
-    const all = [];
+    const all = this._allUnits;
+    all.length = 0;
     for (const t of this.troops) all.push(t);
     for (const e of this.enemies) all.push(e);
     for (let i = 0; i < all.length; i++) {
@@ -601,7 +668,7 @@ export class Battle {
       for (let j = i + 1; j < all.length; j++) {
         const b = all[j];
         // same-team pairs keep extra spacing so a squad reads as countable units, not one blob
-        const sameTeam = this.troops.includes(a) === this.troops.includes(b);
+        const sameTeam = a.team === b.team;
         const rr = a.d.radius + b.d.radius + (sameTeam ? 13 : 7);
         const d2 = dist2(a.x, a.y, b.x, b.y);
         if (d2 < rr * rr && d2 > 0.01) {
@@ -720,7 +787,7 @@ export class Battle {
 
   // ------------------------------------------------------------- drawing
   draw(ctx) {
-    this._alerts = []; // per-frame alert cluster-cull registry
+    this._alertCount = 0; // per-frame alert cluster-cull registry
     // paint the whole screen in the biome's shade tone FIRST — the battle sits on
     // continuous terrain, never on a floating "arena card" over the canvas default
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -742,47 +809,35 @@ export class Battle {
     }
     // island: ink cliff base, then ground on top
     ctx.fillStyle = P.ink;
-    rrect(ctx, -46, -34, this.W + 92, this.H + 92, 60); ctx.fill();
+    ctx.fill(this._staticPaths.islandInk);
     ctx.fillStyle = P.ground;
-    rrect(ctx, -30, -30, this.W + 60, this.H + 60, 46); ctx.fill();
+    ctx.fill(this._staticPaths.islandGround);
     ctx.strokeStyle = P.groundShade; ctx.lineWidth = 8;
-    rrect(ctx, 4, 4, this.W - 8, this.H - 8, 34); ctx.stroke();
+    ctx.stroke(this._staticPaths.islandBorder);
     // large second-tone regions: strong enough to read as landform, with a hard darker
     // edge on the light-away side so the patch reads as carved elevation, not a smudge
     ctx.save();
     ctx.globalAlpha = 0.62;
     ctx.fillStyle = P.groundShade;
-    for (const b of this.regions) {
-      ctx.beginPath(); ctx.moveTo(b[0][0], b[0][1]);
-      for (const pt of b) ctx.lineTo(pt[0], pt[1]);
-      ctx.closePath(); ctx.fill();
-    }
+    ctx.fill(this._staticPaths.regions);
     ctx.restore(); // no edge stroke at all: a line across same-biome ground is a seam, not art
     // per-scene light grading: one broad diagonal LIGHT band across the field (the sun falls
     // somewhere) + stepped shade wedges in the far corners — scene lighting, drawn flat
     ctx.save();
     ctx.globalAlpha = 0.10;
     ctx.fillStyle = '#FFF6E0';
-    ctx.beginPath();
-    ctx.moveTo(this.W * 0.05, -30); ctx.lineTo(this.W * 0.55, -30);
-    ctx.lineTo(this.W * 0.95, this.H + 30); ctx.lineTo(this.W * 0.45, this.H + 30);
-    ctx.closePath(); ctx.fill();
+    ctx.fill(this._staticPaths.light);
     ctx.fillStyle = P.ink;
     ctx.globalAlpha = 0.10;
-    ctx.beginPath(); ctx.moveTo(this.W + 30, -30); ctx.lineTo(this.W - 340, -30); ctx.lineTo(this.W + 30, 300); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-30, this.H + 30); ctx.lineTo(340, this.H + 30); ctx.lineTo(-30, this.H - 300); ctx.closePath(); ctx.fill();
+    ctx.fill(this._staticPaths.shadeNear);
     ctx.globalAlpha = 0.07;
-    ctx.beginPath(); ctx.moveTo(this.W + 30, -30); ctx.lineTo(this.W - 500, -30); ctx.lineTo(this.W + 30, 440); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-30, this.H + 30); ctx.lineTo(500, this.H + 30); ctx.lineTo(-30, this.H - 440); ctx.closePath(); ctx.fill();
+    ctx.fill(this._staticPaths.shadeFar);
     ctx.restore();
     // blotches
     ctx.fillStyle = P.groundShade;
-    for (const b of this.blotches) {
-      ctx.beginPath(); ctx.moveTo(b[0][0], b[0][1]);
-      for (const pt of b) ctx.lineTo(pt[0], pt[1]);
-      ctx.closePath(); ctx.fill();
-    }
-    this.drawProps(ctx);
+    ctx.fill(this._staticPaths.blotches);
+    ctx.drawImage(this._staticLayer, -64, -64);
+    this.drawProps(ctx, true);
 
     // hold banner
     if (this.command === 'hold' && this.holdPoint) {
@@ -794,17 +849,38 @@ export class Battle {
     }
 
     // depth sort drawables
-    const draws = [];
-    for (const o of this.obstacles) draws.push({ y: o.y, f: () => this.drawObstacle(ctx, o) });
-    for (const t of this.troops) draws.push({ y: t.y, f: () => this.drawTroop(ctx, t) });
-    for (const e of this.enemies) draws.push({ y: e.y, f: () => this.drawEnemy(ctx, e) });
-    draws.push({ y: h.y, f: () => this.drawHero(ctx) });
-    draws.sort((a, b) => a.y - b.y);
+    const draws = this._drawEntries;
+    for (const entry of draws) entry.ref = null;
+    const oldDrawLength = draws.length;
+    let drawCount = 0;
+    for (const o of this.obstacles) {
+      const entry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
+      entry.y = o.y; entry.kind = 0; entry.ref = o; drawCount++;
+    }
+    for (const t of this.troops) {
+      const entry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
+      entry.y = t.y; entry.kind = 1; entry.ref = t; drawCount++;
+    }
+    for (const e of this.enemies) {
+      const entry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
+      entry.y = e.y; entry.kind = 2; entry.ref = e; drawCount++;
+    }
+    const heroEntry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
+    heroEntry.y = h.y; heroEntry.kind = 3; heroEntry.ref = h; drawCount++;
+    for (let i = drawCount; i < oldDrawLength; i++) draws[i].ref = null;
+    this._drawEntriesActive = drawCount;
+    sortDrawPrefix(draws, drawCount);
     // shadows first
     for (const t of this.troops) shadow(ctx, t.x, t.y + 2, t.d.radius, 12, P.groundShade);
     for (const e of this.enemies) shadow(ctx, e.x, e.y + 2, e.d.radius, 12, P.groundShade);
     shadow(ctx, h.x, h.y + 4, 15, 16, P.groundShade);
-    for (const d of draws) d.f();
+    for (let i = 0; i < drawCount; i++) {
+      const d = draws[i];
+      if (d.kind === 0) this.drawObstacle(ctx, d.ref);
+      else if (d.kind === 1) this.drawTroop(ctx, d.ref);
+      else if (d.kind === 2) this.drawEnemy(ctx, d.ref);
+      else this.drawHero(ctx);
+    }
     // the commander is never buried: while hurt (and at the death moment) he draws above the pile
     if (h.hurtT > 0 || h.hp <= 0) this.drawHero(ctx);
 
@@ -829,21 +905,41 @@ export class Battle {
     // scrum readability: slimmer bars, and only for meaningfully wounded units (<90%)
     // density-gated: most-wounded units draw first, then any bar landing within 20px of an
     // already-drawn bar is skipped — packed melees show a few meaningful bars, not a bar wall
-    const wounded = [];
-    for (const t of this.troops) if (t.hp / t.maxHp < 0.9) wounded.push({ u: t, w: 24, fill: P.hp });
-    for (const e of this.enemies) if (e.hp / e.maxHp < 0.9) wounded.push({ u: e, w: e.type === 'brute' ? 38 : 24, fill: P.hp });
-    wounded.sort((a, b) => a.u.hp / a.u.maxHp - b.u.hp / b.u.maxHp);
+    const wounded = this._woundedEntries;
+    for (const entry of wounded) entry.u = null;
+    let woundedCount = 0;
+    for (const t of this.troops) if (t.hp / t.maxHp < 0.9) {
+      const entry = wounded[woundedCount] || (wounded[woundedCount] = { u: null, w: 0, fill: null });
+      entry.u = t; entry.w = 24; entry.fill = P.hp; woundedCount++;
+    }
+    for (const e of this.enemies) if (e.hp / e.maxHp < 0.9) {
+      const entry = wounded[woundedCount] || (wounded[woundedCount] = { u: null, w: 0, fill: null });
+      entry.u = e; entry.w = e.type === 'brute' ? 38 : 24; entry.fill = P.hp; woundedCount++;
+    }
+    this._woundedEntriesActive = woundedCount;
+    sortWoundedPrefix(wounded, woundedCount);
     // regional overlay budget: max 3 bars per ~120px region — past that a cluster is a
     // single wounded MASS, not individually-tracked units (Thronefall's hierarchy rule)
-    const drawnBars = [];
-    for (const { u, w, fill } of wounded) {
+    const drawnBars = this._drawnBars;
+    let barCount = 0;
+    for (let wi = 0; wi < woundedCount; wi++) {
+      const { u, w, fill } = wounded[wi];
       const bx = u.x, by = u.y - u.d.radius * 3;
-      if (drawnBars.some(([px, py]) => Math.abs(px - bx) < 26 && Math.abs(py - by) < 14)) continue;
-      const regionCount = drawnBars.filter(([px, py]) => Math.abs(px - bx) < 120 && Math.abs(py - by) < 120).length;
+      let overlap = false, regionCount = 0;
+      for (let i = 0; i < barCount; i++) {
+        const bar = drawnBars[i];
+        if (Math.abs(bar.x - bx) < 26 && Math.abs(bar.y - by) < 14) overlap = true;
+        if (Math.abs(bar.x - bx) < 120 && Math.abs(bar.y - by) < 120) regionCount++;
+      }
+      if (overlap) continue;
       if (regionCount >= 3) continue;
-      drawnBars.push([bx, by]);
+      const bar = drawnBars[barCount] || (drawnBars[barCount] = { x: 0, y: 0 });
+      bar.x = bx; bar.y = by;
+      barCount++;
       hpBar(ctx, bx, by, w, u.hp / u.maxHp, P.hpBack, fill);
     }
+    for (let i = barCount; i < drawnBars.length; i++) { drawnBars[i].x = 0; drawnBars[i].y = 0; }
+    this._drawnBarsActive = barCount;
 
     // squad balloons: one per unit type cluster (centroid)
     this.drawBalloons(ctx);
@@ -861,35 +957,37 @@ export class Battle {
 
   drawBalloons(ctx) {
     const s = clamp(1 / this.game.camera.zoom, 1, 1.7);
-    const centroidBalloon = (g, icon, ink, paper, lift) => {
-      let cx = 0, cy = 0;
-      for (const u of g) { cx += u.x; cy += u.y; }
-      cx /= g.length; cy /= g.length;
-      // clamp the badge outside the squad's own bounding radius so tags never sit ON units
-      let top = cy;
-      for (const u of g) top = Math.min(top, u.y - u.d.radius * 2.6);
-      const stagger = lift - 56; // keeps co-located type-badges from re-stacking when clamped
-      // icon-only at mass-battle zoom: counts are detail chrome, and text over a melee is clutter
-      const count = this.game.camera.zoom < 0.95 ? 0 : g.length;
-      balloon(ctx, cx, Math.min(cy - lift, top - 26 - Math.max(0, stagger)), icon, ink, paper, s, count);
-    };
     // at mass-battle zoom: ONE badge per side (dominant type) — the silhouettes carry unit
     // identity now, and a stack of per-type badges over a melee drowns the fight it labels
     const massZoom = this.game.camera.zoom < 0.95 || (this.troops.length + this.enemies.length) > 12;
-    const groups = {};
-    for (const t of this.troops) (groups[t.type] = groups[t.type] || []).push(t);
-    const eg = {};
-    for (const e of this.enemies) (eg[e.type] = eg[e.type] || []).push(e);
+    const groups = this._groups, eg = this._enemyGroups;
+    for (const type in UNIT_TYPES) { if (!groups[type]) groups[type] = []; else groups[type].length = 0; }
+    for (const type in ENEMY_TYPES) { if (!eg[type]) eg[type] = []; else eg[type].length = 0; }
+    for (const t of this.troops) groups[t.type].push(t);
+    for (const e of this.enemies) eg[e.type].push(e);
     if (massZoom) {
-      const dom = (g) => Object.keys(g).sort((a, b) => g[b].length - g[a].length)[0];
-      if (this.troops.length) centroidBalloon(this.troops, UNIT_TYPES[dom(groups)].icon, P.ink, P.cream, 56);
-      if (this.enemies.length) centroidBalloon(this.enemies, ENEMY_TYPES[dom(eg)].icon, P.enemyDark, P.enemyAccent, 58);
+      let td = null, ed = null;
+      for (const type in groups) if (groups[type].length && (!td || groups[type].length > groups[td].length)) td = type;
+      for (const type in eg) if (eg[type].length && (!ed || eg[type].length > eg[ed].length)) ed = type;
+      if (td) this.drawCentroidBalloon(ctx, this.troops, UNIT_TYPES[td].icon, P.ink, P.cream, 56, s);
+      if (ed) this.drawCentroidBalloon(ctx, this.enemies, ENEMY_TYPES[ed].icon, P.enemyDark, P.enemyAccent, 58, s);
     } else {
       let ti = 0;
-      for (const type in groups) centroidBalloon(groups[type], UNIT_TYPES[type].icon, P.ink, P.cream, 56 + (ti++) * 28);
+      for (const type in groups) if (groups[type].length) this.drawCentroidBalloon(ctx, groups[type], UNIT_TYPES[type].icon, P.ink, P.cream, 56 + (ti++) * 28, s);
       let ei = 0;
-      for (const type in eg) centroidBalloon(eg[type], ENEMY_TYPES[type].icon, P.enemyDark, P.enemyAccent, 58 + (ei++) * 28);
+      for (const type in eg) if (eg[type].length) this.drawCentroidBalloon(ctx, eg[type], ENEMY_TYPES[type].icon, P.enemyDark, P.enemyAccent, 58 + (ei++) * 28, s);
     }
+  }
+
+  drawCentroidBalloon(ctx, group, icon, ink, paper, lift, scale) {
+    let cx = 0, cy = 0;
+    for (const u of group) { cx += u.x; cy += u.y; }
+    cx /= group.length; cy /= group.length;
+    let top = cy;
+    for (const u of group) top = Math.min(top, u.y - u.d.radius * 2.6);
+    const stagger = lift - 56;
+    const count = this.game.camera.zoom < 0.95 ? 0 : group.length;
+    balloon(ctx, cx, Math.min(cy - lift, top - 26 - Math.max(0, stagger)), icon, ink, paper, scale, count);
   }
 
   drawObstacle(ctx, o) {
@@ -898,8 +996,10 @@ export class Battle {
     else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot);
   }
 
-  drawProps(ctx) {
+  drawProps(ctx, dynamicOnly = false) {
     for (const p of this.props) {
+      const dynamic = p.kind === 'fire' || p.kind === 'mill' || p.kind === 'river';
+      if (dynamicOnly !== dynamic) continue;
       if (p.kind === 'river') {
         const bx = this.bridge.x;
         ctx.fillStyle = P.water;
@@ -1243,9 +1343,13 @@ export class Battle {
     // "!" attack telegraph — wolves get a red DOUBLE mark: their tell is faster, says so
     if (e.windupT > 0) {
       // cluster-cull: one alert per ~70px — three stacked "!" marks read as noise, not signal
-      this._alerts = this._alerts || [];
-      if (this._alerts.some(([ax, ay]) => (ax - e.x) ** 2 + (ay - e.y) ** 2 < 70 * 70)) return;
-      this._alerts.push([e.x, e.y]);
+      for (let i = 0; i < this._alertCount; i++) {
+        const alert = this._alerts[i];
+        if ((alert.x - e.x) ** 2 + (alert.y - e.y) ** 2 < 70 * 70) return;
+      }
+      const alert = this._alerts[this._alertCount] || (this._alerts[this._alertCount] = { x: 0, y: 0 });
+      alert.x = e.x; alert.y = e.y;
+      this._alertCount++;
       const wolf = e.type === 'wolf';
       const yy = e.y - (e.type === 'brute' ? 64 : wolf ? 34 : 46);
       // enemyDark, not ink-black: the alert stays inside the enemy color language
