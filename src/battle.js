@@ -1,6 +1,6 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rc6b69aee02ac';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rc6b69aee02ac';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rc8c7c6810a0d';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rc8c7c6810a0d';
 
 const BASE = Object.assign({}, PAL.battle);
 // P is battle.js's own working copy, re-tinted per biome in the constructor — never the
@@ -40,8 +40,10 @@ export class Battle {
   constructor(game, setup) {
     this.game = game;
     this.setup = setup;
-    this.rng = makeRng(setup.seed ?? 1);
-    this.particles = new Particles();
+    const battleSeed = setup.seed ?? 1;
+    this.simRng = makeRng(deriveSeed(battleSeed, RNG_DOMAINS.BATTLE_SIM));
+    this.fxRng = makeRng(deriveSeed(battleSeed, RNG_DOMAINS.BATTLE_FX));
+    this.particles = new Particles(() => this.game.effectsEnabled);
     this.W = 1250; this.H = 880;
     this.zoom = 1; this.zoomT = 1;
     // biome palette (rose | meadow | night) — same scene code, different world
@@ -89,9 +91,9 @@ export class Battle {
     this.arena = setup.arena || 'road';
     this.obstacles = [];
     this.props = [];   // non-colliding dressing drawn under units
-    const R = this.rng;
+    const simRng = this.simRng, fxRng = this.fxRng;
     for (let i = 0; i < 16; i++) {
-      this.obstacles.push({ kind: R() < 0.45 ? 'rock' : 'tree', x: 140 + R() * (this.W - 280), y: 120 + R() * (this.H - 240), r: 24 + R() * 16, rot: R() * TAU });
+      this.obstacles.push({ kind: simRng() < 0.45 ? 'rock' : 'tree', x: 140 + simRng() * (this.W - 280), y: 120 + simRng() * (this.H - 240), r: 24 + simRng() * 16, rot: fxRng() * TAU });
     }
     if (this.arena === 'camp') {
       for (const [ox, oy, s] of [[0.72, 0.32, 30], [0.86, 0.5, 34], [0.74, 0.68, 28]]) {
@@ -102,7 +104,7 @@ export class Battle {
       for (let i = 0; i < 6; i++) this.props.push({ kind: 'stake', x: this.W * 0.62, y: this.H * (0.2 + i * 0.12), s: 10 });
       // palisade run behind the tents — jittered per-instance so it reads hand-placed, not tiled
       for (let i = 0; i < 7; i++) {
-        this.props.push({ kind: 'plank', x: this.W * 0.94 + (R() - 0.5) * 26, y: this.H * (0.22 + i * 0.095) + (R() - 0.5) * 18, s: 11 + R() * 5 });
+        this.props.push({ kind: 'plank', x: this.W * 0.94 + (fxRng() - 0.5) * 26, y: this.H * (0.22 + i * 0.095) + (fxRng() - 0.5) * 18, s: 11 + fxRng() * 5 });
       }
     } else if (this.arena === 'village') {
       for (const [ox, oy, w, hh] of [[0.2, 0.24, 56, 40], [0.34, 0.15, 46, 34], [0.14, 0.5, 50, 36]]) {
@@ -131,10 +133,10 @@ export class Battle {
     // ground interest everywhere: grass tufts + pebble scatters so no region reads as a
     // flat colored rectangle (the critics' "battle void") — non-colliding, drawn under units
     for (let i = 0; i < 26; i++) {
-      this.props.push({ kind: 'tuft', x: 60 + R() * (this.W - 120), y: 60 + R() * (this.H - 120), s: 5 + R() * 4, rot: R() * 0.8 - 0.4 });
+      this.props.push({ kind: 'tuft', x: 60 + fxRng() * (this.W - 120), y: 60 + fxRng() * (this.H - 120), s: 5 + fxRng() * 4, rot: fxRng() * 0.8 - 0.4 });
     }
     for (let i = 0; i < 10; i++) {
-      this.props.push({ kind: 'pebbles', x: 80 + R() * (this.W - 160), y: 80 + R() * (this.H - 160), s: 3 + R() * 3, rot: R() * TAU });
+      this.props.push({ kind: 'pebbles', x: 80 + fxRng() * (this.W - 160), y: 80 + fxRng() * (this.H - 160), s: 3 + fxRng() * 3, rot: fxRng() * TAU });
     }
     // keep spawn areas clear
     this.obstacles = this.obstacles.filter(o =>
@@ -144,11 +146,11 @@ export class Battle {
     this.blotches = [];
     for (let i = 0; i < 22; i++) {
       const pts = [];
-      const cx = R() * this.W, cy = R() * this.H, s = 16 + R() * 42;
-      const n = 5 + (R() * 3 | 0);
+      const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 16 + fxRng() * 42;
+      const n = 5 + (fxRng() * 3 | 0);
       for (let j = 0; j < n; j++) {
         const a = j / n * TAU;
-        pts.push([cx + Math.cos(a) * s * (0.6 + R() * 0.6), cy + Math.sin(a) * s * (0.4 + R() * 0.45)]);
+        pts.push([cx + Math.cos(a) * s * (0.6 + fxRng() * 0.6), cy + Math.sin(a) * s * (0.4 + fxRng() * 0.45)]);
       }
       this.blotches.push(pts);
     }
@@ -156,11 +158,11 @@ export class Battle {
     this.regions = [];
     for (let i = 0; i < 4; i++) {
       const pts = [];
-      const cx = R() * this.W, cy = R() * this.H, s = 160 + R() * 200;
-      const n = 7 + (R() * 3 | 0);
+      const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 160 + fxRng() * 200;
+      const n = 7 + (fxRng() * 3 | 0);
       for (let j = 0; j < n; j++) {
         const a = j / n * TAU;
-        pts.push([cx + Math.cos(a) * s * (0.55 + R() * 0.5), cy + Math.sin(a) * s * (0.4 + R() * 0.4)]);
+        pts.push([cx + Math.cos(a) * s * (0.55 + fxRng() * 0.5), cy + Math.sin(a) * s * (0.4 + fxRng() * 0.4)]);
       }
       this.regions.push(pts);
     }
@@ -205,8 +207,8 @@ export class Battle {
       let cx = ecx, cy = ecy;
       if (setup.ambush && i % 2 === 1) { cx = bcx; cy = bcy; }
       this.spawnEnemy(e.type,
-        clamp(cx + Math.cos(a) * (60 + R() * 120), 50, this.W - 50),
-        clamp(cy + Math.sin(a) * (50 + R() * 100), 50, this.H - 50));
+        clamp(cx + Math.cos(a) * (60 + this.simRng() * 120), 50, this.W - 50),
+        clamp(cy + Math.sin(a) * (50 + this.simRng() * 100), 50, this.H - 50));
     });
     this.totalEnemies = this.enemies.length;
     this.startTroops = this.troops.length;
@@ -228,17 +230,17 @@ export class Battle {
   spawnTroop(type, hp) {
     const d = UNIT_TYPES[type];
     this.troops.push({
-      type, team: 'friendly', d, x: this.hero.x - 60 - this.rng() * 80, y: this.hero.y + (this.rng() - 0.5) * 160,
-      vx: 0, vy: 0, hp: hp != null ? hp : d.hp, maxHp: d.hp, cd: this.rng() * d.cooldown,
-      facing: 0, slot: null, target: null, lunge: 0, bob: this.rng() * TAU, holdX: null, holdY: null, flash: 0,
+      type, team: 'friendly', d, x: this.hero.x - 60 - this.simRng() * 80, y: this.hero.y + (this.simRng() - 0.5) * 160,
+      vx: 0, vy: 0, hp: hp != null ? hp : d.hp, maxHp: d.hp, cd: this.simRng() * d.cooldown,
+      facing: 0, slot: null, target: null, lunge: 0, bob: this.fxRng() * TAU, holdX: null, holdY: null, flash: 0,
     });
   }
   spawnEnemy(type, x, y) {
     const d = ENEMY_TYPES[type];
     this.enemies.push({
       type, team: 'enemy', d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
-      cd: 0.5 + this.rng() * d.cooldown, windupT: 0, facing: Math.PI,
-      target: null, lunge: 0, bob: this.rng() * TAU, flash: 0, slamT: 0,
+      cd: 0.5 + this.simRng() * d.cooldown, windupT: 0, facing: Math.PI,
+      target: null, lunge: 0, bob: this.fxRng() * TAU, flash: 0, slamT: 0,
     });
   }
 
@@ -308,16 +310,16 @@ export class Battle {
     e.flash = 0.12;
     e.vx += kx; e.vy += ky;
     // impact must be VISIBLE in a still frame: more sparks, longer-lived, plus debris
-    this.particles.spark(e.x, e.y - 10, P.cream, 6, this.rng);
-    this.particles.dust(e.x - kx * 0.03, e.y + 4, '#B4A08C', 2, this.rng); // fixed tan: survives night tint
+    this.particles.spark(e.x, e.y - 10, P.cream, 6, this.fxRng);
+    this.particles.dust(e.x - kx * 0.03, e.y + 4, '#B4A08C', 2, this.fxRng); // fixed tan: survives night tint
     this.game.sfx.hit();
     if (e.hp <= 0) {
       this.kills++;
       this.deadEnemyTypes.push(e.type);
       const idx = this.enemies.indexOf(e);
       if (idx >= 0) this.enemies.splice(idx, 1);
-      this.particles.shards(e.x, e.y, e.type === 'brute' ? P.enemyDark : P.enemy, e.type === 'brute' ? 16 : 10, this.rng);
-      this.particles.dust(e.x, e.y, P.groundShade, 5, this.rng);
+      this.particles.shards(e.x, e.y, e.type === 'brute' ? P.enemyDark : P.enemy, e.type === 'brute' ? 16 : 10, this.fxRng);
+      this.particles.dust(e.x, e.y, P.groundShade, 5, this.fxRng);
       this.particles.ring(e.x, e.y, e.type === 'brute' ? 44 : 30, '#FFFFFF', 0.3, 4);
       this.game.sfx.kill();
       if (source === 'hero') this.freeze = Math.max(this.freeze, 0.09);
@@ -335,7 +337,7 @@ export class Battle {
       f.hurtT = 0.25;
       this.game.sfx.hurt();
       this.game.camera.shake(7, 0.3);
-      this.particles.spark(f.x, f.y - 12, P.enemy, 5, this.rng);
+      this.particles.spark(f.x, f.y - 12, P.enemy, 5, this.fxRng);
       // shoved out of the scrum — being surrounded is escapable, standing still is a choice
       if (from) {
         const a = Math.atan2(f.y - from.y, f.x - from.x);
@@ -350,12 +352,12 @@ export class Battle {
       }
     } else {
       f.flash = 0.12;
-      this.particles.spark(f.x, f.y - 10, P.enemy, 5, this.rng);
-      this.particles.dust(f.x, f.y + 4, P.groundShade, 2, this.rng);
+      this.particles.spark(f.x, f.y - 10, P.enemy, 5, this.fxRng);
+      this.particles.dust(f.x, f.y + 4, P.groundShade, 2, this.fxRng);
       if (f.hp <= 0) {
         const idx = this.troops.indexOf(f);
         if (idx >= 0) this.troops.splice(idx, 1);
-        this.particles.shards(f.x, f.y, P.friend, 7, this.rng);
+        this.particles.shards(f.x, f.y, P.friend, 7, this.fxRng);
         this.particles.ring(f.x, f.y, 18, P.friend, 0.3, 2);
         this.game.sfx.kill();
         this.assignSlots();
@@ -366,7 +368,7 @@ export class Battle {
   fireArrow(sx, sy, tx, ty, friendly, dmg, speed, srcType) {
     const d = Math.max(1, len(tx - sx, ty - sy));
     // slight inaccuracy
-    const off = (this.rng() - 0.5) * d * 0.12;
+    const off = (this.simRng() - 0.5) * d * 0.12;
     const a = Math.atan2(ty - sy, tx - sx) + Math.PI / 2;
     tx += Math.cos(a) * off; ty += Math.sin(a) * off;
     this.projectiles.push({ sx, sy, tx, ty, t: 0, T: d / speed, friendly, dmg, srcType });
@@ -443,7 +445,7 @@ export class Battle {
           this.damageEnemy(e, HERO.dashDmg, h.vx * 0.4 * dt * 60, h.vy * 0.4 * dt * 60, 'hero');
         }
       }
-      this.particles.dust(h.x, h.y + 6, P.cream, 2, this.rng);
+      this.particles.dust(h.x, h.y + 6, P.cream, 2, this.fxRng);
     }
     h.x += h.vx * dt; h.y += h.vy * dt;
     h.x = clamp(h.x, 40, this.W - 40); h.y = clamp(h.y, 40, this.H - 40);
@@ -451,7 +453,7 @@ export class Battle {
     const moving = len(h.vx, h.vy) > 40;
     const aimA = Math.atan2(mw.y - h.y, mw.x - h.x);
     h.facing = angLerp(h.facing, moving ? Math.atan2(h.vy, h.vx) : aimA, 1 - Math.exp(-10 * dt));
-    if (moving) { h.bob += dt * 11; sfx.gallop(); if (this.rng() < dt * 14) this.particles.dust(h.x - h.vx * 0.04, h.y + 8 - h.vy * 0.04, P.cream, 1, this.rng); }
+    if (moving) { h.bob += dt * 11; sfx.gallop(); if (this.fxRng() < dt * 14) this.particles.dust(h.x - h.vx * 0.04, h.y + 8 - h.vy * 0.04, P.cream, 1, this.fxRng); }
     if (h.hurtT > 0) h.hurtT -= dt;
     if (h.iframesT > 0) h.iframesT -= dt;
 
@@ -570,7 +572,7 @@ export class Battle {
 
       t.x += t.vx * dt; t.y += t.vy * dt;
       t.x = clamp(t.x, 30, this.W - 30); t.y = clamp(t.y, 30, this.H - 30);
-      if (len(t.vx, t.vy) > 30) { t.bob += dt * 10; if (this.rng() < dt * 3) this.particles.dust(t.x, t.y + 5, P.groundShade, 1, this.rng); }
+      if (len(t.vx, t.vy) > 30) { t.bob += dt * 10; if (this.fxRng() < dt * 3) this.particles.dust(t.x, t.y + 5, P.groundShade, 1, this.fxRng); }
     }
 
     // ---- deploy window: enemies hold their line until the horn, the player sets up freely.
@@ -620,7 +622,7 @@ export class Battle {
             this.game.sfx.brute();
             this.game.camera.shake(9, 0.35);
             this.particles.ring(e.x, e.y, e.d.slamR, P.enemy, 0.4, 5);
-            this.particles.dust(e.x, e.y, P.groundShade, 10, this.rng);
+            this.particles.dust(e.x, e.y, P.groundShade, 10, this.fxRng);
             if (dist2(e.x, e.y, this.hero.x, this.hero.y) < e.d.slamR * e.d.slamR) this.damageFriendly(this.hero, true, e.d.dmg, e);
             for (const t of [...this.troops]) if (dist2(e.x, e.y, t.x, t.y) < e.d.slamR * e.d.slamR) this.damageFriendly(t, false, e.d.dmg);
           } else if (e.d.ranged) {
@@ -713,7 +715,7 @@ export class Battle {
       if (p.t >= p.T) {
         // land: check hit
         const hx = p.tx, hy = p.ty;
-        this.particles.dust(hx, hy, P.groundShade, 1, this.rng);
+        this.particles.dust(hx, hy, P.groundShade, 1, this.fxRng);
         if (p.friendly) {
           const e = this.nearestEnemy(hx, hy, 16);
           if (e) this.damageEnemy(e, p.dmg, 0, 0, 'troop');

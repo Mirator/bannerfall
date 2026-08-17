@@ -82,6 +82,14 @@ the existing 17 named legacy records and their result shape. Do not weaken an
 assertion, raise a performance budget, or ignore page/console errors to obtain
 green CI.
 
+Randomness domains are explicit: `simRng` may affect gameplay state, `fxRng`
+may only affect particles/decorative variation, and camera shake uses its own
+stream. Derive new streams with `deriveSeed(seed, RNG_DOMAINS.<name>)`; never
+share a generic gameplay RNG with presentation code. Validate changes with
+`window.game.effects(false)` and the QA record
+`rng_domains_keep_simulation_independent_of_effects`. Use `??` for seed
+defaults so the valid seed `0` remains deterministic.
+
 ## Save-slot isolation
 
 Any call through `window.game` marks the page as test mode and writes

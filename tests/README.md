@@ -66,6 +66,18 @@ must never be used to hide an unexplained regression. Visual checks supplement
 semantic QA; keep both the focused `npm run test:visual` and the full `npm test`
 gate green.
 
+## Randomness domains
+
+Runtime random draws are intentionally split into named streams. `simRng` is
+for anything that can affect a campaign or battle result (composition, spawn
+positions, AI/navigation timing, cooldowns, and projectile spread). `fxRng` is
+for particles and decorative variation only. Camera shake has its own stream.
+Use `deriveSeed(seed, RNG_DOMAINS.<name>)` when adding a new stream; never pass a
+generic scene RNG to a visual effect. A quick regression is available through
+`window.game.effects(false)`: run the same seeded inputs with effects enabled
+and disabled and compare the canonical state, not particle counts. Preserve
+seed `0` with nullish checks (`??`), not truthiness defaults.
+
 ## CI flake policy
 
 Playwright uses zero retries locally. CI permits one retry only to collect

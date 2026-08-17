@@ -1,9 +1,9 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=rc6b69aee02ac';
-import { Input, Camera, Sfx, makeRng, rrect, mountain } from './engine.js?v=rc6b69aee02ac';
-import { Battle } from './battle.js?v=rc6b69aee02ac';
-import { World } from './world.js?v=rc6b69aee02ac';
-import { parseSave } from './save.js?v=rc6b69aee02ac';
+import { PAL } from './data.js?v=rc8c7c6810a0d';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rc8c7c6810a0d';
+import { Battle } from './battle.js?v=rc8c7c6810a0d';
+import { World } from './world.js?v=rc8c7c6810a0d';
+import { parseSave } from './save.js?v=rc8c7c6810a0d';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -20,7 +20,7 @@ class Game {
     this.input = new Input(canvas);
     this.camera = new Camera(canvas.width, canvas.height);
     this.sfx = new Sfx();
-    this.shakeRng = makeRng(99);
+    this.shakeRng = makeRng(deriveSeed(99, RNG_DOMAINS.CAMERA_SHAKE));
     this.scene = null;
     this.sceneName = 'menu';
     this.menuT = 0;
@@ -32,6 +32,7 @@ class Game {
     // a real player's campaign save.
     this.testMode = false;
     this.testSeed = null; // one-shot deterministic runSeed override for scenario('world', {seed})
+    this.effectsEnabled = true;
     this.renderDirty = true;
   }
 
@@ -372,6 +373,7 @@ window.game = {
   mouse: (x, y, down) => { markTest(); game.input.injectMouse(x, y, down); },
   click: (x, y) => { markTest(); game.input.injectMouse(x, y, true); game.update(DT); game.input.injectMouse(x, y, false); game.draw(); },
   shot: () => canvas.toDataURL('image/png'),
+  effects: (enabled = true) => { markTest(); game.effectsEnabled = !!enabled; },
   state: () => {
     const s = { scene: game.sceneName };
     const sc = game.scene;

@@ -1,6 +1,6 @@
 # Plan 013: Isolate Gameplay and Presentation Randomness
 
-**Status:** READY
+**Status:** DONE
 **Priority:** Medium
 **Effort:** M
 **Risk:** Medium
@@ -72,3 +72,21 @@ Inventory all live `rng`, `rand`, and random helper uses in `engine.js`, `world.
 
 Revert the commit. No save migration is required unless stream state was newly persisted; this plan should derive streams from existing stable seeds instead.
 
+## Implementation notes
+
+- `World` and `Battle` now expose `simRng` and `fxRng`; camera shake and audio
+  noise use separate derived streams. Gameplay-affecting placement, cooldown,
+  composition, navigation, garrison, and arrow-spread draws stay on simulation;
+  bobbing, prop jitter, terrain decoration, particles, and audio noise stay on
+  presentation streams. Static authored world scenery retains its fixed map
+  seed because it is collision geometry, not a runtime stream.
+- `deriveSeed()` uses integer mixing and preserves seed `0`. The test API's
+  `effects(false)` switch suppresses particle insertion without suppressing
+  simulation updates. The QA record
+  `rng_domains_keep_simulation_independent_of_effects` compares exact battle
+  state with effects on/off and replays a zero-seed world.
+- Battle visual baselines changed intentionally because previously interleaved
+  random draws produced different seeded placements; the reviewed actual frame
+  remains visually coherent. World baselines were unchanged.
+- Verification: `npm run test:qa`, `npm run test:visual`, `npm run test:perf`,
+  `npm run test:tooling`, `npm run test:release`, `npm test`, and `git diff --check`.

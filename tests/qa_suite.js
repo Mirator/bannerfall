@@ -451,6 +451,42 @@ function runQaSuiteImpl() {
   });
 
   // ======================================================================
+  // 12b. RNG domains: presentation effects cannot perturb simulation
+  // ======================================================================
+  record('rng_domains_keep_simulation_independent_of_effects', () => {
+    function battleSnapshot(effectsEnabled) {
+      g.effects(effectsEnabled);
+      g.scenario('battle_small');
+      g.tap('Digit2');
+      g.step(4);
+      const b = G.scene;
+      assert(G.sceneName === 'battle', 'battle fixture ended before RNG comparison');
+      return {
+        hero: { x: b.hero.x, y: b.hero.y, vx: b.hero.vx, vy: b.hero.vy, hp: b.hero.hp },
+        troops: b.troops.map(t => ({ type: t.type, x: t.x, y: t.y, vx: t.vx, vy: t.vy, hp: t.hp, cd: t.cd })),
+        enemies: b.enemies.map(e => ({ type: e.type, x: e.x, y: e.y, vx: e.vx, vy: e.vy, hp: e.hp, cd: e.cd })),
+        projectiles: b.projectiles.map(p => ({ tx: p.tx, ty: p.ty, t: p.t, T: p.T, friendly: p.friendly, dmg: p.dmg })),
+        state: b.state, kills: b.kills, time: b.time, bloodlust: b.bloodlust,
+      };
+    }
+    const withEffects = battleSnapshot(true);
+    const withoutEffects = battleSnapshot(false);
+    assert(JSON.stringify(withEffects) === JSON.stringify(withoutEffects), 'effect toggle changed canonical battle simulation state');
+    assert(G.scene.particles.list.length === 0, 'disabled effects still emitted particles');
+
+    function worldSnapshot() {
+      g.effects(false);
+      g.scenario('world', { seed: 0 });
+      const w = G.scene;
+      return { hero: { x: w.hero.x, y: w.hero.y }, parties: w.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: [...p.comp], home: { ...p.home } })) };
+    }
+    const zeroA = worldSnapshot(), zeroB = worldSnapshot();
+    assert(JSON.stringify(zeroA) === JSON.stringify(zeroB), 'seed zero world replay was not deterministic');
+    g.effects(true);
+    return 'battle state matched with effects enabled/disabled and seed-zero world replay matched';
+  });
+
+  // ======================================================================
   // 13. Perf smoke: 200 x step(0.5) wall-clock budget
   // ======================================================================
   record('perf_smoke_200_half_second_steps', () => {
