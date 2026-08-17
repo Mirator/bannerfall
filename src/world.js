@@ -689,7 +689,7 @@ export class World {
       {
         if (!p._navGoalVisibility) { p._navGoalVisibility = new Float64Array(this.navNodes.length); p._navGoalX = NaN; p._navGoalY = NaN; }
         p.navT = (p.navT == null ? 0 : p.navT) - dt;
-        const goalChanged = !p.navFor || len(goal.x - p.navFor.x, goal.y - p.navFor.y) > 140;
+        const goalChanged = !!p.navFor && len(goal.x - p.navFor.x, goal.y - p.navFor.y) > 140;
         if (p.navT <= 0 || goalChanged) {
           p.navGoal = this.pathGoal(p.x, p.y, goal, p);
           if (!p.navFor) p.navFor = { x: goal.x, y: goal.y };

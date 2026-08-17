@@ -11,16 +11,15 @@ async function startWorld(page, seed = 42) {
 test('scheduler coalesces high-refresh callbacks and suppresses hidden watchdog draws', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await page.addInitScript(() => {
-    let now = 0;
     const raf = [];
     const intervals = [];
-    window.__perfClock = () => now;
+    window.__perfState = { now: 0, hidden: false };
     window.__perfRaf = raf;
     window.__perfIntervals = intervals;
     window.requestAnimationFrame = callback => { raf.push(callback); return raf.length; };
     window.setInterval = callback => { intervals.push(callback); return intervals.length; };
-    window.performance.now = () => now;
-    Object.defineProperty(document, 'hidden', { configurable: true, get: () => !!window.__perfHidden });
+    window.performance.now = () => window.__perfState.now;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => window.__perfState.hidden });
   });
   await page.goto('/');
   await page.waitForFunction(() => window.__g && window.__perfRaf && window.__perfIntervals);
@@ -32,22 +31,24 @@ test('scheduler coalesces high-refresh callbacks and suppresses hidden watchdog 
     game.draw = () => { draws++; return draw(); };
     let callback = window.__perfRaf.shift();
     for (let i = 0; i < 144; i++) {
-      window.__perfClock = () => (i + 1) * (1000 / 144);
-      callback((i + 1) * (1000 / 144));
+      window.__perfState.now = (i + 1) * (1000 / 144);
+      callback(window.__perfState.now);
       callback = window.__perfRaf.shift();
     }
     const beforeHidden = draws;
-    window.__perfHidden = true;
-    window.__perfClock = () => 1000;
+    const updatesBeforeWatchdog = updates;
+    window.__perfState.hidden = true;
+    window.__perfState.now = 1401;
     window.__perfIntervals[0]();
-    return { updates, draws, beforeHidden, rafs: window.__perfRaf.length };
+    return { updates, rafUpdates: updatesBeforeWatchdog, draws, beforeHidden, updatesBeforeWatchdog, rafs: window.__perfRaf.length };
   });
-  expect(result.updates).toBeGreaterThanOrEqual(58);
-  expect(result.updates).toBeLessThanOrEqual(62);
+  expect(result.rafUpdates).toBeGreaterThanOrEqual(58);
+  expect(result.rafUpdates).toBeLessThanOrEqual(62);
   expect(result.draws).toBeLessThanOrEqual(result.updates + 2);
   expect(result.draws).toBeLessThan(80);
   expect(result.beforeHidden).toBeGreaterThan(0);
   expect(result.draws).toBe(result.beforeHidden);
+  expect(result.updates).toBeGreaterThan(result.updatesBeforeWatchdog);
   await expect.poll(() => runtimeErrors).toEqual([]);
 });
 
@@ -61,17 +62,16 @@ test('world rendering reuses static paths and culls offscreen scenery', async ({
     const original = CanvasRenderingContext2D.prototype.beginPath;
     CanvasRenderingContext2D.prototype.beginPath = function (...args) { beginPath++; return original.apply(this, args); };
     const cache = world._staticPaths;
-    const sentinel = { kind: 'tree', x: 999999, y: 999999, s: 20 };
+    const sentinel = { kind: 'rock', x: 999999, y: 999999, s: 20 };
+    Object.defineProperty(sentinel, 'rot', { get() { throw new Error('offscreen sentinel was rendered'); } });
     world.scenery.push(sentinel);
-    const originalSize = sentinel.s;
     for (let i = 0; i < 20; i++) window.__g.draw();
     CanvasRenderingContext2D.prototype.beginPath = original;
-    return { beginPath, cache, cacheAgain: world._staticPaths, sentinelSize: sentinel.s, originalSize, ctx: !!ctx };
+    return { beginPath, cache, cacheAgain: world._staticPaths, ctx: !!ctx };
   });
   expect(result.beginPath).toBeLessThan(10000);
   expect(result.cache).toBeTruthy();
   expect(result.cacheAgain).toBe(result.cache);
-  expect(result.sentinelSize).toBe(result.originalSize);
   expect(runtimeErrors).toEqual([]);
 });
 
@@ -85,6 +85,9 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
     let beginPath = 0;
     const original = CanvasRenderingContext2D.prototype.beginPath;
     CanvasRenderingContext2D.prototype.beginPath = function (...args) { beginPath++; return original.apply(this, args); };
+    battle.troops[0].hp = battle.troops[0].maxHp * 0.5;
+    battle.enemies[0].windupT = 1;
+    window.__g.draw();
     const refs = {
       alerts: battle._alerts,
       drawEntries: battle._drawEntries,
@@ -92,52 +95,111 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
       drawnBars: battle._drawnBars,
       static: battle._staticLayer || battle._staticPaths,
       allUnits: battle._allUnits,
+      alertEntry: battle._alerts[0],
+      drawEntry: battle._drawEntries[0],
+      woundedEntry: battle._woundedEntries[0],
+      barEntry: battle._drawnBars[0],
     };
+    window.__g.draw();
+    const sameEntries = {
+      alert: refs.alertEntry === battle._alerts[0],
+      draw: battle._drawEntries.includes(refs.drawEntry),
+      wounded: refs.woundedEntry === battle._woundedEntries[0],
+      bar: refs.barEntry === battle._drawnBars[0],
+    };
+    const removedTroop = battle.troops.pop();
+    const removedEnemy = battle.enemies.pop();
+    const removedObstacle = battle.obstacles.pop();
     for (let i = 0; i < 20; i++) window.__g.draw();
     CanvasRenderingContext2D.prototype.beginPath = original;
+    const activeDrawCount = battle.obstacles.length + battle.troops.length + battle.enemies.length + 1;
     return {
       beginPath,
-      same: Object.fromEntries(Object.entries(refs).map(([k, v]) => [k, v === (k === 'static' ? (battle._staticLayer || battle._staticPaths) : battle['_' + k])])),
+      same: Object.fromEntries(Object.entries(refs).filter(([k]) => ['alerts', 'drawEntries', 'woundedEntries', 'drawnBars', 'static', 'allUnits'].includes(k)).map(([k, v]) => [k, v === (k === 'static' ? (battle._staticLayer || battle._staticPaths) : battle['_' + k])])),
+      sameEntries,
+      drawFound: !!refs.drawEntry && battle._drawEntries.includes(refs.drawEntry),
       teams: [...battle.troops].every(t => t.team === 'friendly') && [...battle.enemies].every(e => e.team === 'enemy'),
       counts: { troops: battle.troops.length, enemies: battle.enemies.length },
+      staleDrawRefs: battle._drawEntries.slice(activeDrawCount).every(entry => entry.ref === null),
+      activeRemovedRefs: battle._drawEntries.slice(0, activeDrawCount).every(entry => entry.ref !== removedTroop && entry.ref !== removedEnemy && entry.ref !== removedObstacle),
+      staleWoundedRefs: battle._woundedEntries.every(entry => entry.u !== removedTroop && entry.u !== removedEnemy),
     };
   });
   expect(result.beginPath).toBeLessThan(9000);
   expect(Object.values(result.same).every(Boolean)).toBeTruthy();
+  expect(Object.values(result.sameEntries).every(Boolean)).toBeTruthy();
   expect(result.teams).toBeTruthy();
+  expect(result.staleDrawRefs).toBeTruthy();
+  expect(result.activeRemovedRefs).toBeTruthy();
+  expect(result.staleWoundedRefs).toBeTruthy();
   expect(runtimeErrors).toEqual([]);
 });
 
 test('party replans are staggered and reuse goal visibility', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await startWorld(page, 424242);
+  await page.evaluate(() => {
+    for (let seed = 424242; seed < 424300 && window.__g.scene.parties.length < 6; seed++) {
+      window.__g.testSeed = seed;
+      window.__g.startWorld(null);
+    }
+    if (window.__g.scene.parties.length < 6) throw new Error('fixture setup: no deterministic production world produced six parties');
+  });
   const result = await page.evaluate(() => {
     const world = window.__g.scene;
-    const base = world.parties[0];
-    world.parties = Array.from({ length: 6 }, (_, i) => ({
-      camp: base.camp, x: 820 + i * 20, y: 580 + i * 12, vx: 0, vy: 0,
-      facing: 0, bob: i, comp: base.comp.slice(), home: { x: 820, y: 580 },
-      wander: { x: 2100, y: 1100 }, wanderT: 99, waryT: 0, navT: i * 0.04,
-    }));
-    const initial = world.parties.map(p => p.navT);
+    const parties = world.parties.slice(0, 6);
+    parties.forEach((p, i) => {
+      p.x = 820 + i * 14; p.y = 1000 + i * 18;
+      p.wander = { x: 1100, y: 1000 + i * 18 }; p.wanderT = 99;
+      p.navFor = null; p.navGoal = null;
+    });
+    const initial = parties.map(p => p.navT);
     const original = world.lineClear.bind(world);
+    const originalPathGoal = world.pathGoal.bind(world);
     let calls = 0;
+    let planners = 0;
     world.lineClear = (...args) => { calls++; return original(...args); };
+    world.pathGoal = (...args) => { planners++; return originalPathGoal(...args); };
     const perStep = [];
+    const plannerPerStep = [];
+    calls = 0; planners = 0;
+    window.__g.update(1 / 60);
+    perStep.push(calls); plannerPerStep.push(planners);
     for (let i = 0; i < 60; i++) {
       calls = 0;
+      planners = 0;
       window.__g.update(1 / 60);
       perStep.push(calls);
+      plannerPerStep.push(planners);
     }
-    const cacheRefs = world.parties.map(p => p._navGoalVisibility || p._navVisibility || null);
-    const before = calls;
+    const targetParty = parties[0];
+    if (!targetParty._navGoalVisibility) throw new Error('fixture setup: target did not receive goal visibility cache');
+    const cacheRef = targetParty._navGoalVisibility;
+    targetParty._navGoalX = NaN; targetParty._navGoalY = NaN;
+    targetParty.navT = 0;
+    for (const p of parties.slice(1)) p.navT = 10;
+    calls = 0; planners = 0;
     window.__g.update(1 / 60);
-    const after = calls;
-    return { initial, perStep, cache: cacheRefs, stableReuse: after <= before + 2 };
+    const uncachedCalls = calls;
+    targetParty.navT = 0;
+    calls = 0; planners = 0;
+    window.__g.update(1 / 60);
+    const stableCalls = calls;
+    const stablePlannerCount = planners;
+    return {
+      initial, perStep, plannerPerStep,
+      boundedInitial: initial.every(v => v >= 0 && v < 0.3),
+      distinctInitial: new Set(initial.map(v => Math.round(v * 1000))).size > 1,
+      cacheSame: cacheRef === targetParty._navGoalVisibility,
+      uncachedCalls, stableCalls, stablePlannerCount,
+    };
   });
-  expect(new Set(result.initial.map(v => Math.round(v * 100))).size).toBeGreaterThan(1);
-  expect(result.perStep[0]).toBeLessThan(30);
-  expect(result.cache.every(Boolean)).toBeTruthy();
-  expect(result.stableReuse).toBeTruthy();
+  expect(result.boundedInitial).toBeTruthy();
+  expect(result.distinctInitial).toBeTruthy();
+  expect(result.plannerPerStep[0]).toBeLessThan(6);
+  expect(Math.max(...result.plannerPerStep)).toBeLessThanOrEqual(2);
+  expect(result.cacheSame).toBeTruthy();
+  expect(result.stablePlannerCount).toBe(1);
+  expect(result.stableCalls).toBeLessThan(result.uncachedCalls);
   expect(runtimeErrors).toEqual([]);
 });
