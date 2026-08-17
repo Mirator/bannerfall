@@ -1,6 +1,6 @@
 # Plan 009: Unify Rendered and Simulated Terrain Geometry
 
-**Status:** READY
+**Status:** DONE
 **Priority:** High
 **Effort:** M
 **Risk:** Medium
@@ -70,3 +70,14 @@ Verify the audited mismatch still exists between the road/river drawing code and
 
 Revert the commit; the change has no persistence-format effect.
 
+## Implementation Notes
+
+- `World.buildTerrainGeometry()` samples the four authored road quadratics and
+  the two multi-anchor river courses at a maximum 24px chord length. Both
+  rendering and simulation consume those cached polylines; query segments add
+  only bounding metadata for faster exact distance checks.
+- River curves now include both authored map-edge endpoints. Bridge exemptions
+  retain the existing 95px corridor, and the former invisible settlement
+  diagonal is no longer present in either rendering or road bonuses.
+- `tests/e2e/terrain-geometry.spec.js` covers road membership, the removed
+  chord, river blocking/open banks, bridge openings, and endpoint continuity.

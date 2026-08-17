@@ -108,6 +108,14 @@ performance smoke check is wall-clock sensitive. Add the record name to the
 ordered list in `tests/e2e/qa.spec.js` whenever the legacy suite intentionally
 changes.
 
+`tests/e2e/terrain-geometry.spec.js` is the focused terrain contract. It starts
+a pinned world through the raw debug handle and checks that sampled road points
+are queryable, the old invisible settlement chord is not a road, river samples
+block away from bridges, bridge centers remain open, and river endpoints reach
+the authored map edges. When adding terrain, define the curve once in
+`World.buildTerrainGeometry()`; draw and simulation must consume its cached
+polyline rather than maintaining independent coordinates.
+
 `World.syncLiveStateToSave()` is the single map snapshot boundary. New live
 campaign fields must be copied there if they should survive a refresh, or stay
 deliberately transient if they are presentation/input state. Persistence
