@@ -22,4 +22,17 @@ Original prompt: I want to amek better game menu. Look at 5 indies games like th
 - [x] Focused menu/input/persistence suite passed, 13/13.
 - [x] `npm run test:release` passed with token `raf847f688e24`.
 - [x] `npm test` passed, 42/42.
-- [ ] Commit, merge to main, and push.
+- [x] Committed as `f5ca89c`, merged as `819124b`, and pushed to `origin/main`.
+
+## Implementation slice 2
+
+- Slice 1 committed as `f5ca89c`, merged as `819124b`, and pushed to `origin/main`.
+- Branch: `codex/menu-vignette-slice`
+- Plan: `plans/018-menu-vignette-slice.md`
+- [x] Implemented responsive campaign-vignette composition using bounded Canvas paths and `menuT` only.
+- [x] Inspected `shots/menu-slice-2-final/shot-0.png`; text state matched and no console errors were emitted.
+- [x] Added and reviewed `menu-campaign-vignette.png`; visual suite passed, 6/6.
+- [x] Performance suite passed, 7/7, without budget changes.
+- [x] `npm run test:release` passed with token `r7584d9e97185`.
+- [x] `npm test` passed, 43/43.
+- [x] Ready for the verified commit, merge, and push recorded in this task's final handoff.

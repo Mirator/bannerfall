@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=raf847f688e24';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=raf847f688e24';
-import { Battle } from './battle.js?v=raf847f688e24';
-import { World } from './world.js?v=raf847f688e24';
-import { ACTIONS } from './input-actions.js?v=raf847f688e24';
-import { createWebPlatform } from './platform/web-platform.js?v=raf847f688e24';
-import { SaveRepository } from './persistence/save-repository.js?v=raf847f688e24';
+import { PAL } from './data.js?v=r7584d9e97185';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r7584d9e97185';
+import { Battle } from './battle.js?v=r7584d9e97185';
+import { World } from './world.js?v=r7584d9e97185';
+import { ACTIONS } from './input-actions.js?v=r7584d9e97185';
+import { createWebPlatform } from './platform/web-platform.js?v=r7584d9e97185';
+import { SaveRepository } from './persistence/save-repository.js?v=r7584d9e97185';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -293,67 +293,126 @@ class Game {
     ctx.fillText('Your campaign auto-saves on the map — closing the tab is safe', W / 2, H * 0.4 + 84);
   }
 
+  menuLayout(W, H) {
+    const compact = W < 900 || H < 600;
+    const panelW = Math.min(compact ? 520 : 470, W - 48);
+    const panelX = compact ? (W - panelW) / 2 : Math.max(42, W * 0.055);
+    return {
+      compact, panelW, panelX,
+      centerX: panelX + panelW / 2,
+      titleY: compact ? H * 0.20 : H * 0.18,
+      rootY: compact ? H * 0.38 : H * 0.36,
+      panelY: compact ? H * 0.47 : H * 0.43,
+    };
+  }
+
+  drawMenuCloud(cx, cy, s) {
+    ctx.fillStyle = '#FFF6E3';
+    for (const [ox, oy, r] of [[0, 0, s], [s * 0.9, -s * 0.25, s * 0.75], [-s * 0.9, -s * 0.15, s * 0.7], [s * 0.45, -s * 0.6, s * 0.6], [-s * 0.4, -s * 0.55, s * 0.55]]) {
+      ctx.beginPath(); ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  drawMenuScenery(W, H, P, compact) {
+    ctx.fillStyle = P.ground;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = P.groundShade;
+    ctx.beginPath();
+    ctx.moveTo(compact ? 0 : W * 0.46, H * 0.76);
+    ctx.lineTo(W, H * 0.48); ctx.lineTo(W, H); ctx.lineTo(compact ? 0 : W * 0.35, H); ctx.closePath(); ctx.fill();
+
+    const cloudSpan = W + 240;
+    const driftA = (this.menuT * 7) % cloudSpan;
+    const driftB = (this.menuT * 4.5) % cloudSpan;
+    this.drawMenuCloud((W * 0.58 + driftA) % cloudSpan - 100, H * 0.16, 30);
+    this.drawMenuCloud((W * 0.88 + driftB) % cloudSpan - 80, H * 0.08, 42);
+    this.drawMenuCloud(W * 0.06, H * 1.02, 62);
+
+    const horizon = H * 0.47;
+    for (const [fx, fs] of [[0.50, 62], [0.61, 94], [0.72, 68], [0.82, 112], [0.94, 78]]) {
+      mountain(ctx, W * fx, horizon - fs * 0.32, fs, P.ink, P.cream);
+    }
+
+    // One world-map road carries the eye from the menu toward the objective.
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = P.ink; ctx.lineWidth = Math.max(28, W * 0.025);
+    ctx.beginPath(); ctx.moveTo(W * 0.55, H * 0.91); ctx.quadraticCurveTo(W * 0.67, H * 0.72, W * 0.75, H * 0.61); ctx.quadraticCurveTo(W * 0.82, H * 0.51, W * 0.85, H * 0.39); ctx.stroke();
+    ctx.strokeStyle = P.cream; ctx.lineWidth = Math.max(18, W * 0.015);
+    ctx.stroke();
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+
+    // Wolfsjaw Hold: a tiny, readable destination rather than unrelated key art.
+    const hx = W * 0.855, hy = H * 0.34, hs = Math.min(W, H) * 0.105;
+    ctx.fillStyle = P.ink;
+    ctx.fillRect(hx - hs * 0.55, hy, hs * 1.1, hs * 0.72);
+    ctx.fillRect(hx - hs * 0.72, hy - hs * 0.28, hs * 0.32, hs);
+    ctx.fillRect(hx + hs * 0.40, hy - hs * 0.28, hs * 0.32, hs);
+    ctx.fillRect(hx - hs * 0.10, hy - hs * 0.45, hs * 0.20, hs * 1.17);
+    ctx.fillStyle = P.cream;
+    ctx.fillRect(hx - hs * 0.62, hy - hs * 0.18, hs * 0.12, hs * 0.34);
+    ctx.fillRect(hx + hs * 0.50, hy - hs * 0.18, hs * 0.12, hs * 0.34);
+    ctx.fillStyle = P.enemy;
+    const flagWave = Math.sin(this.menuT * 2.2) * hs * 0.05;
+    ctx.beginPath(); ctx.moveTo(hx, hy - hs * 0.45); ctx.lineTo(hx + hs * 0.36, hy - hs * 0.34 + flagWave); ctx.lineTo(hx, hy - hs * 0.22); ctx.closePath(); ctx.fill();
+
+    const pointOnRoad = u => ({
+      x: W * (0.55 + u * 0.29),
+      y: H * (0.91 - u * 0.50 - Math.sin(u * Math.PI) * 0.035),
+    });
+    const travel = (0.22 + this.menuT * 0.035) % 1;
+    // Dust remains presentation-only and deterministic; no gameplay/fx RNG is consumed.
+    ctx.fillStyle = 'rgba(242,227,193,0.62)';
+    for (let i = 0; i < 5; i++) {
+      const p = pointOnRoad(Math.max(0, travel - 0.055 * i));
+      const pulse = 3 + ((this.menuT * 12 + i * 2) % 4);
+      ctx.beginPath(); ctx.arc(p.x - 10 - i * 2, p.y + 12, pulse, 0, Math.PI * 2); ctx.fill();
+    }
+    const drawSoldier = (p, spear) => {
+      ctx.fillStyle = P.hero;
+      ctx.fillRect(p.x - 3, p.y - 10, 6, 11);
+      ctx.beginPath(); ctx.arc(p.x, p.y - 13, 3, 0, Math.PI * 2); ctx.fill();
+      if (spear) {
+        ctx.fillRect(p.x + 4, p.y - 25, 2, 25);
+        ctx.beginPath(); ctx.moveTo(p.x + 5, p.y - 29); ctx.lineTo(p.x + 2, p.y - 23); ctx.lineTo(p.x + 8, p.y - 23); ctx.closePath(); ctx.fill();
+      }
+    };
+    for (let i = 4; i >= 0; i--) drawSoldier(pointOnRoad(Math.max(0, travel - 0.055 * (i + 1))), i % 2 === 0);
+    const hero = pointOnRoad(travel);
+    ctx.fillStyle = P.hero;
+    ctx.fillRect(hero.x - 13, hero.y - 8, 26, 9);
+    for (const ox of [-9, -3, 5, 11]) ctx.fillRect(hero.x + ox, hero.y, 3, 5);
+    ctx.beginPath(); ctx.arc(hero.x + 12, hero.y - 12, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = P.enemy;
+    ctx.fillRect(hero.x - 3, hero.y - 22, 7, 14);
+    ctx.beginPath(); ctx.arc(hero.x, hero.y - 25, 4, 0, Math.PI * 2); ctx.fill();
+  }
+
   drawMenu() {
     const W = canvas.width, H = canvas.height;
     const P = PAL.world;
-    ctx.fillStyle = P.ground;
-    ctx.fillRect(0, 0, W, H);
-    // committed corner motif: cloud clusters (the WatG-validated vignette), not ambiguous ovals
-    const cloud = (cx, cy, s) => {
-      ctx.fillStyle = '#FFF6E3';
-      for (const [ox, oy, r] of [[0, 0, s], [s * 0.9, -s * 0.25, s * 0.75], [-s * 0.9, -s * 0.15, s * 0.7], [s * 0.45, -s * 0.6, s * 0.6], [-s * 0.4, -s * 0.55, s * 0.55]]) {
-        ctx.beginPath(); ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill();
-      }
-    };
-    cloud(W * 0.05, H * 0.99, 66); cloud(W * 0.17, H * 1.04, 52); cloud(W * 0.97, H * 0.04, 58);
-    // mountains — same faceted three-tone draw as the world map (no menu/game style seam),
-    // varied sizes and irregular spacing so the ridge doesn't read as one shape copy-pasted
-    // no peak may cross the center button column — z-order collisions on the first screen
-    for (const [fx, fs] of [[0.05, 47], [0.14, 92], [0.245, 61], [0.33, 112], [0.65, 66], [0.735, 84], [0.845, 55], [0.94, 99]]) {
-      mountain(ctx, W * fx, H * 0.72 - fs * 0.35, fs, P.ink, P.cream);
-    }
-    // the game's own iconography on its poster: a marching warband silhouette along the ridge base
-    const ry = H * 0.725;
-    ctx.fillStyle = P.ink;
-    const marcher = (mx, spear) => {
-      ctx.fillRect(mx - 4, ry - 16, 8, 16);
-      ctx.beginPath(); ctx.arc(mx, ry - 19, 3.5, 0, Math.PI * 2); ctx.fill();
-      if (spear) { ctx.fillRect(mx + 5, ry - 32, 2, 32); ctx.beginPath(); ctx.moveTo(mx + 6, ry - 38); ctx.lineTo(mx + 2, ry - 30); ctx.lineTo(mx + 10, ry - 30); ctx.closePath(); ctx.fill(); }
-    };
-    // marchers live LEFT of the button column, in hero-gold so they read against the ridge
-    ctx.fillStyle = P.hero;
-    for (let i = 0; i < 5; i++) marcher(W * 0.175 + i * 26, i % 2 === 0);
-    ctx.fillStyle = P.hero;
-    ctx.fillRect(W * 0.15 - 14, ry - 14, 28, 10);
-    for (const lo of [-10, -4, 4, 10]) ctx.fillRect(W * 0.15 + lo, ry - 5, 3, 5);
-    ctx.beginPath(); ctx.arc(W * 0.15 + 12, ry - 18, 4, 0, Math.PI * 2); ctx.fill();
-    ctx.fillRect(W * 0.15 - 2, ry - 44, 2.5, 30);
-    ctx.fillStyle = P.enemy;
-    ctx.beginPath(); ctx.moveTo(W * 0.15, ry - 44); ctx.lineTo(W * 0.15 + 16, ry - 39); ctx.lineTo(W * 0.15, ry - 34); ctx.closePath(); ctx.fill();
-    // title — poster lockup: hard offset shadow under the wordmark, same one-light rule as the game
+    const layout = this.menuLayout(W, H);
+    this.drawMenuScenery(W, H, P, layout.compact);
+
+    // Compact banner lockup leaves the world vignette and navigation equal room.
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `900 ${Math.min(110, W * 0.09)}px system-ui, sans-serif`;
-    // banner-ribbon plate behind the wordmark: the title sits ON a banner — it IS the game's name
+    const fs2 = Math.min(82, W * (layout.compact ? 0.075 : 0.062));
+    ctx.font = `900 ${fs2}px system-ui, sans-serif`;
     const tw2 = ctx.measureText('BANNERFALL').width;
-    const fs2 = Math.min(110, W * 0.09);
-    const rx = W / 2 - tw2 / 2 - 36, ry2 = H * 0.3 - fs2 * 0.54, rw = tw2 + 72, rh = fs2 * 1.08;
+    const rx = layout.centerX - tw2 / 2 - 25, ry2 = layout.titleY - fs2 * 0.54, rw = tw2 + 50, rh = fs2 * 1.08;
     ctx.fillStyle = P.enemy;
     ctx.fillRect(rx, ry2, rw, rh);
-    // notched swallowtail ends
-    ctx.beginPath(); ctx.moveTo(rx, ry2); ctx.lineTo(rx - 26, ry2 + rh / 2); ctx.lineTo(rx, ry2 + rh); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(rx + rw, ry2); ctx.lineTo(rx + rw + 26, ry2 + rh / 2); ctx.lineTo(rx + rw, ry2 + rh); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(rx, ry2); ctx.lineTo(rx - 18, ry2 + rh / 2); ctx.lineTo(rx, ry2 + rh); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(rx + rw, ry2); ctx.lineTo(rx + rw + 18, ry2 + rh / 2); ctx.lineTo(rx + rw, ry2 + rh); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#A32E23';
-    ctx.fillRect(rx, ry2 + rh - 8, rw, 8);
-    // stepped long-shadow (3 stacked copies) + accent understroke: a carved poster lockup
-    ctx.fillStyle = '#A32E23';
-    ctx.fillText('BANNERFALL', W / 2 + 4, H * 0.3 + 4);
+    ctx.fillRect(rx, ry2 + rh - 6, rw, 6);
+    ctx.fillText('BANNERFALL', layout.centerX + 3, layout.titleY + 3);
     ctx.fillStyle = P.ink;
-    ctx.fillText('BANNERFALL', W / 2, H * 0.3);
-    ctx.strokeStyle = P.cream; ctx.lineWidth = 1.5;
-    ctx.strokeText('BANNERFALL', W / 2, H * 0.3);
-    ctx.font = '600 17px system-ui, sans-serif';
+    ctx.fillText('BANNERFALL', layout.centerX, layout.titleY);
+    ctx.strokeStyle = P.cream; ctx.lineWidth = 1.25;
+    ctx.strokeText('BANNERFALL', layout.centerX, layout.titleY);
+    ctx.font = `600 ${layout.compact ? 14 : 15}px system-ui, sans-serif`;
     ctx.fillStyle = P.ink;
-    ctx.fillText('Raise a warband. Raze the camps. Take Wolfsjaw Hold.', W / 2, H * 0.3 + Math.min(70, W * 0.05) * 1.45);
+    ctx.fillText('Raise a warband. Raze the camps. Take Wolfsjaw Hold.', layout.centerX, layout.titleY + fs2 * 0.88);
     const headings = {
       new: ['CHOOSE YOUR CAMPAIGN', 'Difficulty cannot be changed after departure.'],
       confirm: ['REPLACE SAVED CAMPAIGN?', 'Your current campaign will be permanently replaced.'],
@@ -364,20 +423,20 @@ class Game {
     if (heading) {
       ctx.fillStyle = P.ink;
       ctx.font = '900 19px system-ui, sans-serif';
-      ctx.fillText(heading[0], W / 2, H * 0.445);
+      ctx.fillText(heading[0], layout.centerX, H * 0.335);
       ctx.font = '600 13px system-ui, sans-serif';
-      ctx.fillText(heading[1], W / 2, H * 0.475);
+      ctx.fillText(heading[1], layout.centerX, H * 0.372);
       if (this.menuPanel === 'credits') {
-        ctx.fillText('Art direction: flat-shaded campaign maps, banners, and tiny warbands.', W / 2, H * 0.505);
+        ctx.fillText('Flat-shaded campaign maps, banners, and tiny warbands.', layout.centerX, H * 0.402);
       }
     }
 
     const items = this.menuItems();
-    const pw = Math.min(520, W - 48), rowH = 42, gap = 8;
-    const startY = heading ? H * (this.menuPanel === 'credits' ? 0.55 : 0.515) : H * 0.47;
+    const pw = layout.panelW, rowH = 42, gap = 8;
+    const startY = heading ? layout.panelY : layout.rootY;
     this.menuHitRegions = [];
     items.forEach((item, index) => {
-      const x = W / 2 - pw / 2, y = startY + index * (rowH + gap);
+      const x = layout.panelX, y = startY + index * (rowH + gap);
       const selected = index === this.menuIndex;
       ctx.fillStyle = selected ? P.cream : P.ink;
       rrect(ctx, x, y, pw, rowH, 8); ctx.fill();
@@ -398,7 +457,7 @@ class Game {
     ctx.textAlign = 'center';
     ctx.fillStyle = P.ink;
     ctx.font = '700 12px system-ui, sans-serif';
-    ctx.fillText(`${this.menuPanel === 'root' ? '↑↓ / WASD  Navigate' : '↑↓  Navigate'}    ·    ENTER  Select${this.menuPanel === 'root' ? '' : '    ·    ESC  Back'}    ·    M  Mute`, W / 2, H - 24);
+    ctx.fillText(`${this.menuPanel === 'root' ? '↑↓ / WASD  Navigate' : '↑↓  Navigate'}    ·    ENTER  Select${this.menuPanel === 'root' ? '' : '    ·    ESC  Back'}    ·    M  Mute`, layout.centerX, H - 24);
   }
 
   drawVictory() {

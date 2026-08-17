@@ -41,6 +41,11 @@ test('seeded world overview remains visually stable', async ({ page }) => {
   await expect(canvas).toHaveScreenshot('world-overview.png', VISUAL_OPTIONS);
 });
 
+test('title menu campaign vignette remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'menu', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('menu-campaign-vignette.png', VISUAL_OPTIONS);
+});
+
 test('world road river and bridge landmark remains visible', async ({ page }) => {
   const canvas = await settle(page, 'world', {
     seed: 20260817,
