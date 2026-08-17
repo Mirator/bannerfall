@@ -1,7 +1,7 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r020bd544754c';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r020bd544754c';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r020bd544754c';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r2de3fd5a3de7';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r2de3fd5a3de7';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r2de3fd5a3de7';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -60,6 +60,7 @@ export class Battle {
     this._unitGrid = new SpatialGrid(this.W, this.H, 128);
     this._obstacleGrid = new SpatialGrid(this.W, this.H, 128);
     this._spatialCounters = { targetChecks: 0, separationChecks: 0, obstacleChecks: 0, orderingItems: 0 };
+    this._separationSpatialThreshold = 128;
 
     // the fight keeps your real map orientation: you enter from the way you rode in,
     // enemies are ahead, and retreat means literally riding back the way you came
@@ -284,36 +285,16 @@ export class Battle {
     return this.nearestFromGrid(this._enemyGrid, x, y, maxR);
   }
   nearestFriendly(x, y) {
-    let best = { obj: this.hero, isHero: true }, bd = dist2(x, y, this.hero.x, this.hero.y);
-    const count = this._friendlyGrid.query(x, y, Math.max(this.W, this.H));
-    const candidates = this._friendlyGrid.queryItems;
-    for (let i = 0; i < count; i++) {
-      const t = candidates[i];
-      this._friendlyGrid.noteCandidate();
-      const d = dist2(x, y, t.x, t.y);
-      if (d < bd) { bd = d; best = { obj: t, isHero: false }; }
-    }
-    return best;
+    const heroDistance = dist2(x, y, this.hero.x, this.hero.y);
+    const troop = this._friendlyGrid.nearest(
+      x, y, 1e9, null, this.hero, heroDistance, -1);
+    return troop === this.hero ? { obj: this.hero, isHero: true } : { obj: troop, isHero: false };
   }
   nearestFriendlyRanged(x, y, maxR = 1e9) {
     return this.nearestFromGrid(this._friendlyGrid, x, y, maxR, t => t.d.ranged);
   }
   nearestFromGrid(grid, x, y, maxR, predicate = null) {
-    let best = null, bd = maxR * maxR, bestOrder = Infinity;
-    const count = grid.query(x, y, maxR);
-    const candidates = grid.queryItems;
-    for (let i = 0; i < count; i++) {
-      const candidate = candidates[i];
-      grid.noteCandidate();
-      if (predicate && !predicate(candidate)) continue;
-      const d = dist2(x, y, candidate.x, candidate.y);
-      // The order comparison preserves the old array-order winner for exact
-      // ties even when a query visits neighboring buckets in another order.
-      if (d < bd || (d === bd && candidate._spatialOrder < bestOrder)) {
-        bd = d; best = candidate; bestOrder = candidate._spatialOrder;
-      }
-    }
-    return best;
+    return grid.nearest(x, y, maxR, predicate);
   }
 
   damageEnemy(e, dmg, kx, ky, source) {
@@ -466,6 +447,9 @@ export class Battle {
     // must see the current positions rather than the beginning-of-phase grid.
     this._enemyGrid.rebuild(this.enemies);
     this.updateSeparationPhase(h);
+    // Separation can move enemies across cell boundaries. Projectile landings
+    // must query the post-separation positions, not the pre-push buckets.
+    this._enemyGrid.rebuild(this.enemies);
     this.updateProjectilePhase(dt, h);
     this.updateStalematePhase();
     this.resolveBattleResult(dt, h, ax);
@@ -475,6 +459,7 @@ export class Battle {
   getSpatialStats() {
     return {
       targetChecks: this._enemyGrid.stats.candidateChecks + this._friendlyGrid.stats.candidateChecks,
+      targetCells: this._enemyGrid.stats.cellVisits + this._friendlyGrid.stats.cellVisits,
       separationChecks: this._unitGrid.stats.candidateChecks,
       separationPairs: this._unitGrid.stats.pairs,
       obstacleChecks: this._obstacleGrid.stats.candidateChecks,
@@ -771,10 +756,19 @@ export class Battle {
     all.length = 0;
     for (const t of this.troops) all.push(t);
     for (const e of this.enemies) all.push(e);
+    // Designed battles stay on the exact legacy mutation order. This avoids
+    // changing a normal encounter because an earlier push moved a later unit
+    // across a bucket boundary; the broad phase is reserved for stress sizes.
+    if (all.length <= this._separationSpatialThreshold) {
+      this.updateLegacySeparation(all, h);
+      return;
+    }
+    let maxUnitRadius = 0;
+    for (const unit of all) if (unit.d.radius > maxUnitRadius) maxUnitRadius = unit.d.radius;
+    let maxObstacleRadius = 0;
+    for (const obstacle of this.obstacles) if (obstacle.r > maxObstacleRadius) maxObstacleRadius = obstacle.r;
     this._unitGrid.rebuild(all);
     this._obstacleGrid.rebuild(this.obstacles);
-    const maxUnitRadius = 40;
-    const maxObstacleRadius = 64;
     for (let i = 0; i < all.length; i++) {
       const a = all[i];
       const unitCandidates = this._unitGrid.queryOrdered(a.x, a.y, a.d.radius + maxUnitRadius + 13);
@@ -783,43 +777,69 @@ export class Battle {
         this._unitGrid.noteCandidate();
         if (b._spatialOrder <= i) continue;
         this._unitGrid.stats.pairs++;
-        const sameTeam = a.team === b.team;
-        const rr = a.d.radius + b.d.radius + (sameTeam ? 13 : 7);
-        const d2 = dist2(a.x, a.y, b.x, b.y);
-        if (d2 < rr * rr && d2 > 0.01) {
-          const d = Math.sqrt(d2), push = (rr - d) / d * (sameTeam ? 0.95 : 0.8);
-          const dx = (a.x - b.x) * push, dy = (a.y - b.y) * push;
-          a.x += dx; a.y += dy; b.x -= dx; b.y -= dy;
-        }
+        this.applyUnitSeparation(a, b);
       }
-      const rr = a.d.radius + HERO.radius + 3;
-      const d2 = dist2(a.x, a.y, h.x, h.y);
-      if (d2 < rr * rr && d2 > 0.01) {
-        const d = Math.sqrt(d2), push = (rr - d) / d * 0.9;
-        a.x += (a.x - h.x) * push; a.y += (a.y - h.y) * push;
-      }
+      this.applyHeroSeparation(a, h);
       const obstacleCandidates = this._obstacleGrid.queryOrdered(a.x, a.y, a.d.radius + maxObstacleRadius);
       for (let k = 0; k < obstacleCandidates; k++) {
         const o = this._obstacleGrid.queryItems[k];
         this._obstacleGrid.noteCandidate();
-        const obstacleR = a.d.radius + o.r;
-        const obstacleD2 = dist2(a.x, a.y, o.x, o.y);
-        if (obstacleD2 < obstacleR * obstacleR && obstacleD2 > 0.01) {
-          const d = Math.sqrt(obstacleD2), push = (obstacleR - d) / d;
-          a.x += (a.x - o.x) * push; a.y += (a.y - o.y) * push;
-        }
+        this.applyObstacleSeparation(a, o);
       }
     }
     const heroObstacleCandidates = this._obstacleGrid.queryOrdered(h.x, h.y, HERO.radius + maxObstacleRadius);
     for (let k = 0; k < heroObstacleCandidates; k++) {
       const o = this._obstacleGrid.queryItems[k];
       this._obstacleGrid.noteCandidate();
-      const rr = HERO.radius + o.r;
-      const d2 = dist2(h.x, h.y, o.x, o.y);
-      if (d2 < rr * rr && d2 > 0.01) {
-        const d = Math.sqrt(d2), push = (rr - d) / d;
-        h.x += (h.x - o.x) * push; h.y += (h.y - o.y) * push;
-      }
+      this.applyHeroObstacleSeparation(h, o);
+    }
+  }
+
+  updateLegacySeparation(all, h) {
+    for (let i = 0; i < all.length; i++) {
+      const a = all[i];
+      for (let j = i + 1; j < all.length; j++) this.applyUnitSeparation(a, all[j]);
+      this.applyHeroSeparation(a, h);
+      for (const obstacle of this.obstacles) this.applyObstacleSeparation(a, obstacle);
+    }
+    for (const obstacle of this.obstacles) this.applyHeroObstacleSeparation(h, obstacle);
+  }
+
+  applyUnitSeparation(a, b) {
+    const sameTeam = a.team === b.team;
+    const rr = a.d.radius + b.d.radius + (sameTeam ? 13 : 7);
+    const d2 = dist2(a.x, a.y, b.x, b.y);
+    if (d2 < rr * rr && d2 > 0.01) {
+      const d = Math.sqrt(d2), push = (rr - d) / d * (sameTeam ? 0.95 : 0.8);
+      const dx = (a.x - b.x) * push, dy = (a.y - b.y) * push;
+      a.x += dx; a.y += dy; b.x -= dx; b.y -= dy;
+    }
+  }
+
+  applyHeroSeparation(a, h) {
+    const rr = a.d.radius + HERO.radius + 3;
+    const d2 = dist2(a.x, a.y, h.x, h.y);
+    if (d2 < rr * rr && d2 > 0.01) {
+      const d = Math.sqrt(d2), push = (rr - d) / d * 0.9;
+      a.x += (a.x - h.x) * push; a.y += (a.y - h.y) * push;
+    }
+  }
+
+  applyObstacleSeparation(a, o) {
+    const obstacleR = a.d.radius + o.r;
+    const obstacleD2 = dist2(a.x, a.y, o.x, o.y);
+    if (obstacleD2 < obstacleR * obstacleR && obstacleD2 > 0.01) {
+      const d = Math.sqrt(obstacleD2), push = (obstacleR - d) / d;
+      a.x += (a.x - o.x) * push; a.y += (a.y - o.y) * push;
+    }
+  }
+
+  applyHeroObstacleSeparation(h, o) {
+    const rr = HERO.radius + o.r;
+    const d2 = dist2(h.x, h.y, o.x, o.y);
+    if (d2 < rr * rr && d2 > 0.01) {
+      const d = Math.sqrt(d2), push = (rr - d) / d;
+      h.x += (h.x - o.x) * push; h.y += (h.y - o.y) * push;
     }
   }
 

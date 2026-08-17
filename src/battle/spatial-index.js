@@ -11,8 +11,10 @@ export class SpatialGrid {
     this.cells = Array.from({ length: this.cols * this.rows }, () => []);
     this.items = [];
     this.queryItems = [];
+    this.heapIds = new Int32Array(this.cells.length);
+    this.heapBounds = new Float64Array(this.cells.length);
     this.count = 0;
-    this.stats = { rebuilds: 0, candidateChecks: 0, queries: 0, pairs: 0 };
+    this.stats = { rebuilds: 0, candidateChecks: 0, queries: 0, pairs: 0, cellVisits: 0 };
   }
 
   clearStats() {
@@ -20,6 +22,7 @@ export class SpatialGrid {
     this.stats.candidateChecks = 0;
     this.stats.queries = 0;
     this.stats.pairs = 0;
+    this.stats.cellVisits = 0;
   }
 
   rebuild(items, count = items.length) {
@@ -75,6 +78,69 @@ export class SpatialGrid {
       this.queryItems[j + 1] = value;
     }
     return count;
+  }
+
+  cellDistance2(cellId, x, y) {
+    const col = cellId % this.cols, row = Math.floor(cellId / this.cols);
+    const left = col * this.cellSize, top = row * this.cellSize;
+    const right = Math.min(this.width, left + this.cellSize);
+    const bottom = Math.min(this.height, top + this.cellSize);
+    const dx = x < left ? left - x : x > right ? x - right : 0;
+    const dy = y < top ? top - y : y > bottom ? y - bottom : 0;
+    return dx * dx + dy * dy;
+  }
+
+  // Exact branch-and-bound nearest query. Every arena cell is put into a
+  // reusable min-heap by its lower-bound distance. Once the next cell's bound
+  // is greater than the best result, no unvisited entity can improve it. The
+  // equality case is still visited so source-order ties remain exact.
+  nearest(x, y, maxR = 1e9, predicate = null, initial = null, initialDistance = Infinity, initialOrder = Infinity) {
+    this.stats.queries++;
+    const limit2 = maxR * maxR;
+    let best = initial;
+    let bestD2 = Math.min(limit2, initial ? initialDistance : limit2);
+    let bestOrder = initial ? initialOrder : Infinity;
+    let heapSize = 0;
+    const ids = this.heapIds, bounds = this.heapBounds;
+    for (let cellId = 0; cellId < this.cells.length; cellId++) {
+      const bound = this.cellDistance2(cellId, x, y);
+      if (bound >= limit2 && !best) continue;
+      let i = heapSize++;
+      while (i > 0) {
+        const parent = (i - 1) >> 1;
+        if (bounds[parent] <= bound) break;
+        ids[i] = ids[parent]; bounds[i] = bounds[parent]; i = parent;
+      }
+      ids[i] = cellId; bounds[i] = bound;
+    }
+    while (heapSize > 0) {
+      const cellId = ids[0], bound = bounds[0];
+      heapSize--;
+      if (heapSize > 0) {
+        const lastId = ids[heapSize], lastBound = bounds[heapSize];
+        let i = 0;
+        while (i * 2 + 1 < heapSize) {
+          let child = i * 2 + 1;
+          if (child + 1 < heapSize && bounds[child + 1] < bounds[child]) child++;
+          if (bounds[child] >= lastBound) break;
+          ids[i] = ids[child]; bounds[i] = bounds[child]; i = child;
+        }
+        ids[i] = lastId; bounds[i] = lastBound;
+      }
+      if (bound > bestD2) break;
+      this.stats.cellVisits++;
+      const cell = this.cells[cellId];
+      for (const candidate of cell) {
+        this.stats.candidateChecks++;
+        if (predicate && !predicate(candidate)) continue;
+        const d2 = (x - candidate.x) ** 2 + (y - candidate.y) ** 2;
+        if (d2 >= limit2) continue; // preserve the old strict max-radius check
+        if (d2 < bestD2 || (best && d2 === bestD2 && candidate._spatialOrder < bestOrder)) {
+          best = candidate; bestD2 = d2; bestOrder = candidate._spatialOrder;
+        }
+      }
+    }
+    return best;
   }
 
   noteCandidate() { this.stats.candidateChecks++; }

@@ -82,6 +82,11 @@ pre-optimization implementation and do not make the standard suite impractical.
 - Added reusable 128px `SpatialGrid` buckets for enemy/friendly target queries,
   unit separation, and static obstacles. Rebuilds occur after each movement
   phase and after removals so queries never retain dead entities.
+- Nearest queries now use an exact lower-bound min-heap over cells, supporting
+  predicates, strict maximum radii, initial hero candidates, and source-order
+  ties without arena-wide target scans. Separation retains the mutation-ordered
+  legacy path through 128 units and derives broad-phase radii from live data
+  above that threshold.
 - Preserved strict-distance and source-order tie behavior; separation still
   processes each unordered pair once in legacy order. Added allocation-free
   reusable query and merge-sort scratch storage.
