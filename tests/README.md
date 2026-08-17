@@ -54,8 +54,8 @@ Baselines live under `tests/e2e/__screenshots__/visual-regression.spec.js/`.
 Playwright uses one platform-neutral path and compares at CSS-pixel scale with
 `threshold: 0.20` and `maxDiffPixelRatio: 0.015`: this permits small
 Windows/Linux font and antialiasing differences while still rejecting broad
-terrain, unit, palette, or layout regressions. CI runs the same command on
-every pull request. A failure writes `test-results/` `-actual`, `-expected`,
+terrain, unit, palette, or layout regressions. The default `npm test` command
+discovers this spec and runs it on every pull request. A failure writes `test-results/` `-actual`, `-expected`,
 and `-diff` images; inspect all three before deciding whether a change is
 intentional.
 
@@ -63,7 +63,8 @@ To intentionally update a baseline, run the focused command with
 `--update-snapshots`, inspect every changed PNG, and include the visual reason
 in the change description. `--update-snapshots` is not a repair command and
 must never be used to hide an unexplained regression. Visual checks supplement
-semantic QA; keep both `npm run test:visual` and `npm test` green.
+semantic QA; keep both the focused `npm run test:visual` and the full `npm test`
+gate green.
 
 ## CI flake policy
 

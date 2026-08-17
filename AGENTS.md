@@ -45,7 +45,8 @@ Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
 
 Canvas visual QA lives in `tests/e2e/visual-regression.spec.js` and runs in CI
-on every pull request via `npm run test:visual`. It uses seeded scenarios,
+on every pull request as part of `npm test`; use `npm run test:visual` for the
+focused suite. It uses seeded scenarios,
 explicit fixed steps, and a frozen page-side update hook; do not add wall-clock sleeps or
 change production visuals solely to make a screenshot pass. Baselines are
 platform-neutral and intentionally tolerate only the documented small raster
