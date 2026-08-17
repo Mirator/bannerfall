@@ -1,6 +1,6 @@
 # Plan 011: Add Deterministic Canvas Visual Regression Coverage
 
-**Status:** READY
+**Status:** DONE
 **Priority:** Medium
 **Effort:** M
 **Risk:** Low
@@ -29,6 +29,7 @@ Detect unintended changes to the actual pixels players see in representative wor
 ## Files to Modify
 
 - `playwright.config.js`
+- `.github/workflows/qa.yml`
 - `tests/e2e/visual-regression.spec.js`
 - committed snapshot PNGs under the Playwright snapshot convention
 - `package.json`
@@ -64,6 +65,20 @@ npm test
 git diff --check
 ```
 
+## Completion Notes
+
+- Added five deterministic Canvas captures covering the seeded world overview,
+  river/bridge landmark, small road battle, large night camp battle, and bridge
+  ambush battle.
+- The scenarios use fixed `window.game.step()` setup and replace only the page's
+  live update hook before capture, so the user-facing pause overlay is absent
+  while rAF/watchdog timing cannot move the frame.
+- Baselines use the platform-neutral snapshot path and CSS-pixel comparison with
+  `threshold: 0.20` and `maxDiffPixelRatio: 0.015`; repeated Windows runs were
+  identical. CI runs `npm run test:visual` on every pull request.
+- Verification passed: `npm run test:visual` twice, `npm run test:tooling`,
+  `npm run test:qa`, `npm test` (31/31), and `git diff --check`.
+
 ## Drift Check
 
 Verify no screenshot assertions or committed canvas baselines already exist. Use the canonical geometry produced by Plan 009 and the CI policy from Plan 010. If rendering changed after this plan was written, regenerate only after confirming the live state is intended and deterministic.
@@ -71,4 +86,3 @@ Verify no screenshot assertions or committed canvas baselines already exist. Use
 ## Rollback
 
 Revert the test/config/baseline commit. No production runtime behavior should be included in this plan.
-

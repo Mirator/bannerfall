@@ -24,7 +24,7 @@ its STOP conditions, and update its status row when done.
 | 008 | Make the save contract total and battle-stat safe | High | M | 007 | DONE |
 | 009 | Unify rendered and simulated terrain geometry | High | M | 007-008 | DONE |
 | 010 | Fail CI on flaky Playwright results | Medium | S | 007-009 | DONE |
-| 011 | Add deterministic Canvas visual regression coverage | Medium | M | 009-010 | READY |
+| 011 | Add deterministic Canvas visual regression coverage | Medium | M | 009-010 | DONE |
 | 012 | Enforce release cache-token integrity | Medium | S | 010 | READY |
 | 013 | Isolate gameplay and presentation randomness | Medium | M | 011 | READY |
 | 014 | Establish maintainable World and Battle simulation seams | Medium | L | 009, 011, 013 | READY |

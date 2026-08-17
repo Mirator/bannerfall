@@ -6,6 +6,9 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
   expect: { timeout: 5_000 },
+  // Keep visual baselines shared by every local/CI platform. The visual suite
+  // crops to the canvas and uses a documented raster tolerance below.
+  snapshotPathTemplate: '{testDir}/__screenshots__/{testFileName}/{arg}{ext}',
   workers: 1,
   forbidOnly: isCi,
   retries: isCi ? 1 : 0,

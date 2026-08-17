@@ -33,6 +33,38 @@ collision correctness for an approximate cache. Structural budgets are
 intentionally fixed (`<10000` world and `<9000` battle `beginPath` calls over
 20 draws); never raise or weaken them to make CI green.
 
+## Canvas visual regression
+
+`tests/e2e/visual-regression.spec.js` captures five representative, deterministic
+Canvas states: a seeded world overview, a road/river/bridge landmark, a small
+road battle, a large night camp battle, and a bridge ambush. Each scenario is
+created through the existing `window.game.scenario()` API, advanced with the
+synchronous fixed-step `window.game.step()`, then frozen before capture so rAF
+and watchdog timing cannot affect the image. The test replaces only the page's
+live update method after setup, leaving the normal pause overlay out of the
+captured scene.
+
+Run the focused suite with:
+
+```text
+npm run test:visual
+```
+
+Baselines live under `tests/e2e/__screenshots__/visual-regression.spec.js/`.
+Playwright uses one platform-neutral path and compares at CSS-pixel scale with
+`threshold: 0.20` and `maxDiffPixelRatio: 0.015`: this permits small
+Windows/Linux font and antialiasing differences while still rejecting broad
+terrain, unit, palette, or layout regressions. CI runs the same command on
+every pull request. A failure writes `test-results/` `-actual`, `-expected`,
+and `-diff` images; inspect all three before deciding whether a change is
+intentional.
+
+To intentionally update a baseline, run the focused command with
+`--update-snapshots`, inspect every changed PNG, and include the visual reason
+in the change description. `--update-snapshots` is not a repair command and
+must never be used to hide an unexplained regression. Visual checks supplement
+semantic QA; keep both `npm run test:visual` and `npm test` green.
+
 ## CI flake policy
 
 Playwright uses zero retries locally. CI permits one retry only to collect

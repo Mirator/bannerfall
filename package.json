@@ -9,6 +9,7 @@
     "test": "playwright test",
     "test:qa": "playwright test tests/e2e/qa.spec.js",
     "test:perf": "playwright test tests/e2e/performance.spec.js",
+    "test:visual": "playwright test tests/e2e/visual-regression.spec.js",
     "test:tooling": "node --test tests/tooling/config-contract.test.js",
     "test:headed": "playwright test --headed",
     "serve": "python scripts/serve.py"
