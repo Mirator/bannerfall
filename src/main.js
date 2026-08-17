@@ -1,19 +1,9 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=r10';
+import { PAL } from './data.js?v=r10';
 import { Input, Camera, Sfx, makeRng, rrect, mountain } from './engine.js?v=r10';
 import { Battle } from './battle.js?v=r10';
 import { World } from './world.js?v=r10';
-
-// A save is only as good as its shape: an old-schema or hand-corrupted bf_save must
-// never reach `new World(...)`, which dereferences save.camps/save.troops unguarded.
-// Reject anything that doesn't look like a real save instead of crashing the game loop.
-function isValidSave(save) {
-  if (!save || typeof save !== 'object') return false;
-  if (typeof save.gold !== 'number' || typeof save.x !== 'number' || typeof save.y !== 'number') return false;
-  if (!Array.isArray(save.troops) || !Array.isArray(save.camps)) return false;
-  const ids = new Set(save.camps.map(c => c && c.id));
-  return WORLD.camps.every(c => ids.has(c.id));
-}
+import { parseSave } from './save.js?v=r10';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -53,13 +43,12 @@ class Game {
     }
   }
   loadRun() {
-    try {
-      const raw = localStorage.getItem(this.saveKey);
-      if (!raw) return null;
-      const save = JSON.parse(raw);
-      if (!isValidSave(save)) { this.clearRun(); return null; }
-      return save;
-    } catch (e) { return null; }
+    let raw;
+    try { raw = localStorage.getItem(this.saveKey); } catch (e) { return null; }
+    if (!raw) return null;
+    const save = parseSave(raw);
+    if (!save) { this.clearRun(); return null; }
+    return save;
   }
   clearRun() { try { localStorage.removeItem(this.saveKey); } catch (e) {} }
 

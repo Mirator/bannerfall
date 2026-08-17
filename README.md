@@ -37,6 +37,15 @@ browser console error. `npm run test:qa` runs the focused legacy 17-check suite;
 the agent contract and `tests/README.md` for test architecture and extension
 rules.
 
+### Save compatibility
+
+`src/save.js` is the canonical versioned save schema and migration boundary.
+It accepts the unversioned legacy format, writes current saves as version 1,
+and rejects malformed or unsupported future data before it reaches the world
+simulation. Keep the field-level contract in that module; see
+`tests/README.md` for valid fixture construction and the focused schema test
+command.
+
 ## Structure
 
 - `index.html` — entry point

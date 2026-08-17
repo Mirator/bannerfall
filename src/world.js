@@ -1,6 +1,7 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r10';
 import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r10';
+import { SAVE_VERSION } from './save.js?v=r10';
 
 const P = PAL.world;
 
@@ -15,6 +16,7 @@ export class World {
 
     // persistent campaign state (survives battles)
     this.save = save || {
+      version: SAVE_VERSION,
       gold: BALANCE.startGold,
       heroHp: HERO.hp, heroMaxHp: HERO.hp,
       troops: Array.from({ length: BALANCE.startTroops }, () => ({ type: 'spear' })),
@@ -28,11 +30,10 @@ export class World {
       runSeed: game.testSeed != null ? game.testSeed : (Math.random() * 1e9) | 0,
       stats: { won: 0, kills: 0, lost: 0, playT: 0 },
       hard: !!game.hardNext,
+      battleCount: 0,
     };
     game.hardNext = false;
     game.testSeed = null;
-    if (!this.save.stats) this.save.stats = { won: 0, kills: 0, lost: 0, playT: 0 };
-    if (!this.save.runSeed) this.save.runSeed = 777;
 
     this.hero = { x: this.save.x, y: this.save.y, vx: 0, vy: 0, facing: 0, bob: 0 };
     this.grace = save ? BALANCE.battleGrace : 0;   // ambush immunity after a battle

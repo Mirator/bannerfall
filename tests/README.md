@@ -23,6 +23,26 @@ party behavior, or the stronghold flow:
 npx playwright test tests/e2e/campaign-persistence.spec.js
 ```
 
+## Save schema and migration
+
+`src/save.js` is the authoritative save boundary. Unversioned browser saves
+are treated as version 0 and migrated to the current version 1 shape with
+documented legacy defaults. Unknown future versions, unknown production IDs,
+malformed nested values, and out-of-range numbers are rejected and the active
+save slot is cleared before `World` sees the payload.
+
+Run the focused schema coverage with:
+
+```text
+npx playwright test tests/e2e/save-schema.spec.js
+```
+
+Construct fixtures from current `WORLD.camps`, `UNIT_TYPES`, and
+`ENEMY_TYPES` production values. Do not invent camp or troop/enemy IDs, and
+keep real-player persistence fixtures in isolated contexts using `bf_save`
+and raw `window.__g`; calls through `window.game` belong to the `bf_save_test`
+slot.
+
 ## Legacy check inventory
 
 The 17 deterministic records cover:
