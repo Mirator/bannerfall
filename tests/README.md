@@ -35,10 +35,21 @@ shared mutable context object.
 `tests/e2e/performance.spec.js` is the focused structural performance gate.
 Run it with `npm run test:perf` after scheduler, Canvas, battle-loop, or party
 navigation changes. It drives fixed steps and seeded scenarios; it does not
-use sleeps or machine-specific millisecond assertions. The four tests cover
+use sleeps or machine-specific millisecond assertions. The tests cover
 144 Hz scheduler coalescing and hidden-watchdog suppression, world static path
 reuse/culling, battle static/scratch reuse and team tags, and seeded party
-replan staggering with cached goal visibility.
+replan staggering with cached goal visibility. The spatial cases compare
+grid nearest-target results with the legacy brute-force answer (including
+exact ties), then drive deterministic 400/1000-unit distributions and assert
+that candidate work remains a small fraction of the all-pairs count. The
+battle index owns fixed 128px buckets and reusable query/heap storage; nearest
+queries use cell lower-bound branch-and-bound rather than collecting the whole
+arena, and rebuilds happen after a phase moves the indexed collection. Use
+`getSpatialStats()` when adding a new broad-phase query. Keep the exact
+distance check and source-order tie rule in the narrow phase—cell membership
+is only a candidate filter. Battles at or below 128 units retain the legacy
+ordered separation loop for exact designed-size behavior; larger stress
+fixtures use the spatial pair path and report candidate/pair counters.
 
 The scheduler renders after a fixed update or explicit invalidation only. The
 watchdog never renders hidden documents. World caches are reusable `Path2D`
