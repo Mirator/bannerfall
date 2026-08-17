@@ -50,11 +50,18 @@ export class World {
     this.riverLines = this.terrain.rivers;
     this.roadLines = this.terrain.roads;
     this.riverSegs = this.linesToSegments(this.riverLines);
-    this.riverBands = this.riverLines.map(line => ({
-      minX: Math.min(...line.map(p => p[0])), maxX: Math.max(...line.map(p => p[0])),
-      minY: Math.min(...line.map(p => p[1])), maxY: Math.max(...line.map(p => p[1])),
-      segs: this.linesToSegments([line]),
-    }));
+    this.riverBands = this.riverLines.map(line => {
+      const raw = this.linesToSegments([line]);
+      const segs = new Float64Array(raw.length * 8);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      raw.forEach((s, i) => {
+        const o = i * 8;
+        for (let j = 0; j < 8; j++) segs[o + j] = s[j];
+        if (s[4] < minX) minX = s[4]; if (s[5] > maxX) maxX = s[5];
+        if (s[6] < minY) minY = s[6]; if (s[7] > maxY) maxY = s[7];
+      });
+      return { minX, maxX, minY, maxY, segs };
+    });
     this.bridgePts = [];
     for (const r of this.rivers) {
       for (const b of r.bridges) this.bridgePts.push(b);
@@ -235,7 +242,9 @@ export class World {
     let best = Infinity;
     for (const band of this.riverBands) {
       if (x < band.minX - pad || x > band.maxX + pad || y < band.minY - pad || y > band.maxY + pad) continue;
-      for (const [ax, ay, bx, by, minX, maxX, minY, maxY] of band.segs) {
+      for (let o = 0; o < band.segs.length; o += 8) {
+        const ax = band.segs[o], ay = band.segs[o + 1], bx = band.segs[o + 2], by = band.segs[o + 3];
+        const minX = band.segs[o + 4], maxX = band.segs[o + 5], minY = band.segs[o + 6], maxY = band.segs[o + 7];
         if (x < minX - pad || x > maxX + pad || y < minY - pad || y > maxY + pad) continue;
         const d = distToSegment(x, y, ax, ay, bx, by);
         if (d < best) best = d;
@@ -782,10 +791,7 @@ export class World {
           p.navGoal = this.pathGoal(p.x, p.y, goal, p);
           if (!p.navFor) p.navFor = { x: goal.x, y: goal.y };
           else { p.navFor.x = goal.x; p.navFor.y = goal.y; }
-          // Keep replan timers bounded even if a frame is delayed while a world is built.
-          // This preserves seeded staggering without letting a watchdog turn the initial
-          // fixture into an indistinguishable post-replan state.
-          p.navT = 0.2 + this.rng() * 0.1;
+          p.navT = 0.5 + this.rng() * 0.2;
         }
         const wp = p.navGoal;
         if (wp) goal = wp;
