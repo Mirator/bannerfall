@@ -35,7 +35,10 @@ a full-map bitmap. Scratch arrays/entries are instance-owned, clear logical
 lengths, and null stale references when shrinking. Battle units carry immutable
 `team` tags for constant-time separation classification. Party replans use
 seeded staggering and exact river collision/visibility; do not approximate or
-quantize collision answers. Structural Canvas budgets are machine-independent
+quantize collision answers. World roads and rivers are single-source cached
+sampled polylines: add a curve only through `World.buildTerrainGeometry()` so
+rendering, collision, navigation, and movement bonuses cannot diverge.
+Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
 
 After persistence, battle-result, save, party-AI, or stronghold changes, also

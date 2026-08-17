@@ -43,17 +43,30 @@ export class World {
 
     // scenery (deterministic)
     this.scenery = this.buildScenery();
-    // terrain that MEANS something: river segments block (except bridges), roads speed you up,
-    // mountains and rocks are solid
-    this.riverSegs = [];
+    // Terrain is defined once as sampled polylines. Rendering and simulation both consume
+    // these cached points, so a curve can never be visible in one system but absent in the
+    // other. The segment arrays below are a derived query representation, not a second map.
+    this.terrain = this.buildTerrainGeometry();
+    this.riverLines = this.terrain.rivers;
+    this.roadLines = this.terrain.roads;
+    this.riverSegs = this.linesToSegments(this.riverLines);
+    this.riverBands = this.riverLines.map(line => {
+      const raw = this.linesToSegments([line]);
+      const segs = new Float64Array(raw.length * 8);
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      raw.forEach((s, i) => {
+        const o = i * 8;
+        for (let j = 0; j < 8; j++) segs[o + j] = s[j];
+        if (s[4] < minX) minX = s[4]; if (s[5] > maxX) maxX = s[5];
+        if (s[6] < minY) minY = s[6]; if (s[7] > maxY) maxY = s[7];
+      });
+      return { minX, maxX, minY, maxY, segs };
+    });
     this.bridgePts = [];
     for (const r of this.rivers) {
-      for (let i = 0; i < r.pts.length - 1; i++) this.riverSegs.push([...r.pts[i], ...r.pts[i + 1]]);
       for (const b of r.bridges) this.bridgePts.push(b);
     }
-    const S = WORLD.settlements;
-    const roadPairs = [[0, 1], [0, 2], [1, 3], [2, 3], [0, 3]];
-    this.roadSegs = roadPairs.map(([a, b]) => [S[a].x, S[a].y, S[b].x, S[b].y]);
+    this.roadSegs = this.linesToSegments(this.roadLines);
     this._staticPaths = this.buildStaticPaths();
     this.solids = this.scenery.filter(it => it.kind === 'mtn' || it.kind === 'rock')
       .map(it => ({ x: it.x, y: it.y - (it.kind === 'mtn' ? it.s * 0.25 : 0), r: it.kind === 'mtn' ? it.s * 0.72 : it.s * 1.1 }))
@@ -150,9 +163,7 @@ export class World {
       if (dist2(x, y, bx, by) < 95 * 95) { nearBridge = true; break; }
     }
     if (!nearBridge) {
-      for (const [ax, ay, bx, by] of this.riverSegs) {
-        if (distToSegment(x, y, ax, ay, bx, by) < 22) return true;
-      }
+      if (this.riverDistanceAt(x, y, 22) < 22) return true;
     }
     for (const o of this.solids) {
       if (dist2(x, y, o.x, o.y) < o.r * o.r) return true;
@@ -165,6 +176,82 @@ export class World {
     }
     return false;
   }
+
+  // Build the only terrain representation used by draw(), collision and movement bonuses.
+  // A maximum chord length keeps the polyline's geometric error well below the 28px road
+  // bonus and 22px river collision bands while keeping construction outside hot paths.
+  buildTerrainGeometry() {
+    const sampleQuadratic = (a, control, b, maxStep = 24) => {
+      const approx = Math.hypot(control[0] - a[0], control[1] - a[1]) +
+        Math.hypot(b[0] - control[0], b[1] - control[1]);
+      const n = Math.max(2, Math.ceil(approx / maxStep));
+      const out = [];
+      for (let i = 0; i <= n; i++) {
+        const t = i / n, u = 1 - t;
+        out.push([
+          u * u * a[0] + 2 * u * t * control[0] + t * t * b[0],
+          u * u * a[1] + 2 * u * t * control[1] + t * t * b[1],
+        ]);
+      }
+      return out;
+    };
+    const join = (pieces) => pieces.reduce((all, piece, i) => all.concat(i ? piece.slice(1) : piece), []);
+
+    // Roads intentionally match the four paths rendered below. The former [0, 3] chord was
+    // never drawn and therefore granted an invisible movement bonus; it is intentionally gone.
+    const S = WORLD.settlements;
+    const roadDefs = [
+      [S[0], S[1], 60, 40], [S[0], S[2], 60, 40],
+      [S[1], S[3], -60, 40], [S[2], S[3], -60, 40],
+    ];
+    const roads = roadDefs.map(([a, b, ox, oy]) => sampleQuadratic(
+      [a.x, a.y], [(a.x + b.x) / 2 + (a.y < b.y ? ox : -ox), (a.y + b.y) / 2 + oy], [b.x, b.y]
+    ));
+
+    // Each river anchor is a control point. Consecutive quadratic pieces end at the midpoint
+    // between controls, and the final piece explicitly reaches the final anchor. This keeps
+    // the existing hand-authored course while making both map-edge endpoints canonical.
+    const rivers = this.rivers.map(r => {
+      const pts = r.pts;
+      const pieces = [];
+      for (let i = 0; i < pts.length - 2; i++) {
+        const end = [(pts[i + 1][0] + pts[i + 2][0]) / 2, (pts[i + 1][1] + pts[i + 2][1]) / 2];
+        pieces.push(sampleQuadratic(pts[i], pts[i + 1], end));
+      }
+      const last = pts.length - 1;
+      pieces.push(sampleQuadratic(
+        [(pts[last - 1][0] + pts[last][0]) / 2, (pts[last - 1][1] + pts[last][1]) / 2],
+        pts[last], pts[last]
+      ));
+      return join(pieces);
+    });
+    return { roads, rivers };
+  }
+
+  linesToSegments(lines) {
+    const segments = [];
+    for (const line of lines) {
+      for (let i = 1; i < line.length; i++) {
+        const a = line[i - 1], b = line[i];
+        segments.push([a[0], a[1], b[0], b[1], Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1])]);
+      }
+    }
+    return segments;
+  }
+  riverDistanceAt(x, y, pad = 0) {
+    let best = Infinity;
+    for (const band of this.riverBands) {
+      if (x < band.minX - pad || x > band.maxX + pad || y < band.minY - pad || y > band.maxY + pad) continue;
+      for (let o = 0; o < band.segs.length; o += 8) {
+        const ax = band.segs[o], ay = band.segs[o + 1], bx = band.segs[o + 2], by = band.segs[o + 3];
+        const minX = band.segs[o + 4], maxX = band.segs[o + 5], minY = band.segs[o + 6], maxY = band.segs[o + 7];
+        if (x < minX - pad || x > maxX + pad || y < minY - pad || y > maxY + pad) continue;
+        const d = distToSegment(x, y, ax, ay, bx, by);
+        if (d < best) best = d;
+      }
+    }
+    return best;
+  }
   // River-only collision for AI parties: rivers block everyone, but bandits know the goat
   // paths through the mountains (soft-steered around them instead of hard-blocked) — this
   // keeps the coherent river/bridge rule while making AI freezes structurally impossible.
@@ -174,9 +261,7 @@ export class World {
       if (dist2(x, y, bx, by) < 95 * 95) { nearBridge = true; break; }
     }
     if (!nearBridge) {
-      for (const [ax, ay, bx, by] of this.riverSegs) {
-        if (distToSegment(x, y, ax, ay, bx, by) < 22 + (pad || 0)) return true;
-      }
+      if (this.riverDistanceAt(x, y, 22 + (pad || 0)) < 22 + (pad || 0)) return true;
     }
     return false;
   }
@@ -245,18 +330,14 @@ export class World {
     paths.light.lineTo(this.W * 0.90, this.H + 40); paths.light.lineTo(this.W * 0.55, this.H + 40); paths.light.closePath();
     paths.shade.moveTo(this.W + 40, -40); paths.shade.lineTo(this.W - 900, -40); paths.shade.lineTo(this.W + 40, 800); paths.shade.closePath();
     paths.shade.moveTo(-40, this.H + 40); paths.shade.lineTo(900, this.H + 40); paths.shade.lineTo(-40, this.H - 800); paths.shade.closePath();
-    const S = WORLD.settlements;
-    for (const [a, b] of [[S[0], S[1]], [S[0], S[2]], [S[1], S[3]], [S[2], S[3]]]) {
-      const mx = (a.x + b.x) / 2 + (a.y < b.y ? 60 : -60), my = (a.y + b.y) / 2 + 40;
-      paths.roads.moveTo(a.x, a.y); paths.roads.quadraticCurveTo(mx, my, b.x, b.y);
+    for (const line of this.roadLines) {
+      paths.roads.moveTo(line[0][0], line[0][1]);
+      for (let i = 1; i < line.length; i++) paths.roads.lineTo(line[i][0], line[i][1]);
     }
-    for (const r of this.rivers) {
+    for (const line of this.riverLines) {
       const path = new Path2D();
-      path.moveTo(r.pts[0][0], r.pts[0][1]);
-      for (let i = 1; i < r.pts.length - 1; i++) {
-        const [x1, y1] = r.pts[i], [x2, y2] = r.pts[i + 1];
-        path.quadraticCurveTo(x1, y1, (x1 + x2) / 2, (y1 + y2) / 2);
-      }
+      path.moveTo(line[0][0], line[0][1]);
+      for (let i = 1; i < line.length; i++) path.lineTo(line[i][0], line[i][1]);
       paths.rivers.push(path);
     }
     return paths;
@@ -430,7 +511,9 @@ export class World {
 
   // Biomes are the lands BETWEEN the two rivers — crossing a bridge takes you into different country
   biomeAt(x) { return x < 1030 ? 'meadow' : x < 2430 ? 'rose' : 'night'; }
-  nearRiver(x) { return Math.abs(x - 1000) < 140 || Math.abs(x - 2430) < 140; }
+  nearRiver(x, y = this.hero.y) {
+    return this.riverSegs.some(([ax, ay, bx, by]) => distToSegment(x, y, ax, ay, bx, by) < 140);
+  }
   // which way you rode into the fight — battles keep your real map orientation
   approachTo(tx, ty) {
     const dx = tx - this.hero.x, dy = ty - this.hero.y;
