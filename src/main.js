@@ -39,7 +39,7 @@ class Game {
   // ---- campaign persistence: the run survives a refresh
   persistRun() {
     if (this.sceneName === 'world' && this.scene && this.scene.save && !this.scene.save.won) {
-      try { localStorage.setItem(this.saveKey, JSON.stringify(this.scene.save)); } catch (e) {}
+      try { localStorage.setItem(this.saveKey, JSON.stringify(this.scene.syncLiveStateToSave())); } catch (e) {}
     }
   }
   loadRun() {

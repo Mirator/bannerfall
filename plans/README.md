@@ -14,7 +14,7 @@ status row when done.
 | 001 | Add a one-command browser QA gate and document it | P1 | M | — | DONE |
 | 002 | Cover persistence and non-victory campaign transitions | P1 | M | 001 | DONE |
 | 003 | Version, validate, and migrate campaign saves | P1 | M | 002 | DONE |
-| 004 | Synchronize live world state before every save | P1 | S | 003 | TODO |
+| 004 | Synchronize live world state before every save | P1 | S | 003 | DONE |
 | 005 | Persist a coherent checkpoint before entering battle | P1 | S | 004 | TODO |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line

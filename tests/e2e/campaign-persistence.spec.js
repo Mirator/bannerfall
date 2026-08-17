@@ -235,24 +235,69 @@ test('final stronghold victory enters the victory scene and clears the run save'
 });
 
 test('AUDIT-02 autosave captures live hero and roaming-party positions', async ({ page }) => {
-  test.fail(true, 'AUDIT-02: remove when persistRun snapshots live world hero and party coordinates');
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, { seed: 905 });
-  const live = await page.evaluate(({ partyCamp, home }) => {
+  const explicitLive = await page.evaluate(({ partyCamp, home }) => {
     const world = window.__g.scene;
-    world.hero.x = 1765;
-    world.hero.y = 965;
-    world.parties = [{ camp: partyCamp, x: 1875, y: 1005, comp: ['bandit'], home: { ...home }, waryT: 0 }];
+    world.hero.x = 1400;
+    world.hero.y = 700;
+    world.parties = [{
+      camp: partyCamp, x: 1875, y: 1005, vx: 0, vy: 0, comp: ['bandit'], home: { ...home },
+      wander: { ...home }, wanderT: 999, waryT: 0,
+    }];
     window.__g.persistRun();
     return { hero: { x: world.hero.x, y: world.hero.y }, party: { x: 1875, y: 1005 } };
   }, { partyCamp: PARTY_KEY, home: PARTY_HOME });
-  const stored = await page.evaluate(() => {
+  const explicitStored = await page.evaluate(() => {
     const save = JSON.parse(localStorage.getItem('bf_save'));
     return { hero: { x: save.x, y: save.y }, party: { x: save.parties[0].x, y: save.parties[0].y } };
   });
+  expect(explicitStored).toEqual(explicitLive);
+
+  await page.evaluate(({ partyCamp }) => {
+    const world = window.__g.scene;
+    world.hero.x = 1500;
+    world.hero.y = 700;
+    world.parties[0].camp = partyCamp;
+    world.parties[0].x = 1900;
+    world.parties[0].y = 1020;
+    world.parties[0].home = { x: 1900, y: 1020 };
+    world.parties[0].wander = { x: 1900, y: 1020 };
+    world.parties[0].wanderT = 999;
+    window.__g.saveTimer = 0;
+  }, { partyCamp: PARTY_KEY });
+  await rawStep(page, 4.01);
+  const timedLive = await page.evaluate(() => {
+    const world = window.__g.scene;
+    return {
+      hero: { x: world.hero.x, y: world.hero.y },
+      party: { x: world.parties[0].x, y: world.parties[0].y },
+    };
+  });
+  const timedStored = await page.evaluate(() => {
+    const save = JSON.parse(localStorage.getItem('bf_save'));
+    return { hero: { x: save.x, y: save.y }, party: { x: save.parties[0].x, y: save.parties[0].y } };
+  });
+  expect(timedStored.hero).toEqual(timedLive.hero);
+  expect(timedStored.party.x).toBeCloseTo(timedLive.party.x, 9);
+  expect(timedStored.party.y).toBeCloseTo(timedLive.party.y, 9);
+
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => window.__g.sceneName === 'world');
+  const restored = await page.evaluate(() => {
+    const world = window.__g.scene;
+    return {
+      hero: { x: world.hero.x, y: world.hero.y },
+      party: { x: world.save.parties[0].x, y: world.save.parties[0].y },
+    };
+  });
   assertNoRuntimeErrors(runtimeErrors);
-  expect(stored).toEqual(live);
+  expect(restored.hero).toEqual(timedLive.hero);
+  expect(restored.party.x).toBeCloseTo(timedLive.party.x, 9);
+  expect(restored.party.y).toBeCloseTo(timedLive.party.y, 9);
 });
 
 test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) => {
