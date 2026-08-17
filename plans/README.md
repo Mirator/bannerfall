@@ -33,6 +33,7 @@ conditions, and update its status row when done.
 | 015 | Bound battle simulation scaling with spatial broad phases | Medium* | L | 014 | DONE |
 | 016 | Introduce a Steam-ready platform and input boundary | P2 | L | 001-015 | DONE |
 | 017 | Replace title-screen shortcuts with safe menu navigation | P0 | M | 016 | DONE |
+| 018 | Recompose the title screen around an animated campaign vignette | P1 | M | 017 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).

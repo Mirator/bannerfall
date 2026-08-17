@@ -1,8 +1,8 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=raf847f688e24';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=raf847f688e24';
-import { SAVE_VERSION } from './save.js?v=raf847f688e24';
-import { ACTIONS } from './input-actions.js?v=raf847f688e24';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r7584d9e97185';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r7584d9e97185';
+import { SAVE_VERSION } from './save.js?v=r7584d9e97185';
+import { ACTIONS } from './input-actions.js?v=r7584d9e97185';
 
 const P = PAL.world;
 
