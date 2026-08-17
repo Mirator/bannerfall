@@ -23,6 +23,13 @@ npm test
 Use `npm run test:headed` when a visible Chromium session is useful for
 debugging. Playwright starts the server automatically for test commands.
 
+After persistence, battle-result, save, party-AI, or stronghold changes, also
+run the focused campaign coverage:
+
+```text
+npx playwright test tests/e2e/campaign-persistence.spec.js
+```
+
 ## Deterministic QA conventions
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,
@@ -42,3 +49,9 @@ real-player setup.
 
 See `tests/README.md` for the harness architecture, test placement, isolation
 rules, and expected-failure policy.
+
+The campaign spec contains active `test.fail` annotations for AUDIT-02,
+AUDIT-03, and AUDIT-05. When fixing one of those defects, remove its matching
+annotation in the same change. An unexpected pass is useful drift that signals
+the test debt is ready to retire; never weaken the assertion or add a skip to
+make the gate green.

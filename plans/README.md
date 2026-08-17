@@ -11,7 +11,7 @@ and update its status row when done.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
 | 001 | Add a one-command browser QA gate and document it | P1 | M | — | DONE |
-| 002 | Cover persistence and non-victory campaign transitions | P1 | M | 001 | TODO |
+| 002 | Cover persistence and non-victory campaign transitions | P1 | M | 001 | DONE |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
