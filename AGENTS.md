@@ -44,6 +44,17 @@ rendering, collision, navigation, and movement bonuses cannot diverge.
 Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
 
+Canvas visual QA lives in `tests/e2e/visual-regression.spec.js` and runs in CI
+on every pull request as part of `npm test`; use `npm run test:visual` for the
+focused suite. It uses seeded scenarios,
+explicit fixed steps, and a frozen page-side update hook; do not add wall-clock sleeps or
+change production visuals solely to make a screenshot pass. Baselines are
+platform-neutral and intentionally tolerate only the documented small raster
+difference (`threshold: 0.20`, `maxDiffPixelRatio: 0.015`). Review actual,
+expected, and diff PNGs before using `--update-snapshots`; never update a
+baseline to conceal an unexplained regression. See `tests/README.md` for the
+five covered world/battle states and the baseline workflow.
+
 After persistence, battle-result, save, party-AI, or stronghold changes, also
 run the focused campaign coverage:
 
