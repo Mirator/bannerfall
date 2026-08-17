@@ -474,13 +474,41 @@ function runQaSuiteImpl() {
     assert(JSON.stringify(withEffects) === JSON.stringify(withoutEffects), 'effect toggle changed canonical battle simulation state');
     assert(G.scene.particles.list.length === 0, 'disabled effects still emitted particles');
 
-    function worldSnapshot() {
-      g.effects(false);
+    function worldSnapshot(effectsEnabled) {
+      g.effects(effectsEnabled);
       g.scenario('world', { seed: 0 });
+      // Exercise the same fixed-timestep input script in both modes. Movement
+      // emits dust, while party navigation and campaign updates remain gameplay.
+      g.key('ArrowRight', true);
+      g.step(1.5);
+      g.key('ArrowRight', false);
+      g.step(1.5);
       const w = G.scene;
-      return { hero: { x: w.hero.x, y: w.hero.y }, parties: w.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: [...p.comp], home: { ...p.home } })) };
+      const point = value => value ? { x: value.x, y: value.y } : null;
+      return {
+        time: w.time, spawnT: w.spawnT,
+        hero: { x: w.hero.x, y: w.hero.y, vx: w.hero.vx, vy: w.hero.vy },
+        save: {
+          gold: w.save.gold, heroHp: w.save.heroHp, heroMaxHp: w.save.heroMaxHp,
+          armyCap: w.save.armyCap, won: w.save.won, battleCount: w.save.battleCount,
+          troops: w.save.troops.map(t => ({ type: t.type, hp: t.hp })),
+          camps: w.save.camps.map(c => ({ id: c.id, razed: c.razed, garrison: c.garrison ? [...c.garrison] : null })),
+        },
+        parties: w.parties.map(p => ({
+          camp: p.camp, x: p.x, y: p.y, vx: p.vx, vy: p.vy, comp: [...p.comp], home: point(p.home),
+          waryT: p.waryT, chaseT: p.chaseT, wanderT: p.wanderT, wander: point(p.wander),
+          navT: p.navT, navGoal: point(p.navGoal), navFor: point(p.navFor), mood: p.mood,
+        })),
+      };
     }
-    const zeroA = worldSnapshot(), zeroB = worldSnapshot();
+    const worldWithEffects = worldSnapshot(true);
+    const worldWithoutEffects = worldSnapshot(false);
+    assert(JSON.stringify(worldWithEffects) === JSON.stringify(worldWithoutEffects), 'effect toggle changed canonical world simulation state');
+    assert(G.scene.particles.list.length === 0, 'disabled world effects still emitted particles');
+
+    // Keep a separate replay assertion so seed zero remains covered independently
+    // of the effects comparison above.
+    const zeroA = worldSnapshot(false), zeroB = worldSnapshot(false);
     assert(JSON.stringify(zeroA) === JSON.stringify(zeroB), 'seed zero world replay was not deterministic');
     g.effects(true);
     return 'battle state matched with effects enabled/disabled and seed-zero world replay matched';
