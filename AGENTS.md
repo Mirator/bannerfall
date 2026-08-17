@@ -81,6 +81,13 @@ Adding resumable battles or pending encounters requires an explicit versioned
 save-schema design, migration, and dedicated coverage rather than expanding
 this checkpoint casually.
 
+Roaming-party lifecycle: removing a party for an encounter is temporary unless
+all enemies die. Both retreat and ordinary defeat restore the surviving enemy
+types at the original encounter coordinates with the original camp/home
+identity; camp garrisons remain on their separate attrition path. Keep the
+AUDIT-03 campaign regression and its fully-wiped control passing when changing
+battle-result or party-restoration code.
+
 Any save-field change must deliberately increment or migrate the schema in
 `src/save.js`, update both fresh-save defaults and validation, and add legacy,
 current, and malformed fixtures. Preserve `bf_save`/`bf_save_test` isolation.

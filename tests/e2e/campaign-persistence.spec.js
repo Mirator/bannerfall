@@ -55,8 +55,8 @@ async function installUniqueParty(page, { camp = PARTY_KEY, comp = PARTY_COMP } 
       bob: 0,
       comp: [...partyComp],
       home: { ...home },
-      wander: null,
-      wanderT: 0,
+      wander: { ...home },
+      wanderT: 999,
       waryT: 0,
     }];
     world.hero.x = home.x;
@@ -355,13 +355,57 @@ test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) =
 });
 
 test('AUDIT-03 defeat restores the surviving roaming party', async ({ page }) => {
-  test.fail(true, 'AUDIT-03: remove when ordinary defeat restores the surviving roaming party');
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, { seed: 907 });
   await installUniqueParty(page);
+  const encounter = await page.evaluate(() => {
+    const battle = window.__g.scene;
+    const save = window.__g._lastSave;
+    const killed = battle.enemies.find(enemy => enemy.type === 'bandit');
+    if (!killed) throw new Error('fixture setup: expected a bandit to kill');
+    battle.damageEnemy(killed, killed.hp + 1, 0, 0, 'qa');
+    battle.damageFriendly(battle.hero, true, battle.hero.hp + 1, {
+      type: 'bandit', x: battle.hero.x, y: battle.hero.y,
+    });
+    return { x: save.x, y: save.y };
+  });
+  await rawStep(page, 3.2);
+  const result = await page.evaluate(() => {
+    if (window.__g.sceneName !== 'world') throw new Error('fixture setup: defeat did not return to world');
+    const parties = window.__g.scene.parties.filter(p => p.camp === 'c1');
+    return {
+      parties: parties.map(p => ({
+        camp: p.camp,
+        comp: [...p.comp].sort(),
+        home: p.home,
+        position: { x: p.x, y: p.y },
+      })),
+      hero: { x: window.__g.scene.hero.x, y: window.__g.scene.hero.y },
+    };
+  });
+  assertNoRuntimeErrors(runtimeErrors);
+  expect(result.parties).toEqual([{
+    camp: PARTY_KEY,
+    comp: ['bandit', 'raider'],
+    home: PARTY_HOME,
+    position: expect.any(Object),
+  }]);
+  const restoredPosition = result.parties[0].position;
+  expect(Math.hypot(restoredPosition.x - encounter.x, restoredPosition.y - encounter.y)).toBeLessThan(60);
+  expect(result.hero).not.toEqual(encounter);
+});
+
+test('AUDIT-03 fully defeated roaming parties stay removed', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, { seed: 908, hard: true });
+  await installUniqueParty(page, { comp: ['bandit'] });
   await page.evaluate(() => {
     const battle = window.__g.scene;
+    const enemy = battle.enemies.find(candidate => candidate.type === 'bandit');
+    if (!enemy) throw new Error('fixture setup: expected a bandit enemy');
+    battle.damageEnemy(enemy, enemy.hp + 1, 0, 0, 'qa');
     battle.damageFriendly(battle.hero, true, battle.hero.hp + 1, {
       type: 'bandit', x: battle.hero.x, y: battle.hero.y,
     });
@@ -369,9 +413,8 @@ test('AUDIT-03 defeat restores the surviving roaming party', async ({ page }) =>
   await rawStep(page, 3.2);
   const parties = await page.evaluate(() => {
     if (window.__g.sceneName !== 'world') throw new Error('fixture setup: defeat did not return to world');
-    return window.__g.scene.parties.filter(p => p.camp === 'c1')
-      .map(p => ({ camp: p.camp, comp: [...p.comp].sort() }));
+    return window.__g.scene.parties.filter(p => p.camp === PARTY_KEY);
   });
   assertNoRuntimeErrors(runtimeErrors);
-  expect(parties).toEqual([{ camp: PARTY_KEY, comp: [...PARTY_COMP].sort() }]);
+  expect(parties).toEqual([]);
 });

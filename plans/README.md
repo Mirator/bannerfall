@@ -20,7 +20,7 @@ its STOP conditions, and update its status row when done.
 | 004 | Synchronize live world state before every save | P1 | S | 003 | DONE |
 | 005 | Persist a coherent checkpoint before entering battle | P1 | S | 004 | DONE |
 | 006 | Eliminate audited scheduler, rendering, simulation, and pathfinding waste | P1 | L | 005 | DONE |
-| 007 | Preserve roaming parties after player defeat | High | S | 006 | READY |
+| 007 | Preserve roaming parties after player defeat | High | S | 006 | DONE |
 | 008 | Make the save contract total and battle-stat safe | High | M | 007 | READY |
 | 009 | Unify rendered and simulated terrain geometry | High | M | 007-008 | READY |
 | 010 | Fail CI on flaky Playwright results | Medium | S | 007-009 | READY |

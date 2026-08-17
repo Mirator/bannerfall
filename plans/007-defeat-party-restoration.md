@@ -1,6 +1,6 @@
 # Plan 007: Preserve Roaming Parties After Player Defeat
 
-**Status:** READY
+**Status:** DONE
 **Priority:** High
 **Effort:** S
 **Risk:** Medium
@@ -72,4 +72,3 @@ Before editing, verify the roaming-party removal still occurs in `World.update`,
 ## Rollback
 
 Revert the implementation commit. No persisted-data migration is introduced.
-
