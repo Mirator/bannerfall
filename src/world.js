@@ -1,7 +1,7 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rc8c7c6810a0d';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rc8c7c6810a0d';
-import { SAVE_VERSION } from './save.js?v=rc8c7c6810a0d';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r503076710384';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r503076710384';
+import { SAVE_VERSION } from './save.js?v=r503076710384';
 
 const P = PAL.world;
 
@@ -637,12 +637,8 @@ export class World {
     });
   }
 
-  update(dt) {
-    this.time += dt;
-    const inp = this.game.input, h = this.hero;
-    if (this.msgT > 0) this.msgT -= dt;
-
-    // movement — roads are faster, rivers and mountains are real
+  updateHeroMovement(dt, inp, h) {
+    // Movement is the first world phase: interactions and party AI observe its result.
     const ax = inp.axis();
     const SPEED = this.onRoad(h.x, h.y) ? 276 : 240, ACCEL = 900;
     h.vx += ax.x * ACCEL * dt; h.vy += ax.y * ACCEL * dt;
@@ -658,8 +654,9 @@ export class World {
       this.game.sfx.gallop();
       if (this.fxRng() < dt * 10) this.particles.dust(h.x - h.vx * 0.05, h.y + 8, P.cream, 1, this.fxRng);
     }
+  }
 
-    // interactions
+  updateSettlementInteractions(inp) {
     const s = this.nearSettlement();
     if (s) {
       if (inp.pressed.has('KeyQ')) this.recruit('spear');
@@ -688,73 +685,95 @@ export class World {
         } else this.say(`Need ${cost} gold`);
       }
     }
-    // scouting: riding within sight of a camp reveals (and freezes) its garrison
+    // Scouting is deliberately after interaction: a newly revealed garrison is visible
+    // to the next phase, but cannot consume the same input as a camp assault.
     for (const c of WORLD.camps) {
       const st = this.save.camps.find(x => x.id === c.id);
-      if (st.razed || st.garrison) continue;
-      if (c.stronghold) continue; // Wolfsjaw musters when its camps fall, not before
+      if (st.razed || st.garrison || c.stronghold) continue;
       if (dist2(this.hero.x, this.hero.y, c.x, c.y) < 340 * 340) {
         st.garrison = this.rollGarrison(c);
         this.say(`Your scouts count the tents — the camp holds ~${this.strength(st.garrison)} bandits`, 3);
         this.particles.ring(c.x, c.y, 50, P.ink, 0.5, 3);
       }
     }
+    return s;
+  }
 
+  updateCampInteraction(inp, settlement) {
     const camp = this.nearCamp();
-    if (camp && inp.pressed.has('KeyE') && !s) {
-      const razedCount = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
-      if (camp.stronghold && razedCount < 3) {
-        this.say(`Wolfsjaw won't fall while its camps still feed it — cut the supply lines (${razedCount}/3)`);
-        return;
+    if (!camp || !inp.pressed.has('KeyE') || settlement) return false;
+    const razedCount = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
+    if (camp.stronghold && razedCount < 3) {
+      this.say(`Wolfsjaw won't fall while its camps still feed it — cut the supply lines (${razedCount}/3)`);
+      return true;
+    }
+    const st = this.save.camps.find(c => c.id === camp.id);
+    if (!st.garrison) st.garrison = this.rollGarrison(camp);
+    const comp = st.garrison;
+    this.pendingApproach = this.approachTo(camp.x, camp.y);
+    this.pendingDeploy = 4; // YOU are storming THEM — they scramble to arms, not a parade formup
+    this.startBattle(comp, camp.stronghold ? `ASSAULT ON ${camp.name.toUpperCase()}` : 'RAID THE CAMP', () => {
+      st.razed = true;
+      this.save.gold += camp.stronghold ? 200 : 60;
+      if (camp.stronghold) this.save.won = true;
+      const strongCamp = WORLD.camps.find(c => c.id === 'strong');
+      for (const p of (this.save.parties || [])) {
+        if (p.camp === camp.id) { p.camp = 'strong'; p.home = { x: strongCamp.x, y: strongCamp.y }; }
       }
-      const st = this.save.camps.find(c => c.id === camp.id);
-      if (!st.garrison) st.garrison = this.rollGarrison(camp);
-      const comp = st.garrison;
-      this.pendingApproach = this.approachTo(camp.x, camp.y);
-      this.pendingDeploy = 4; // YOU are storming THEM — they scramble to arms, not a parade formup
-      this.startBattle(comp, camp.stronghold ? `ASSAULT ON ${camp.name.toUpperCase()}` : 'RAID THE CAMP', () => {
-        st.razed = true;
-        this.save.gold += camp.stronghold ? 200 : 60;
-        if (camp.stronghold) this.save.won = true;
-        // the camp's surviving war parties don't vanish — they ride for Wolfsjaw (visible remnants)
-        const strongCamp = WORLD.camps.find(c => c.id === 'strong');
-        for (const p of (this.save.parties || [])) {
-          if (p.camp === camp.id) { p.camp = 'strong'; p.home = { x: strongCamp.x, y: strongCamp.y }; }
+      const razedNow = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
+      if (!camp.stronghold) {
+        const humans = comp.filter(t => t === 'bandit' || t === 'raider').length;
+        let freed = 0;
+        while (freed < Math.min(2, Math.ceil(humans / 3)) && this.save.troops.length < this.save.armyCap) {
+          this.save.troops.push({ type: this.simRng() < 0.5 ? 'spear' : 'archer' });
+          freed++;
         }
-        // freed captives join — but only if the camp actually held human captors,
-        // and Wolfsjaw musters its garrison from the remnants once the last camp falls
-        const razedNow = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
-        if (!camp.stronghold) {
-          const humans = comp.filter(t => t === 'bandit' || t === 'raider').length;
-          let freed = 0;
-          while (freed < Math.min(2, Math.ceil(humans / 3)) && this.save.troops.length < this.save.armyCap) {
-            this.save.troops.push({ type: this.simRng() < 0.5 ? 'spear' : 'archer' });
-            freed++;
-          }
-          let remnantNote = '';
-          if (razedNow >= 3) {
-            const strongSt = this.save.camps.find(c => c.id === 'strong');
-            if (!strongSt.garrison) strongSt.garrison = this.rollGarrison(strongCamp);
-            // 'remnants rally' is mechanically TRUE: every surviving refugee party
-            // withdraws from the map and mans Wolfsjaw's walls
-            const remnants = (this.save.parties || []).filter(p => p.camp === 'strong');
-            let absorbed = 0;
-            for (const p of remnants) { strongSt.garrison.push(...p.comp); absorbed += p.comp.length; }
-            this.save.parties = (this.save.parties || []).filter(p => p.camp !== 'strong');
-            remnantNote = absorbed > 0
-              ? ` ${absorbed} bandit remnants withdraw into Wolfsjaw and man its walls — storm it!`
-              : ' Wolfsjaw stands alone — storm it!';
-          }
-          this.save.toast = `Camp razed (${razedNow}/3)!` +
-            (freed > 0 ? ` ${freed} freed captives join your warband.` : '') + remnantNote;
+        let remnantNote = '';
+        if (razedNow >= 3) {
+          const strongSt = this.save.camps.find(c => c.id === 'strong');
+          if (!strongSt.garrison) strongSt.garrison = this.rollGarrison(strongCamp);
+          const remnants = (this.save.parties || []).filter(p => p.camp === 'strong');
+          let absorbed = 0;
+          for (const p of remnants) { strongSt.garrison.push(...p.comp); absorbed += p.comp.length; }
+          this.save.parties = (this.save.parties || []).filter(p => p.camp !== 'strong');
+          remnantNote = absorbed > 0
+            ? ` ${absorbed} bandit remnants withdraw into Wolfsjaw and man its walls — storm it!`
+            : ' Wolfsjaw stands alone — storm it!';
         }
-      }, 'camp', false, { campId: camp.id },
-      camp.stronghold ? 'The final battle — for the realm!' : 'One of the 3 camps — raze it to reach Wolfsjaw');
+        this.save.toast = `Camp razed (${razedNow}/3)!` +
+          (freed > 0 ? ` ${freed} freed captives join your warband.` : '') + remnantNote;
+      }
+    }, 'camp', false, { campId: camp.id },
+    camp.stronghold ? 'The final battle — for the realm!' : 'One of the 3 camps — raze it to reach Wolfsjaw');
+    return true;
+  }
+
+  update(dt) {
+    this.time += dt;
+    const inp = this.game.input, h = this.hero;
+    if (this.msgT > 0) this.msgT -= dt;
+    this.updateHeroMovement(dt, inp, h);
+    const settlement = this.updateSettlementInteractions(inp);
+    if (this.updateCampInteraction(inp, settlement)) return;
+
+    if (this.updateParties(dt)) return;
+
+    // camps slowly send out new parties (visible spawn at the camp)
+    this.updatePartySpawns(dt);
+
+    // victory
+    if (this.save.won) {
+      this.game.startVictory(this.save);
       return;
     }
 
-    // parties: chase only when clearly stronger, flee when clearly weaker
+    this.updateCameraAndEffects(dt);
+  }
+
+  updateParties(dt) {
+    // Party AI owns pursuit, navigation, river-safe movement, and encounter handoff.
     if (this.grace > 0) this.grace -= dt;
+    const h = this.hero;
     const heroSafe = this.inSafeZone(h.x, h.y);
     for (const p of this.parties) {
       const pStr = this.strength(p.comp), mine = this.myStrength();
@@ -864,11 +883,14 @@ export class World {
           null, null, ambushed,
           { camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT },
           caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress');
-        return;
+        return true;
       }
     }
+    return false;
+  }
 
-    // camps slowly send out new parties (visible spawn at the camp)
+  updatePartySpawns(dt) {
+
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       this.spawnT = 40;
@@ -888,12 +910,10 @@ export class World {
       }
     }
 
-    // victory
-    if (this.save.won) {
-      this.game.startVictory(this.save);
-      return;
-    }
+  }
 
+  updateCameraAndEffects(dt) {
+    const h = this.hero;
     const cam = this.game.camera;
     // riding kicks up dust — the hero's cross-bar movement signature (Thronefall + WatG both use it)
     if (Math.hypot(h.vx, h.vy) > 110) {

@@ -1,12 +1,8 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rc8c7c6810a0d';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rc8c7c6810a0d';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r503076710384';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r503076710384';
 
-const BASE = Object.assign({}, PAL.battle);
-// P is battle.js's own working copy, re-tinted per biome in the constructor — never the
-// shared PAL.battle export itself, so a battle never leaves that export mutated for
-// whatever reads it next (menu, world map, a future concurrent battle).
-const P = Object.assign({}, PAL.battle);
+const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
 function sortDrawPrefix(entries, count) {
   for (let i = 1; i < count; i++) {
@@ -48,7 +44,10 @@ export class Battle {
     this.zoom = 1; this.zoomT = 1;
     // biome palette (rose | meadow | night) — same scene code, different world
     this.biome = setup.biome || 'rose';
-    Object.assign(P, BASE, BIOMES[this.biome] || {});
+    // Every battle owns its palette.  Keeping this object on the instance is important:
+    // the menu/world can construct another scene while this one is still alive (and
+    // tests intentionally construct two battles side by side).
+    this.palette = Object.freeze(Object.assign({}, BASE, BIOMES[this.biome] || {}));
     this.state = 'intro';
     this.stateT = 0;
     this.freeze = 0;               // hit-stop timer
@@ -274,6 +273,7 @@ export class Battle {
   }
 
   issueCommand(cmd) {
+    const P = this.palette;
     if (this.command === cmd && cmd !== 'hold') return;
     this.command = cmd;
     const sfx = this.game.sfx;
@@ -305,6 +305,7 @@ export class Battle {
   }
 
   damageEnemy(e, dmg, kx, ky, source) {
+    const P = this.palette;
     this.lastAction = this.time;
     e.hp -= dmg;
     e.flash = 0.12;
@@ -327,6 +328,7 @@ export class Battle {
     }
   }
   damageFriendly(f, isHero, dmg, from) {
+    const P = this.palette;
     this.lastAction = this.time;
     if (isHero && f.iframesT > 0) {
       this.particles.text(f.x, f.y - 40, 'MISS', P.cream, 13);
@@ -394,11 +396,17 @@ export class Battle {
 
   update(dt) {
     this.stateT += dt;
+    if (this.updateSceneState(dt)) return;
+    if (this.freeze > 0) { this.freeze -= dt; return; }
+    this.updateActivePhases(dt);
+  }
+
+  updateSceneState(dt) {
     if (this.state === 'intro') {
       if (this.stateT > 1.1 || (this.stateT > 0.6 && this.game.input.pressed.size > 0)) { this.state = 'fight'; this.game.sfx.horn(175); }
       this.updateCamera(dt);
       this.particles.update(dt);
-      return;
+      return true;
     }
     if (this.state === 'end') {
       this.particles.update(dt);
@@ -414,17 +422,17 @@ export class Battle {
         };
         this.setup.onEnd && this.setup.onEnd(result);
       }
-      return;
+      return true;
     }
-    if (this.freeze > 0) { this.freeze -= dt; return; }
+    return false;
+  }
 
+  updateActivePhases(dt) {
+    const P = this.palette;
     this.time += dt;
     const inp = this.game.input, h = this.hero, sfx = this.game.sfx;
 
-    // ---- commands
-    if (inp.pressed.has('Digit1')) this.issueCommand('follow');
-    if (inp.pressed.has('Digit2')) this.issueCommand('charge');
-    if (inp.pressed.has('Digit3')) this.issueCommand('hold');
+    this.updateCommandPhase(inp);
 
     // ---- hero movement
     const ax = inp.axis();
@@ -662,7 +670,52 @@ export class Battle {
       if (len(e.vx, e.vy) > 25) e.bob += dt * 9;
     }
 
-    // ---- separation (units + hero + obstacles)
+    this.updateSeparationPhase(h);
+
+    // Projectiles resolve after movement/collisions, so a landing observes the final
+    // positions from this tick and can remove a dead target before terminal resolution.
+    this.updateProjectilePhase(dt, h);
+
+    // ---- stalemate breaker: 10s with no blood → survivors stop kiting and close in
+    if (!this.bloodlust && this.time - this.lastAction > 10 && this.enemies.length > 0) {
+      this.bloodlust = true;
+      this.commandFlash = { text: 'THEY CLOSE IN!', t: 1.1 };
+      this.game.sfx.horn(110);
+      for (const e of this.enemies) this.particles.ring(e.x, e.y, 26, P.enemy, 0.5, 3);
+    }
+
+    this.resolveBattleResult(dt, h, ax);
+
+    if (this.commandFlash.t > 0) this.commandFlash.t -= dt;
+
+    this.updateCamera(dt);
+    this.particles.update(dt);
+  }
+
+  updateProjectilePhase(dt, h) {
+    const P = this.palette;
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i];
+      p.t += dt;
+      if (p.t >= p.T) {
+        const hx = p.tx, hy = p.ty;
+        this.particles.dust(hx, hy, P.groundShade, 1, this.fxRng);
+        if (p.friendly) {
+          const e = this.nearestEnemy(hx, hy, 16);
+          if (e) this.damageEnemy(e, p.dmg, 0, 0, 'troop');
+        } else if (dist2(hx, hy, h.x, h.y) < 16 * 16 && h.iframesT <= 0) {
+          this.damageFriendly(h, true, p.dmg, { x: hx, y: hy, type: p.srcType });
+        } else {
+          let hit = null, bd = 16 * 16;
+          for (const t of this.troops) { const dd = dist2(hx, hy, t.x, t.y); if (dd < bd) { bd = dd; hit = t; } }
+          if (hit) this.damageFriendly(hit, false, p.dmg);
+        }
+        this.projectiles.splice(i, 1);
+      }
+    }
+  }
+
+  updateSeparationPhase(h) {
     const all = this._allUnits;
     all.length = 0;
     for (const t of this.troops) all.push(t);
@@ -671,7 +724,6 @@ export class Battle {
       const a = all[i];
       for (let j = i + 1; j < all.length; j++) {
         const b = all[j];
-        // same-team pairs keep extra spacing so a squad reads as countable units, not one blob
         const sameTeam = a.team === b.team;
         const rr = a.d.radius + b.d.radius + (sameTeam ? 13 : 7);
         const d2 = dist2(a.x, a.y, b.x, b.y);
@@ -681,20 +733,17 @@ export class Battle {
           a.x += dx; a.y += dy; b.x -= dx; b.y -= dy;
         }
       }
-      // vs hero (units never stand inside the hero sprite)
-      {
-        const rr = a.d.radius + HERO.radius + 3;
-        const d2 = dist2(a.x, a.y, h.x, h.y);
-        if (d2 < rr * rr && d2 > 0.01) {
-          const d = Math.sqrt(d2), push = (rr - d) / d * 0.9;
-          a.x += (a.x - h.x) * push; a.y += (a.y - h.y) * push;
-        }
+      const rr = a.d.radius + HERO.radius + 3;
+      const d2 = dist2(a.x, a.y, h.x, h.y);
+      if (d2 < rr * rr && d2 > 0.01) {
+        const d = Math.sqrt(d2), push = (rr - d) / d * 0.9;
+        a.x += (a.x - h.x) * push; a.y += (a.y - h.y) * push;
       }
       for (const o of this.obstacles) {
-        const rr = a.d.radius + o.r;
-        const d2 = dist2(a.x, a.y, o.x, o.y);
-        if (d2 < rr * rr && d2 > 0.01) {
-          const d = Math.sqrt(d2), push = (rr - d) / d;
+        const obstacleR = a.d.radius + o.r;
+        const obstacleD2 = dist2(a.x, a.y, o.x, o.y);
+        if (obstacleD2 < obstacleR * obstacleR && obstacleD2 > 0.01) {
+          const d = Math.sqrt(obstacleD2), push = (obstacleR - d) / d;
           a.x += (a.x - o.x) * push; a.y += (a.y - o.y) * push;
         }
       }
@@ -707,43 +756,18 @@ export class Battle {
         h.x += (h.x - o.x) * push; h.y += (h.y - o.y) * push;
       }
     }
+  }
 
-    // ---- projectiles
-    for (let i = this.projectiles.length - 1; i >= 0; i--) {
-      const p = this.projectiles[i];
-      p.t += dt;
-      if (p.t >= p.T) {
-        // land: check hit
-        const hx = p.tx, hy = p.ty;
-        this.particles.dust(hx, hy, P.groundShade, 1, this.fxRng);
-        if (p.friendly) {
-          const e = this.nearestEnemy(hx, hy, 16);
-          if (e) this.damageEnemy(e, p.dmg, 0, 0, 'troop');
-        } else {
-          if (dist2(hx, hy, h.x, h.y) < 16 * 16 && h.iframesT <= 0) this.damageFriendly(h, true, p.dmg, { x: hx, y: hy, type: p.srcType });
-          else {
-            let hit = null, bd = 16 * 16;
-            for (const t of this.troops) { const dd = dist2(hx, hy, t.x, t.y); if (dd < bd) { bd = dd; hit = t; } }
-            if (hit) this.damageFriendly(hit, false, p.dmg);
-          }
-        }
-        this.projectiles.splice(i, 1);
-      }
-    }
+  updateCommandPhase(inp) {
+    if (inp.pressed.has('Digit1')) this.issueCommand('follow');
+    if (inp.pressed.has('Digit2')) this.issueCommand('charge');
+    if (inp.pressed.has('Digit3')) this.issueCommand('hold');
+  }
 
-    // ---- stalemate breaker: 10s with no blood → survivors stop kiting and close in
-    if (!this.bloodlust && this.time - this.lastAction > 10 && this.enemies.length > 0) {
-      this.bloodlust = true;
-      this.commandFlash = { text: 'THEY CLOSE IN!', t: 1.1 };
-      this.game.sfx.horn(110);
-      for (const e of this.enemies) this.particles.ring(e.x, e.y, 26, P.enemy, 0.5, 3);
-    }
-
-    // ---- win/lose/retreat
+  resolveBattleResult(dt, h, ax) {
     if (this.enemies.length === 0) this.endBattle(true);
     if (h.hp <= 0) this.endBattle(false); // standing check — never rely only on the damage path
-    // retreat is a held INPUT decision: you must be at your escape edge AND steering into it.
-    // Knockback, dashes, and drift never fill the bar — only the player's own held direction does.
+    // Retreat is a held INPUT decision; knockback, dashes, and drift never fill the bar.
     const inEscape = this.approach === 'E' ? h.x < 70 : this.approach === 'W' ? h.x > this.W - 70
       : this.approach === 'S' ? h.y < 70 : h.y > this.H - 70;
     const steeringOut = this.approach === 'E' ? ax.x < -0.3 : this.approach === 'W' ? ax.x > 0.3
@@ -754,11 +778,6 @@ export class Battle {
     } else {
       this.retreatT = 0;
     }
-
-    if (this.commandFlash.t > 0) this.commandFlash.t -= dt;
-
-    this.updateCamera(dt);
-    this.particles.update(dt);
   }
 
   // Fit-to-action camera: frame hero + all living units, clamp inside the arena.
@@ -791,6 +810,7 @@ export class Battle {
 
   // ------------------------------------------------------------- drawing
   draw(ctx) {
+    const P = this.palette;
     this._alertCount = 0; // per-frame alert cluster-cull registry
     // paint the whole screen in the biome's shade tone FIRST — the battle sits on
     // continuous terrain, never on a floating "arena card" over the canvas default
@@ -960,6 +980,7 @@ export class Battle {
   }
 
   drawBalloons(ctx) {
+    const P = this.palette;
     const s = clamp(1 / this.game.camera.zoom, 1, 1.7);
     // at mass-battle zoom: ONE badge per side (dominant type) — the silhouettes carry unit
     // identity now, and a stack of per-type badges over a melee drowns the fight it labels
@@ -995,12 +1016,14 @@ export class Battle {
   }
 
   drawObstacle(ctx, o) {
+    const P = this.palette;
     if (o.kind === 'none') return;
     if (o.kind === 'tree') tree(ctx, o.x, o.y, o.r * 1.15, P.tree, P.treeShade, P.groundShade);
     else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot);
   }
 
   drawProps(ctx, dynamicOnly = false) {
+    const P = this.palette;
     for (const p of this.props) {
       const dynamic = p.kind === 'fire' || p.kind === 'mill' || p.kind === 'river';
       if (dynamicOnly !== dynamic) continue;
@@ -1111,6 +1134,7 @@ export class Battle {
 
   // chunky little figure
   figure(ctx, x, y, facing, bob, body, dark, opts = {}) {
+    const P = this.palette;
     const bobY = Math.sin(bob) * 1.6;
     const r = opts.r || 7;
     const lx = Math.cos(facing), ly = Math.sin(facing);
@@ -1239,6 +1263,7 @@ export class Battle {
   }
 
   horse(ctx, x, y, facing, bob, body, dark, mane) {
+    const P = this.palette;
     const bobY = Math.sin(bob) * 2;
     const lx = Math.cos(facing);
     const dir = lx >= 0 ? 1 : -1;
@@ -1270,6 +1295,7 @@ export class Battle {
   }
 
   drawTroop(ctx, t) {
+    const P = this.palette;
     const lungeX = t.lunge > 0 ? Math.cos(t.facing) * t.lunge * 6 : 0;
     const lungeY = t.lunge > 0 ? Math.sin(t.facing) * t.lunge * 6 : 0;
     const body = t.flash > 0 ? '#FFFFFF' : P.friend;
@@ -1291,6 +1317,7 @@ export class Battle {
   }
 
   drawEnemy(ctx, e) {
+    const P = this.palette;
     const lungeX = e.lunge > 0 ? Math.cos(e.facing) * e.lunge * 7 : 0;
     const lungeY = e.lunge > 0 ? Math.sin(e.facing) * e.lunge * 7 : 0;
     // brutes read as a distinct big threat at a glance: size + a HUE break (umber-brown, like
@@ -1367,6 +1394,7 @@ export class Battle {
   }
 
   drawHero(ctx) {
+    const P = this.palette;
     const h = this.hero;
     const body = h.hurtT > 0 ? '#FFFFFF' : P.hero;
     // banner rally range: men within sight of the raised banner fight harder — the ring
@@ -1408,6 +1436,7 @@ export class Battle {
   }
 
   drawHud(ctx) {
+    const P = this.palette;
     const cam = this.game.camera, h = this.hero;
     const W = cam.w, Hh = cam.h;
     ctx.textBaseline = 'middle';

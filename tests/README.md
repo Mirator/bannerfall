@@ -13,6 +13,21 @@ existing Python server, checks browser/runtime errors, verifies all 17 record
 names, and proves that running QA preserves `bf_save` while using
 `bf_save_test`.
 
+## World and battle seams
+
+`tests/e2e/world-battle-seams.spec.js` protects the architecture boundary added
+for audit finding #8. It checks that the ordered world/battle phase methods are
+present and that constructing a second battle with another biome cannot mutate
+the first battle's frozen palette. Keep this test focused on ownership and
+ordering; gameplay outcomes belong in `qa.spec.js`, campaign behavior belongs
+in `campaign-persistence.spec.js`, and pixel changes belong in the visual suite.
+
+When adding a mechanic, put its state mutation in the phase that owns it. World
+ticks move the hero before interactions, then run party AI before spawn/camera
+maintenance. Battle ticks resolve projectile landings before the terminal
+result check. Do not replace these narrow methods with a generic manager or
+shared mutable context object.
+
 ## Performance coverage
 
 `tests/e2e/performance.spec.js` is the focused structural performance gate.

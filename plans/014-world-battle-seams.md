@@ -1,6 +1,6 @@
 # Plan 014: Establish Maintainable World and Battle Simulation Seams
 
-**Status:** READY
+**Status:** DONE
 **Priority:** Medium
 **Effort:** L
 **Risk:** High
@@ -76,3 +76,15 @@ Re-measure file/update sizes and inspect palette ownership on the live branch. P
 
 Revert the commit as a unit. This plan should not alter persistence format or require data rollback.
 
+## Completion Notes
+
+- `World.update()` now orchestrates hero movement, settlement/camp interaction,
+  party AI, spawning, and camera/effects maintenance through named methods.
+- `Battle.update()` now gates scene state, dispatches the active pipeline, and
+  delegates command, separation, projectile, and terminal-result phases while
+  preserving the established ordering.
+- Battle palettes are frozen per instance; `tests/e2e/world-battle-seams.spec.js`
+  proves a second biome cannot recolor an existing battle.
+- `AGENTS.md` and `tests/README.md` document phase ownership and extension rules.
+- No visual baselines changed. `npm test` passed all 32 tests, including all
+  semantic, performance, terrain, persistence, visual, and seam coverage.

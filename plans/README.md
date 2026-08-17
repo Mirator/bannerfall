@@ -27,7 +27,7 @@ its STOP conditions, and update its status row when done.
 | 011 | Add deterministic Canvas visual regression coverage | Medium | M | 009-010 | DONE |
 | 012 | Enforce release cache-token integrity | Medium | S | 010 | DONE |
 | 013 | Isolate gameplay and presentation randomness | Medium | M | 011 | DONE |
-| 014 | Establish maintainable World and Battle simulation seams | Medium | L | 009, 011, 013 | READY |
+| 014 | Establish maintainable World and Battle simulation seams | Medium | L | 009, 011, 013 | DONE |
 | 015 | Bound battle simulation scaling with spatial broad phases | Medium* | L | 014 | READY |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
