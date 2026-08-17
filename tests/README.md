@@ -33,6 +33,22 @@ collision correctness for an approximate cache. Structural budgets are
 intentionally fixed (`<10000` world and `<9000` battle `beginPath` calls over
 20 draws); never raise or weaken them to make CI green.
 
+## CI flake policy
+
+Playwright uses zero retries locally. CI permits one retry only to collect
+diagnostic trace and report data, while `failOnFlakyTests` makes a test that
+passes only after that retry fail the workflow. A retry-dependent pass is
+therefore never an accepted result. Verify this policy without launching a
+browser with:
+
+```text
+npm run test:tooling
+```
+
+Use the focused command when diagnosing a failure locally, then rerun the
+same test without changing its retry behavior. Do not quarantine a flaky test,
+increase retries, or weaken its assertion to make CI green.
+
 `tests/e2e/campaign-persistence.spec.js` owns real-player campaign transition
 coverage. It uses a fresh Playwright context per test, the raw `window.__g`
 handle for controlled setup, real scene/input/damage paths, and the isolated

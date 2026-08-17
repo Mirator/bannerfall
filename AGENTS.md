@@ -17,10 +17,13 @@ npx playwright install chromium
 python scripts/serve.py
 npm run test:qa
 npm run test:perf
+npm run test:tooling
 npm test
 ```
 
 `npm test` is the required full gate before and after gameplay or test changes.
+`npm run test:tooling` is the dependency-free contract check for Playwright and
+CI configuration; run it before browser tests when changing test tooling.
 Use `npm run test:headed` when a visible Chromium session is useful for
 debugging. Playwright starts the server automatically for test commands.
 
