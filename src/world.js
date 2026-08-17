@@ -120,6 +120,13 @@ export class World {
     this.save.parties = this.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT || 0 }));
   }
 
+  syncLiveStateToSave() {
+    this.save.x = this.hero.x;
+    this.save.y = this.hero.y;
+    this.persistParties();
+    return this.save;
+  }
+
   inSafeZone(x, y) {
     for (const s of WORLD.settlements) {
       if (dist2(x, y, s.x, s.y) < BALANCE.settlementSafeR * BALANCE.settlementSafeR) return true;

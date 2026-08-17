@@ -74,6 +74,12 @@ performance smoke check is wall-clock sensitive. Add the record name to the
 ordered list in `tests/e2e/qa.spec.js` whenever the legacy suite intentionally
 changes.
 
+`World.syncLiveStateToSave()` is the single map snapshot boundary. New live
+campaign fields must be copied there if they should survive a refresh, or stay
+deliberately transient if they are presentation/input state. Persistence
+coverage should exercise both explicit `persistRun()` and the deterministic
+four-second timed autosave, then reload and Continue to verify restoration.
+
 Use isolated Playwright contexts for persistence tests. Clear only the test
 origin's storage as part of setup. Calls through `window.game` write
 `bf_save_test`; real-player persistence setup must avoid that API and may use
@@ -93,12 +99,12 @@ errors, weaken assertions, or raise performance budgets to make CI green.
 | Retreat restores the engaged party minus actual dead enemy types | browser E2E | pass |
 | Hard-mode defeat retains exactly one fallback squire | browser E2E | pass |
 | Final stronghold victory enters the victory scene and clears the run save | browser E2E | pass |
-| AUDIT-02 autosave captures live hero and roaming-party positions | browser E2E | expected failure until live autosave synchronization is fixed |
+| AUDIT-02 autosave captures live hero and roaming-party positions | browser E2E | pass (explicit save, timed autosave, reload/Continue) |
 | AUDIT-05 battle entry persists a coherent transaction | browser E2E | expected failure until battle-entry checkpoint persistence is fixed |
 | AUDIT-03 defeat restores the surviving roaming party | browser E2E | expected failure until ordinary defeat restores the party |
 
-The three expected failures are active defect tracking, not skipped debt. Their
-bodies run on every `npm test`; Playwright treats a future pass as an
+AUDIT-03 and AUDIT-05 remain active expected failures for confirmed defects.
+Their bodies run on every `npm test`; Playwright treats a future pass as an
 unexpected pass. The production fix and removal of the matching `test.fail`
 annotation must ship in the same change. Do not change an expected failure to
 `skip`/`fixme`, weaken its assertion, or leave the annotation after the source

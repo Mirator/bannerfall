@@ -50,6 +50,14 @@ real-player setup.
 See `tests/README.md` for the harness architecture, test placement, isolation
 rules, and expected-failure policy.
 
+`World.syncLiveStateToSave()` is the only map snapshot boundary. It copies live
+hero and roaming-party coordinates into the canonical `World.save` immediately
+before `persistRun()` serializes a non-victory world. Add new live campaign
+fields there when they must survive refresh; deliberately transient movement,
+presentation, and input state stays out of the save. Persistence tests must
+cover both explicit `persistRun()` and the timed autosave boundary, followed by
+a reload/Continue assertion.
+
 Any save-field change must deliberately increment or migrate the schema in
 `src/save.js`, update both fresh-save defaults and validation, and add legacy,
 current, and malformed fixtures. Preserve `bf_save`/`bf_save_test` isolation.
@@ -57,8 +65,8 @@ Run `npx playwright test tests/e2e/save-schema.spec.js` and
 `npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
 the required `npm test` gate.
 
-The campaign spec contains active `test.fail` annotations for AUDIT-02,
-AUDIT-03, and AUDIT-05. When fixing one of those defects, remove its matching
-annotation in the same change. An unexpected pass is useful drift that signals
-the test debt is ready to retire; never weaken the assertion or add a skip to
-make the gate green.
+The campaign spec has AUDIT-02 as a normal passing regression. AUDIT-03 and
+AUDIT-05 remain active `test.fail` annotations. When fixing one of those
+defects, remove its matching annotation in the same change. An unexpected pass
+is useful drift that signals the test debt is ready to retire; never weaken the
+assertion or add a skip to make the gate green.
