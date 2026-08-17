@@ -1,5 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=ra95157210ae5';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=raf847f688e24';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -59,7 +59,7 @@ export class Input {
     this.pressed = new Set();     // cleared each frame — edge triggers
     this.actionKeys = new Set();
     this.actionPressed = new Set();
-    this.mouse = { x: canvas.width / 2, y: canvas.height / 2, down: false, clicked: false };
+    this.mouse = { x: canvas.width / 2, y: canvas.height / 2, down: false, clicked: false, moved: false };
     this.canvas = canvas;
     window.addEventListener('keydown', e => {
       if (e.repeat) return;
@@ -74,13 +74,14 @@ export class Input {
       const r = canvas.getBoundingClientRect();
       this.mouse.x = (e.clientX - r.left) * (canvas.width / r.width);
       this.mouse.y = (e.clientY - r.top) * (canvas.height / r.height);
+      this.mouse.moved = true;
     });
     canvas.addEventListener('mousedown', e => { if (e.button === 0) { this.mouse.down = true; this.mouse.clicked = true; } });
     window.addEventListener('mouseup', e => { if (e.button === 0) this.mouse.down = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
   }
   clear() { this.keys.clear(); this.pressed.clear(); this.actionKeys.clear(); this.actionPressed.clear(); }
-  endFrame() { this.pressed.clear(); this.actionPressed.clear(); this.mouse.clicked = false; }
+  endFrame() { this.pressed.clear(); this.actionPressed.clear(); this.mouse.clicked = false; this.mouse.moved = false; }
   // test API injection
   injectKey(code, down) {
     if (down) { if (!this.keys.has(code)) this.pressed.add(code); this.keys.add(code); }
@@ -101,7 +102,7 @@ export class Input {
     return this.actionPressed.has(action) || codes.some(code => this.pressed.has(code));
   }
   injectMouse(x, y, down) {
-    if (x != null) { this.mouse.x = x; this.mouse.y = y; }
+    if (x != null) { this.mouse.moved = this.mouse.moved || this.mouse.x !== x || this.mouse.y !== y; this.mouse.x = x; this.mouse.y = y; }
     if (down != null) { if (down && !this.mouse.down) this.mouse.clicked = true; this.mouse.down = down; }
   }
   axis() {
