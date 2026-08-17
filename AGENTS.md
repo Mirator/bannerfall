@@ -18,12 +18,24 @@ python scripts/serve.py
 npm run test:qa
 npm run test:perf
 npm run test:tooling
+npm run release:cache
+npm run test:release
 npm test
 ```
 
 `npm test` is the required full gate before and after gameplay or test changes.
 `npm run test:tooling` is the dependency-free contract check for Playwright and
 CI configuration; run it before browser tests when changing test tooling.
+The release:cache command computes and applies the deterministic
+content-derived query token to the deployable module graph. Run it after
+changing any file under src/, review the token-only import changes, then run
+test:release to verify that every static module edge in index.html and its
+transitive imports uses the same token. The checker is Node-built-in only; it
+does not add a runtime dependency or build step. CI runs the checker without
+updating files, so a source change that omits the updater fails before browser
+tests. The Pages response cache may retain an individual asset for its short
+max-age, but graph-wide matching prevents a browser from combining
+incompatible module generations.
 Use `npm run test:headed` when a visible Chromium session is useful for
 debugging. Playwright starts the server automatically for test commands.
 

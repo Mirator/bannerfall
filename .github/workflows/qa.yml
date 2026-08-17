@@ -25,6 +25,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify test configuration
         run: npm run test:tooling
+      - name: Verify release cache tokens
+        run: npm run test:release
       - name: Run browser QA
         run: npm test
       - name: Upload Playwright report on failure

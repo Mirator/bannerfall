@@ -1,6 +1,6 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r10';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r10';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rc6b69aee02ac';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rc6b69aee02ac';
 
 const BASE = Object.assign({}, PAL.battle);
 // P is battle.js's own working copy, re-tinted per biome in the constructor — never the

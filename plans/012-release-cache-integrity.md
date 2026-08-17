@@ -1,6 +1,6 @@
 # Plan 012: Enforce Release Cache-Token Integrity
 
-**Status:** READY
+**Status:** DONE
 **Priority:** Medium
 **Effort:** S
 **Risk:** Low
@@ -31,7 +31,7 @@ Ensure GitHub Pages clients cannot retain a mixed or stale JavaScript module gra
 - `scripts/check-release-cache.mjs`
 - `scripts/update-release-cache.mjs` if separate from the checker
 - `package.json`
-- `.github/workflows/ci.yml`
+- `.github/workflows/qa.yml`
 - `AGENTS.md`
 - `tests/README.md`
 - `plans/012-release-cache-integrity.md`
@@ -39,9 +39,9 @@ Ensure GitHub Pages clients cannot retain a mixed or stale JavaScript module gra
 
 ## Implementation Steps
 
-1. Define a deterministic release token from the normalized contents of deployable JavaScript files. Normalize existing `?v=...` substrings before hashing so the token does not depend circularly on itself.
+1. Define a deterministic release token from the normalized contents of the reachable deployable JavaScript files. Normalize existing `?v=...` substrings before hashing so the token does not depend circularly on itself.
 2. Add a checker that enumerates the same deployable module graph, computes the expected token, and fails when any entry/import token is missing, inconsistent, or stale. Use Node built-ins only and stable path/content ordering.
-3. Add an update command that rewrites only recognized version-token locations to the computed token, then re-runs the checker. It must fail safely on unexpected import syntax rather than broad replacement.
+3. Add an update command that rewrites only recognized version-token locations to the computed token, then re-runs the checker. It fails safely on unexpected import syntax rather than broad replacement.
 4. Replace all legacy `r10` references using the updater and verify every static import reachable from `index.html` is covered.
 5. Add `test:release` and run it in CI. Document: modify source, run the updater, review token-only changes, then test/commit.
 6. Explain the Pages `max-age` interaction and why graph-wide consistency matters for transitive ES modules.
@@ -50,7 +50,7 @@ Ensure GitHub Pages clients cannot retain a mixed or stale JavaScript module gra
 
 - Changing any deployable JS source without updating tokens makes `test:release` fail.
 - The updater produces one stable token across repeated runs.
-- Every static browser module edge uses that token; no `r10` remains.
+- Every static browser module edge uses that token; no legacy `r10` remains.
 - No bundler/runtime dependency is introduced.
 - CI enforces the checker.
 
@@ -71,4 +71,3 @@ Verify browser imports still use a shared `?v=r10` token and that no build pipel
 ## Rollback
 
 Revert the commit as one unit so checker expectations and deployed tokens cannot diverge.
-
