@@ -1,9 +1,8 @@
-// Bannerfall QA regression suite — headless, against window.game / window.__g.
+// Bannerfall QA regression suite — browser module against window.game / window.__g.
+import { BALANCE, UNIT_TYPES, WORLD } from '../src/data.js';
 //
-// Paste this whole file as one block into javascript_tool. It is a single
-// expression (no top-level let/const), so it is safe to paste repeatedly
-// while iterating. It defines window.runQaSuite (re-runnable on demand) and
-// also runs it once immediately, storing + returning the result.
+// It preserves the historical window.runQaSuite / window.__qaResult browser
+// globals while remaining importable by the automated Playwright runner.
 //
 // Design notes (see critiques/phase2/qa-auto.md for the full report):
 //  - All game-API calls here (scenario/step/tap/key/state) are synchronous —
@@ -20,10 +19,8 @@
 //    `() => game.startWorld(null)` (src/main.js) — they do NOT feed loot/
 //    survivors back into any save. That's why economy assertions use
 //    World.startBattle instead of scenario('battle_small').
-//  - Constants (costs, loot formula, defeat penalty, grace timer, army cap,
-//    hero start) are mirrored from src/data.js below because they are not
-//    exposed on the test API — if data.js balance numbers change, update
-//    these mirrors too (flagged as a testability gap in the report).
+//  - Balance and world coordinates are imported from src/data.js so this suite
+//    cannot silently drift from production tuning.
 
 // The suite body is a real function, not a one-shot IIFE — window.runQaSuite() below
 // calls this again on demand, instead of replaying a cached result from paste time.
@@ -45,15 +42,20 @@ function runQaSuiteImpl() {
   }
   function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
-  // ---- constants mirrored from src/data.js (not exposed via test API) ----
-  const COST = { spear: 15, archer: 25, knight: 60 };
-  const HEAL_COST = 10;
-  const DEFEAT_GOLD_LOSS = 0.3;
-  const LOOT_BASE = 10, LOOT_PER_ENEMY = 5;
-  const HERO_START = { x: 620, y: 1250 };
-  const SETTLEMENT_ASHFORD = { x: 700, y: 1150 };
-  const CAMP_C1 = { x: 1050, y: 1500 }; // size 3 -> n = 2+size = 5 enemies
-  const CAMP_C2 = { x: 1850, y: 500 };  // size 4 -> n = 2+size = 6 enemies
+  const COST = Object.fromEntries(Object.entries(UNIT_TYPES).map(([type, unit]) => [type, unit.cost]));
+  const HEAL_COST = BALANCE.healCost;
+  const DEFEAT_GOLD_LOSS = BALANCE.defeatGoldLoss;
+  const LOOT_BASE = BALANCE.lootBase;
+  const LOOT_PER_ENEMY = BALANCE.lootPerEnemy;
+  const ARMY_CAP_BASE = BALANCE.armyCapBase;
+  const BATTLE_GRACE = BALANCE.battleGrace;
+  const HERO_START = WORLD.heroStart;
+  const SETTLEMENT_ASHFORD = WORLD.settlements.find(s => s.id === 'ashford');
+  const CAMP_C1 = WORLD.camps.find(c => c.id === 'c1');
+  const CAMP_C2 = WORLD.camps.find(c => c.id === 'c2');
+  assert(SETTLEMENT_ASHFORD, 'WORLD.settlements is missing required id ashford');
+  assert(CAMP_C1, 'WORLD.camps is missing required id c1');
+  assert(CAMP_C2, 'WORLD.camps is missing required id c2');
 
   // ======================================================================
   // 1. State machine — menu -> world on Enter
@@ -122,6 +124,8 @@ function runQaSuiteImpl() {
     save.gold = 100;
     save.troops = [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }]; // odd count
     const startGold = save.gold;
+    assert(save.x === HERO_START.x && save.y === HERO_START.y,
+      'fresh world did not start at WORLD.heroStart (' + HERO_START.x + ',' + HERO_START.y + ')');
     G.scene.startBattle(['bandit'], 'TEST DEFEAT', null);
     assert(g.scene() === 'battle', 'startBattle did not switch scene to battle');
     // no-combat forced defeat: all 5 troops the hero rode out with survive
@@ -132,9 +136,14 @@ function runQaSuiteImpl() {
     const expectedGold = Math.max(25, Math.round(startGold * (1 - DEFEAT_GOLD_LOSS))); // spec v2: 30% loss with a 25g comeback floor
     assert(w.gold === expectedGold, 'defeat gold penalty: expected ' + expectedGold + ' (30% loss, 25g floor), got ' + w.gold);
     assert(w.troops === 5, 'no-combat forced defeat should keep all 5 survivors, got ' + w.troops);
-    // spec v3 (phase-3 coherence): survivors carry you to the NEAREST settlement (from 620,1250 that is Ashford at 700,1150+80)
-    assert(w.hero.x === 700 && w.hero.y === 1230,
-      'defeat respawn expected nearest settlement (700,1230), got (' + w.hero.x + ',' + w.hero.y + ')');
+    // spec v3 (phase-3 coherence): survivors carry you to the nearest settlement.
+    const nearest = WORLD.settlements.reduce((best, settlement) => {
+      const d = (settlement.x - HERO_START.x) ** 2 + (settlement.y - HERO_START.y) ** 2;
+      const bd = (best.x - HERO_START.x) ** 2 + (best.y - HERO_START.y) ** 2;
+      return d < bd ? settlement : best;
+    });
+    assert(w.hero.x === nearest.x && w.hero.y === nearest.y + 80,
+      'defeat respawn expected nearest settlement (' + nearest.x + ',' + (nearest.y + 80) + '), got (' + w.hero.x + ',' + w.hero.y + ')');
     return 'defeat penalties correct: gold ' + startGold + '->' + w.gold + ', troops 5->' + w.troops + ', respawn at nearest settlement';
   });
 
@@ -223,7 +232,7 @@ function runQaSuiteImpl() {
   record('economy_recruit_cost_cap_and_gold_refusals', () => {
     g.scenario('world');
     const save = G.scene.save;
-    save.gold = 100; save.troops = [{ type: 'spear' }]; save.armyCap = 12;
+    save.gold = 100; save.troops = [{ type: 'spear' }]; save.armyCap = ARMY_CAP_BASE;
     G.scene.recruit('archer');
     assert(save.gold === 75, 'recruit archer expected gold 100-25=75, got ' + save.gold);
     assert(save.troops.length === 2, 'recruit archer expected troops.length=2, got ' + save.troops.length);
@@ -245,8 +254,9 @@ function runQaSuiteImpl() {
     G.scene.hero.x = SETTLEMENT_ASHFORD.x; G.scene.hero.y = SETTLEMENT_ASHFORD.y;
     save.gold = 100; save.troops = [];
     g.tap('KeyQ');
-    // spec v3 (phase-3 coherence): settlements quote local prices — Ashford's spearmen cost 12g
-    assert(save.gold === 100 - 12, 'interactive KeyQ recruit at Ashford expected gold 88 (12g farm lads), got ' + save.gold);
+    // spec v3 (phase-3 coherence): settlements quote local prices.
+    assert(save.gold === 100 - SETTLEMENT_ASHFORD.spearCost,
+      'interactive KeyQ recruit at Ashford expected gold ' + (100 - SETTLEMENT_ASHFORD.spearCost) + ', got ' + save.gold);
     assert(save.troops.length === 1, 'interactive KeyQ recruit expected 1 troop, got ' + save.troops.length);
     return 'recruit cost/cap/gold refusals correct; interactive KeyQ path matches direct recruit() call';
   });
@@ -384,8 +394,8 @@ function runQaSuiteImpl() {
     const graceAtStart = G.scene.grace;
     assert(typeof graceAtStart === 'number' && !Number.isNaN(graceAtStart),
       'World.grace was not a number right after returning to world (got ' + graceAtStart + ')');
-    assert(graceAtStart > 4.5 && graceAtStart <= 6.01,
-      'expected grace timer near 6s (BALANCE.battleGrace) right after returning to world, got ' + graceAtStart.toFixed(2));
+    assert(graceAtStart > BATTLE_GRACE - 1.5 && graceAtStart <= BATTLE_GRACE + 0.01,
+      'expected grace timer near ' + BATTLE_GRACE + 's (BALANCE.battleGrace) right after returning to world, got ' + graceAtStart.toFixed(2));
     g.step(3);
     assert(g.scene() === 'world', 'left world scene while observing grace decay, scene=' + g.scene());
     const graceAfter = G.scene.grace;
@@ -395,7 +405,7 @@ function runQaSuiteImpl() {
     assert(g.scene() === 'world', 'left world scene while observing grace decay, scene=' + g.scene());
     const graceLate = G.scene.grace;
     assert(typeof graceLate === 'number', 'World.grace became non-numeric after stepping 7s total (got ' + graceLate + ')');
-    assert(graceLate <= 0, 'expected grace timer to reach 0 after > 6s total, got ' + graceLate.toFixed(2));
+    assert(graceLate <= 0, 'expected grace timer to reach 0 after > ' + BATTLE_GRACE + 's total, got ' + graceLate.toFixed(2));
     return 'grace timer: ' + graceAtStart.toFixed(2) + 's at return -> ' + graceAfter.toFixed(2) + 's after 3s -> ' + graceLate.toFixed(2) + 's after 7s (decays to 0)';
   });
 

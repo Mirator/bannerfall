@@ -12,12 +12,37 @@ Any static file server works (ES modules require http://, not file://):
 python scripts/serve.py
 ```
 
-then open http://localhost:8000.
+then open http://localhost:8474/.
+
+## Development and QA
+
+Development requires Node.js 22+ and Python 3. The shipped game remains a
+static HTML5 canvas application with native ES modules: npm packages are
+development-only QA tooling, and there is still no build step or runtime
+dependency.
+
+For a fresh checkout, install the locked development packages and the local
+Chromium browser once:
+
+```
+npm ci
+npx playwright install chromium
+```
+
+Run `npm test` before submitting gameplay or test changes. It starts and stops
+the existing Python server on port 8474 automatically, runs the browser suite,
+and returns a nonzero exit code for a failed QA record, page exception, or
+browser console error. `npm run test:qa` runs the focused legacy 17-check suite;
+`npm run test:headed` opens Chromium for local debugging. See `AGENTS.md` for
+the agent contract and `tests/README.md` for test architecture and extension
+rules.
 
 ## Structure
 
 - `index.html` — entry point
 - `src/` — game code (engine, world map, battles, data)
-- `tests/qa_suite.js` — headless QA checks
+- `tests/runner.html` — human-readable browser QA runner
+- `tests/qa_suite.js` — deterministic 17-check regression suite
+- `tests/e2e/` — Playwright launch, isolation, and reporting tests
 - `scripts/` — local dev helpers (static server, screenshot server)
 - `critiques/` — design critique notes from the build process
