@@ -1,15 +1,16 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rc6b69aee02ac';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rc6b69aee02ac';
-import { SAVE_VERSION } from './save.js?v=rc6b69aee02ac';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rc8c7c6810a0d';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rc8c7c6810a0d';
+import { SAVE_VERSION } from './save.js?v=rc8c7c6810a0d';
 
 const P = PAL.world;
 
 export class World {
   constructor(game, save) {
     this.game = game;
-    this.rng = makeRng(777);
-    this.particles = new Particles();
+    this.simRng = null;
+    this.fxRng = null;
+    this.particles = new Particles(() => this.game.effectsEnabled);
     this.W = WORLD.w; this.H = WORLD.h;
     this.time = 0;
     this.msg = null; this.msgT = 0;
@@ -27,6 +28,8 @@ export class World {
       parties: null,
       // each campaign rolls its own seed: garrisons, party comps and spawns differ per run —
       // unless a test pinned one via scenario('world', {seed}) for reproducible test worlds
+      // OS/browser entropy chooses a fresh campaign seed; all in-run draws use
+      // the derived simulation/presentation domains below.
       runSeed: game.testSeed != null ? game.testSeed : (Math.random() * 1e9) | 0,
       stats: { won: 0, kills: 0, lost: 0, playT: 0 },
       hard: !!game.hardNext,
@@ -38,10 +41,13 @@ export class World {
     this.hero = { x: this.save.x, y: this.save.y, vx: 0, vy: 0, facing: 0, bob: 0 };
     this.grace = save ? BALANCE.battleGrace : 0;   // ambush immunity after a battle
     // world randomness evolves across the campaign AND differs per run
-    this.rng = makeRng((this.save.runSeed ?? 777) + (this.save.battleCount ?? 0) * 7919);
+    const campaignSeed = ((this.save.runSeed ?? 777) + (this.save.battleCount ?? 0) * 7919) >>> 0;
+    this.simRng = makeRng(deriveSeed(campaignSeed, RNG_DOMAINS.WORLD_SIM));
+    this.fxRng = makeRng(deriveSeed(campaignSeed, RNG_DOMAINS.WORLD_FX));
     if (this.save.toast) { this.say(this.save.toast, 3.5); this.save.toast = null; }
 
-    // scenery (deterministic)
+    // scenery uses a fixed authored seed: it is static map input, not a campaign
+    // stream, so changing effects can never perturb collision geometry.
     this.scenery = this.buildScenery();
     // Terrain is defined once as sampled polylines. Rendering and simulation both consume
     // these cached points, so a curve can never be visible in one system but absent in the
@@ -118,9 +124,9 @@ export class World {
     if (this.save.parties) {
       for (const p of this.save.parties) {
         this.parties.push({
-          camp: p.camp, x: p.x, y: p.y, vx: 0, vy: 0, facing: 0, bob: this.rng() * TAU,
+          camp: p.camp, x: p.x, y: p.y, vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
           comp: p.comp, home: p.home, wander: null, wanderT: 0, waryT: p.waryT || 0,
-          navT: this.rng() * 0.3, navGoal: null, navFor: null,
+          navT: this.simRng() * 0.3, navGoal: null, navFor: null,
           _navGoalVisibility: new Float64Array(N), _navGoalX: NaN, _navGoalY: NaN,
         });
       }
@@ -128,7 +134,7 @@ export class World {
       for (const c of WORLD.camps) {
         const st = this.save.camps.find(s => s.id === c.id);
         if (st.razed || c.stronghold) continue; // the Hold garrisons its walls; it doesn't raid — its camps do
-        const n = 1 + (this.rng() * 2 | 0);
+        const n = 1 + (this.simRng() * 2 | 0);
         for (let i = 0; i < n; i++) this.spawnParty(c);
       }
     }
@@ -415,7 +421,7 @@ export class World {
   // Spawn a party aimed at a strength band around the player, so the map always
   // offers fights worth taking (Bannerlord: pick fights you can win — barely).
   spawnParty(camp, band) {
-    const R = this.rng;
+    const R = this.simRng;
     const mine = this.myStrength();
     const target = Math.max(2, Math.min(24, Math.round(mine * (band || (0.6 + R() * 0.9)))));
     const comp = [];
@@ -436,9 +442,9 @@ export class World {
     this.parties.push({
       camp: camp.id,
       x: px, y: py,
-      vx: 0, vy: 0, facing: 0, bob: R() * TAU,
+      vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
       comp, home: { x: camp.x, y: camp.y },
-      wander: null, wanderT: 0, navT: R() * 0.3, navGoal: null, navFor: null,
+      wander: null, wanderT: 0, navT: this.simRng() * 0.3, navGoal: null, navFor: null,
       _navGoalVisibility: new Float64Array(this.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
     });
   }
@@ -451,7 +457,8 @@ export class World {
   // Bandits don't magically reinforce because you recruited; what you scouted is what you fight.
   rollGarrison(camp) {
     const mine = this.myStrength();
-    const R = makeRng(camp.x * 31 + camp.y * 7 + mine * 13 + (this.save.runSeed ?? 0));
+    const garrisonSeed = (camp.x * 31 + camp.y * 7 + mine * 13 + (this.save.runSeed ?? 0)) >>> 0;
+    const R = makeRng(deriveSeed(garrisonSeed, RNG_DOMAINS.WORLD_GARRISON));
     const hardMul = this.save.hard ? 1.25 : 1;
     const target = Math.max(camp.size + 2, Math.round(mine * (camp.tier || 1) * hardMul));
     const bruteCap = camp.stronghold ? 3 : mine >= 12 ? 2 : mine >= 8 ? 1 : 0;
@@ -649,7 +656,7 @@ export class World {
       h.facing = angLerp(h.facing, Math.atan2(h.vy, h.vx), 1 - Math.exp(-8 * dt));
       h.bob += dt * 10;
       this.game.sfx.gallop();
-      if (this.rng() < dt * 10) this.particles.dust(h.x - h.vx * 0.05, h.y + 8, P.cream, 1, this.rng);
+      if (this.fxRng() < dt * 10) this.particles.dust(h.x - h.vx * 0.05, h.y + 8, P.cream, 1, this.fxRng);
     }
 
     // interactions
@@ -721,7 +728,7 @@ export class World {
           const humans = comp.filter(t => t === 'bandit' || t === 'raider').length;
           let freed = 0;
           while (freed < Math.min(2, Math.ceil(humans / 3)) && this.save.troops.length < this.save.armyCap) {
-            this.save.troops.push({ type: this.rng() < 0.5 ? 'spear' : 'archer' });
+            this.save.troops.push({ type: this.simRng() < 0.5 ? 'spear' : 'archer' });
             freed++;
           }
           let remnantNote = '';
@@ -776,8 +783,8 @@ export class World {
       if (!goal) {
         p.wanderT -= dt;
         if (!p.wander || p.wanderT <= 0) {
-          p.wander = { x: p.home.x + (this.rng() - 0.5) * 700, y: p.home.y + (this.rng() - 0.5) * 500 };
-          p.wanderT = 3 + this.rng() * 4;
+          p.wander = { x: p.home.x + (this.simRng() - 0.5) * 700, y: p.home.y + (this.simRng() - 0.5) * 500 };
+          p.wanderT = 3 + this.simRng() * 4;
         }
         goal = p.wander; speed = 80;
       }
@@ -791,7 +798,7 @@ export class World {
           p.navGoal = this.pathGoal(p.x, p.y, goal, p);
           if (!p.navFor) p.navFor = { x: goal.x, y: goal.y };
           else { p.navFor.x = goal.x; p.navFor.y = goal.y; }
-          p.navT = 0.5 + this.rng() * 0.2;
+          p.navT = 0.5 + this.simRng() * 0.2;
         }
         const wp = p.navGoal;
         if (wp) goal = wp;
@@ -874,8 +881,8 @@ export class World {
           const s = this.strength(p.comp);
           return s >= mine * 0.7 && s <= mine * 1.2;
         });
-        const c = alive[(this.rng() * alive.length) | 0];
-        this.spawnParty(c, fairExists ? null : 0.75 + this.rng() * 0.4);
+        const c = alive[(this.simRng() * alive.length) | 0];
+        this.spawnParty(c, fairExists ? null : 0.75 + this.simRng() * 0.4);
         this.particles.ring(c.x, c.y, 40, P.ink, 0.5, 3);
         this.persistParties();
       }
@@ -891,7 +898,7 @@ export class World {
     // riding kicks up dust — the hero's cross-bar movement signature (Thronefall + WatG both use it)
     if (Math.hypot(h.vx, h.vy) > 110) {
       this.dustT = (this.dustT || 0) + dt;
-      if (this.dustT > 0.09) { this.dustT = 0; this.particles.dust(h.x - h.vx * 0.05, h.y + 8, P.cream, 2); }
+      if (this.dustT > 0.09) { this.dustT = 0; this.particles.dust(h.x - h.vx * 0.05, h.y + 8, P.cream, 2, this.fxRng); }
     }
     cam.follow(h.x + h.vx * 0.35, h.y + h.vy * 0.35, dt, 4);
     // clamp the view inside the map so no void shows at the edges

@@ -22,7 +22,25 @@ export function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-// Deterministic RNG (mulberry32)
+// Deterministic RNG (mulberry32). Domain seeds keep simulation, presentation,
+// and camera effects from consuming one another's sequence.
+export const RNG_DOMAINS = Object.freeze({
+  WORLD_SIM: 0x13579BDF,
+  WORLD_FX: 0x2468ACE0,
+  WORLD_GARRISON: 0x0F1E2D3C,
+  BATTLE_SIM: 0x31415926,
+  BATTLE_FX: 0x27182818,
+  CAMERA_SHAKE: 0x9E3779B9,
+  AUDIO_FX: 0xDEADBEEF,
+});
+
+export function deriveSeed(seed, domain) {
+  let x = ((seed >>> 0) ^ (domain >>> 0) ^ 0xA511E9B3) >>> 0;
+  x = Math.imul(x ^ (x >>> 16), 0x85EBCA6B) >>> 0;
+  x = Math.imul(x ^ (x >>> 13), 0xC2B2AE35) >>> 0;
+  return (x ^ (x >>> 16)) >>> 0;
+}
+
 export function makeRng(seed) {
   let s = seed >>> 0;
   return function () {
@@ -115,15 +133,15 @@ export class Camera {
 // ---------------------------------------------------------------- Particles
 // kinds: dust, shard, ring, slash, arrowTrail, spark, text
 export class Particles {
-  constructor() { this.list = []; }
-  add(p) { this.list.push(Object.assign({ t: 0 }, p)); }
-  dust(x, y, color, n = 3, rng = Math.random) {
+  constructor(isEnabled = () => true) { this.list = []; this.isEnabled = isEnabled; }
+  add(p) { if (this.isEnabled()) this.list.push(Object.assign({ t: 0 }, p)); }
+  dust(x, y, color, n = 3, rng) {
     for (let i = 0; i < n; i++) {
       const a = rng() * TAU, s = 12 + rng() * 30;
       this.add({ kind: 'dust', x: x + (rng() - 0.5) * 8, y: y + (rng() - 0.5) * 6, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.5 - 8, life: 0.5 + rng() * 0.35, r: 3.2 + rng() * 3.4, color });
     }
   }
-  shards(x, y, color, n = 6, rng = Math.random) {
+  shards(x, y, color, n = 6, rng) {
     for (let i = 0; i < n; i++) {
       const a = rng() * TAU, s = 60 + rng() * 160;
       this.add({ kind: 'shard', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.6, vz: 90 + rng() * 160, z: 8, life: 0.55 + rng() * 0.3, r: 2.5 + rng() * 3.5, rot: rng() * TAU, vr: (rng() - 0.5) * 14, color });
@@ -131,7 +149,7 @@ export class Particles {
   }
   ring(x, y, r, color, life = 0.35, width = 3) { this.add({ kind: 'ring', x, y, r0: r * 0.25, r1: r, life, color, width }); }
   slash(x, y, ang, range, arc, color) { this.add({ kind: 'slash', x, y, ang, range, arc, life: 0.22, color }); }
-  spark(x, y, color, n = 4, rng = Math.random) {
+  spark(x, y, color, n = 4, rng) {
     // long enough to survive into a captured still: a hit that leaves no visible trace
     // in a random frame fails the Thronefall impact-feedback bar
     for (let i = 0; i < n; i++) {
@@ -210,6 +228,7 @@ export class Sfx {
     this.muted = false;
     try { this.muted = localStorage.getItem('bf_mute') === '1'; } catch (e) {}
     this.lastAt = {};
+    this.noiseRng = makeRng(deriveSeed(0x534658, RNG_DOMAINS.AUDIO_FX));
   }
   setMuted(m) {
     this.muted = m;
@@ -244,7 +263,7 @@ export class Sfx {
     const c = this.ctx, t0 = c.currentTime;
     const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < d.length; i++) d[i] = this.noiseRng() * 2 - 1;
     const src = c.createBufferSource(); src.buffer = buf;
     const f = c.createBiquadFilter(); f.type = type; f.frequency.value = filterFreq;
     const g = c.createGain(); this.env(g, t0, 0.005, dur, peak);

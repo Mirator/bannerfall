@@ -26,7 +26,7 @@ its STOP conditions, and update its status row when done.
 | 010 | Fail CI on flaky Playwright results | Medium | S | 007-009 | DONE |
 | 011 | Add deterministic Canvas visual regression coverage | Medium | M | 009-010 | DONE |
 | 012 | Enforce release cache-token integrity | Medium | S | 010 | DONE |
-| 013 | Isolate gameplay and presentation randomness | Medium | M | 011 | READY |
+| 013 | Isolate gameplay and presentation randomness | Medium | M | 011 | DONE |
 | 014 | Establish maintainable World and Battle simulation seams | Medium | L | 009, 011, 013 | READY |
 | 015 | Bound battle simulation scaling with spatial broad phases | Medium* | L | 014 | READY |
 
@@ -64,6 +64,8 @@ explicitly selected because its impact becomes high when battle populations grow
   affecting game-state dependencies; it remains ordered after Plan 011 to keep
   one sequential integration stream.
 - Plan 013 relies on visual baselines to expose accidental presentation drift.
+- Plan 013 keeps simulation and presentation streams independent; its effects
+  equivalence QA must remain green when adding particles or decorative jitter.
 - Plan 014 relies on canonical terrain, deterministic visual coverage, and split
   RNG domains before rearranging high-churn update code.
 - Plan 015 deliberately lands last so its algorithm changes target the phase

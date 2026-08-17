@@ -17,6 +17,7 @@ const EXPECTED_QA_NAMES = [
   'world_grace_timer_active_after_battle_then_decays',
   'world_party_strength_stays_in_2_24_band',
   'determinism_battle_small_seed_reproducible',
+  'rng_domains_keep_simulation_independent_of_effects',
   'perf_smoke_200_half_second_steps',
   'world_no_party_freezes_at_rivers',
 ];
