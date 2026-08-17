@@ -16,8 +16,10 @@ names, and proves that running QA preserves `bf_save` while using
 ## World and battle seams
 
 `tests/e2e/world-battle-seams.spec.js` protects the architecture boundary added
-for audit finding #8. It checks that the ordered world/battle phase methods are
-present and that constructing a second battle with another biome cannot mutate
+for audit finding #8. It wraps one controlled tick and asserts the live order of
+World movement/interactions/party/spawn/presentation and Battle command,
+hero/troop/enemy/separation/projectile/stalemate/result/presentation phases. It
+also proves that constructing a second battle with another biome cannot mutate
 the first battle's frozen palette. Keep this test focused on ownership and
 ordering; gameplay outcomes belong in `qa.spec.js`, campaign behavior belongs
 in `campaign-persistence.spec.js`, and pixel changes belong in the visual suite.

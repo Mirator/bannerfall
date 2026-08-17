@@ -80,11 +80,14 @@ Revert the commit as a unit. This plan should not alter persistence format or re
 
 - `World.update()` now orchestrates hero movement, settlement/camp interaction,
   party AI, spawning, and camera/effects maintenance through named methods.
-- `Battle.update()` now gates scene state, dispatches the active pipeline, and
-  delegates command, separation, projectile, and terminal-result phases while
-  preserving the established ordering.
+- `Battle.update()` now gates scene state, dispatches a concise active pipeline,
+  and delegates command, hero, troop, enemy/deploy, separation, projectile,
+  stalemate, terminal-result, and presentation phases while preserving the
+  established ordering.
 - Battle palettes are frozen per instance; `tests/e2e/world-battle-seams.spec.js`
   proves a second biome cannot recolor an existing battle.
 - `AGENTS.md` and `tests/README.md` document phase ownership and extension rules.
-- No visual baselines changed. `npm test` passed all 32 tests, including all
-  semantic, performance, terrain, persistence, visual, and seam coverage.
+- The seam test instruments one controlled world and battle tick to assert the
+  actual phase order, in addition to palette isolation. No visual baselines
+  changed. `npm test` passed all 32 tests, including semantic, performance,
+  terrain, persistence, visual, and seam coverage.

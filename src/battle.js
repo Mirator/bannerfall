@@ -1,6 +1,6 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r503076710384';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r503076710384';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=re3ba82de6ac7';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=re3ba82de6ac7';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -428,14 +428,25 @@ export class Battle {
   }
 
   updateActivePhases(dt) {
-    const P = this.palette;
     this.time += dt;
-    const inp = this.game.input, h = this.hero, sfx = this.game.sfx;
+    const inp = this.game.input, h = this.hero;
 
     this.updateCommandPhase(inp);
-
-    // ---- hero movement
     const ax = inp.axis();
+    this.updateHeroPhase(dt, inp, h, ax);
+    this.updateTroopPhase(dt, h);
+    this.updateEnemyPhase(dt, h);
+    this.updateSeparationPhase(h);
+    this.updateProjectilePhase(dt, h);
+    this.updateStalematePhase();
+    this.resolveBattleResult(dt, h, ax);
+    this.updatePresentationPhase(dt);
+  }
+
+  updateHeroPhase(dt, inp, h, ax) {
+    const P = this.palette;
+    const sfx = this.game.sfx;
+    // ---- hero movement
     const dashing = h.dashT > 0;
     if (!dashing) {
       h.vx += ax.x * HERO.accel * dt;
@@ -504,6 +515,10 @@ export class Battle {
       this.particles.ring(h.x, h.y, 26, P.cream, 0.3, 3);
     }
 
+  }
+
+  updateTroopPhase(dt, h) {
+    const P = this.palette;
     // ---- troops
     for (const t of this.troops) {
       t.cd -= dt;
@@ -583,6 +598,10 @@ export class Battle {
       if (len(t.vx, t.vy) > 30) { t.bob += dt * 10; if (this.fxRng() < dt * 3) this.particles.dust(t.x, t.y + 5, P.groundShade, 1, this.fxRng); }
     }
 
+  }
+
+  updateEnemyPhase(dt, h) {
+    const P = this.palette;
     // ---- deploy window: enemies hold their line until the horn, the player sets up freely.
     // First blood (yours), closing to melee reach, or the timer ends it.
     if (this.deployT > 0) {
@@ -670,24 +689,21 @@ export class Battle {
       if (len(e.vx, e.vy) > 25) e.bob += dt * 9;
     }
 
-    this.updateSeparationPhase(h);
+  }
 
-    // Projectiles resolve after movement/collisions, so a landing observes the final
-    // positions from this tick and can remove a dead target before terminal resolution.
-    this.updateProjectilePhase(dt, h);
-
-    // ---- stalemate breaker: 10s with no blood → survivors stop kiting and close in
+  updateStalematePhase() {
+    const P = this.palette;
+    // Survivors stop kiting and close in after 10s without blood.
     if (!this.bloodlust && this.time - this.lastAction > 10 && this.enemies.length > 0) {
       this.bloodlust = true;
       this.commandFlash = { text: 'THEY CLOSE IN!', t: 1.1 };
       this.game.sfx.horn(110);
       for (const e of this.enemies) this.particles.ring(e.x, e.y, 26, P.enemy, 0.5, 3);
     }
+  }
 
-    this.resolveBattleResult(dt, h, ax);
-
+  updatePresentationPhase(dt) {
     if (this.commandFlash.t > 0) this.commandFlash.t -= dt;
-
     this.updateCamera(dt);
     this.particles.update(dt);
   }

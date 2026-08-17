@@ -1,5 +1,5 @@
 // Campaign save schema — the pure boundary between localStorage and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r503076710384';
+import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=re3ba82de6ac7';
 
 // Version 2 makes party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
