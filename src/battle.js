@@ -1,7 +1,8 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r2de3fd5a3de7';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r2de3fd5a3de7';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r2de3fd5a3de7';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=ra95157210ae5';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=ra95157210ae5';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=ra95157210ae5';
+import { ACTIONS } from './input-actions.js?v=ra95157210ae5';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -503,7 +504,7 @@ export class Battle {
 
     // ---- hero attack
     if (h.swingT > 0) h.swingT -= dt;
-    if ((inp.mouse.clicked || inp.pressed.has('KeyJ')) && h.swingT <= 0) {
+    if ((inp.mouse.clicked || inp.pressedAction(ACTIONS.ATTACK)) && h.swingT <= 0) {
       if (this.deployT > 0) { this.deployT = 0; this.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; this.game.sfx.horn(155); }
       h.swingT = HERO.swingCd;
       sfx.swing();
@@ -531,7 +532,7 @@ export class Battle {
 
     // ---- hero dash
     if (h.dashCdT > 0) h.dashCdT -= dt;
-    if ((inp.pressed.has('Space') || inp.pressed.has('ShiftLeft')) && h.dashCdT <= 0) {
+    if (inp.pressedAction(ACTIONS.DASH) && h.dashCdT <= 0) {
       h.dashT = HERO.dashTime; h.dashCdT = HERO.dashCd; h.iframesT = HERO.iframeTime;
       for (const e of this.enemies) e._trampled = false;
       const a = ax.any ? Math.atan2(ax.y, ax.x) : aimA;
@@ -844,9 +845,9 @@ export class Battle {
   }
 
   updateCommandPhase(inp) {
-    if (inp.pressed.has('Digit1')) this.issueCommand('follow');
-    if (inp.pressed.has('Digit2')) this.issueCommand('charge');
-    if (inp.pressed.has('Digit3')) this.issueCommand('hold');
+    if (inp.pressedAction(ACTIONS.COMMAND_FOLLOW)) this.issueCommand('follow');
+    if (inp.pressedAction(ACTIONS.COMMAND_CHARGE)) this.issueCommand('charge');
+    if (inp.pressedAction(ACTIONS.COMMAND_HOLD)) this.issueCommand('hold');
   }
 
   resolveBattleResult(dt, h, ax) {

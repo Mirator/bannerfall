@@ -1,4 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=ra95157210ae5';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -53,9 +54,11 @@ export function makeRng(seed) {
 
 // ---------------------------------------------------------------- Input
 export class Input {
-  constructor(canvas) {
+  constructor(canvas, platform = null) {
     this.keys = new Set();
     this.pressed = new Set();     // cleared each frame — edge triggers
+    this.actionKeys = new Set();
+    this.actionPressed = new Set();
     this.mouse = { x: canvas.width / 2, y: canvas.height / 2, down: false, clicked: false };
     this.canvas = canvas;
     window.addEventListener('keydown', e => {
@@ -66,8 +69,7 @@ export class Input {
     window.addEventListener('keyup', e => this.keys.delete(e.code));
     // a keyup can be lost entirely if focus left the page while the key was held
     // (alt-tab, a browser shortcut) — without this, movement/attack keys stick forever
-    window.addEventListener('blur', () => this.keys.clear());
-    document.addEventListener('visibilitychange', () => { if (document.hidden) this.keys.clear(); });
+    this.unsubscribeDeactivate = platform?.lifecycle?.onDeactivate?.(() => this.clear()) ?? null;
     canvas.addEventListener('mousemove', e => {
       const r = canvas.getBoundingClientRect();
       this.mouse.x = (e.clientX - r.left) * (canvas.width / r.width);
@@ -77,11 +79,26 @@ export class Input {
     window.addEventListener('mouseup', e => { if (e.button === 0) this.mouse.down = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
   }
-  endFrame() { this.pressed.clear(); this.mouse.clicked = false; }
+  clear() { this.keys.clear(); this.pressed.clear(); this.actionKeys.clear(); this.actionPressed.clear(); }
+  endFrame() { this.pressed.clear(); this.actionPressed.clear(); this.mouse.clicked = false; }
   // test API injection
   injectKey(code, down) {
     if (down) { if (!this.keys.has(code)) this.pressed.add(code); this.keys.add(code); }
     else this.keys.delete(code);
+  }
+  injectAction(action, down = true) {
+    if (down) {
+      if (!this.actionKeys.has(action)) this.actionPressed.add(action);
+      this.actionKeys.add(action);
+    } else this.actionKeys.delete(action);
+  }
+  down(action) {
+    const codes = DEFAULT_BINDINGS[action] ?? [];
+    return this.actionKeys.has(action) || codes.some(code => this.keys.has(code));
+  }
+  pressedAction(action) {
+    const codes = DEFAULT_BINDINGS[action] ?? [];
+    return this.actionPressed.has(action) || codes.some(code => this.pressed.has(code));
   }
   injectMouse(x, y, down) {
     if (x != null) { this.mouse.x = x; this.mouse.y = y; }
@@ -89,10 +106,10 @@ export class Input {
   }
   axis() {
     let x = 0, y = 0;
-    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) y -= 1;
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y += 1;
+    if (this.down(ACTIONS.MOVE_LEFT)) x -= 1;
+    if (this.down(ACTIONS.MOVE_RIGHT)) x += 1;
+    if (this.down(ACTIONS.MOVE_UP)) y -= 1;
+    if (this.down(ACTIONS.MOVE_DOWN)) y += 1;
     const l = Math.hypot(x, y) || 1;
     return { x: x / l, y: y / l, any: x !== 0 || y !== 0 };
   }
@@ -221,19 +238,19 @@ export class Particles {
 
 // ---------------------------------------------------------------- Audio (WebAudio synth — no assets)
 export class Sfx {
-  constructor() {
+  constructor(saves = null) {
+    this.saves = saves;
     this.ctx = null;
     this.master = null;
     this.enabled = true;
-    this.muted = false;
-    try { this.muted = localStorage.getItem('bf_mute') === '1'; } catch (e) {}
+    this.muted = saves?.getSettings?.().muted === true;
     this.lastAt = {};
     this.noiseRng = makeRng(deriveSeed(0x534658, RNG_DOMAINS.AUDIO_FX));
   }
   setMuted(m) {
     this.muted = m;
     if (this.master) this.master.gain.value = m ? 0 : 0.35;
-    try { localStorage.setItem('bf_mute', m ? '1' : '0'); } catch (e) {}
+    return this.saves?.setMuted?.(m) ?? Promise.resolve();
   }
   ensure() {
     if (!this.ctx) {

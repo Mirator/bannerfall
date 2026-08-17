@@ -1,9 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=r2de3fd5a3de7';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r2de3fd5a3de7';
-import { Battle } from './battle.js?v=r2de3fd5a3de7';
-import { World } from './world.js?v=r2de3fd5a3de7';
-import { parseSave } from './save.js?v=r2de3fd5a3de7';
+import { PAL } from './data.js?v=ra95157210ae5';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=ra95157210ae5';
+import { Battle } from './battle.js?v=ra95157210ae5';
+import { World } from './world.js?v=ra95157210ae5';
+import { ACTIONS } from './input-actions.js?v=ra95157210ae5';
+import { createWebPlatform } from './platform/web-platform.js?v=ra95157210ae5';
+import { SaveRepository } from './persistence/save-repository.js?v=ra95157210ae5';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -16,10 +18,12 @@ function resize() {
 window.addEventListener('resize', resize);
 
 class Game {
-  constructor() {
-    this.input = new Input(canvas);
+  constructor({ platform, saves }) {
+    this.platform = platform;
+    this.saves = saves;
+    this.input = new Input(canvas, platform);
     this.camera = new Camera(canvas.width, canvas.height);
-    this.sfx = new Sfx();
+    this.sfx = new Sfx(saves);
     this.shakeRng = makeRng(deriveSeed(99, RNG_DOMAINS.CAMERA_SHAKE));
     this.scene = null;
     this.sceneName = 'menu';
@@ -38,23 +42,31 @@ class Game {
 
   invalidate() { this.renderDirty = true; }
 
-  get saveKey() { return this.testMode ? 'bf_save_test' : 'bf_save'; }
+  reportSaveFailure(error) {
+    this.saveWarning = 'Save failed — progress may not be stored.';
+    this.saveError = error;
+    this.invalidate();
+  }
 
   // ---- campaign persistence: the run survives a refresh
   persistRun() {
     if (this.sceneName === 'world' && this.scene && this.scene.save && !this.scene.save.won) {
-      try { localStorage.setItem(this.saveKey, JSON.stringify(this.scene.syncLiveStateToSave())); } catch (e) {}
+      const snapshot = this.scene.syncLiveStateToSave();
+      if (!Number.isFinite(snapshot.x) || !Number.isFinite(snapshot.y) ||
+          (snapshot.parties || []).some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
+        this.reportSaveFailure(new Error('Save snapshot contains non-finite campaign coordinates'));
+        return;
+      }
+      this.saves.writeCampaign(this.testMode, snapshot)
+        .catch(error => this.reportSaveFailure(error));
     }
   }
   loadRun() {
-    let raw;
-    try { raw = localStorage.getItem(this.saveKey); } catch (e) { return null; }
-    if (!raw) return null;
-    const save = parseSave(raw);
-    if (!save) { this.clearRun(); return null; }
-    return save;
+    return this.saves.getCampaign(this.testMode);
   }
-  clearRun() { try { localStorage.removeItem(this.saveKey); } catch (e) {} }
+  clearRun() {
+    this.saves.removeCampaign(this.testMode).catch(error => this.reportSaveFailure(error));
+  }
 
   startWorld(save) {
     this.scene = new World(this, save);
@@ -84,38 +96,41 @@ class Game {
 
   update(dt) {
     // mute toggle works everywhere
-    if (this.input.pressed.has('KeyM')) { this.sfx.setMuted(!this.sfx.muted); this.muteToastT = 2.5; this.invalidate(); }
+    if (this.input.pressedAction(ACTIONS.MUTE)) {
+      this.sfx.setMuted(!this.sfx.muted).catch(error => this.reportSaveFailure(error));
+      this.muteToastT = 2.5; this.invalidate();
+    }
     if (this.muteToastT > 0) this.muteToastT -= dt;
     // pause: any active scene, Escape or P
-    if ((this.input.pressed.has('Escape') || this.input.pressed.has('KeyP')) &&
+    if (this.input.pressedAction(ACTIONS.PAUSE) &&
         (this.sceneName === 'world' || this.sceneName === 'battle')) {
       this.paused = !this.paused;
       if (this.paused) this.persistRun();
       this.invalidate();
     }
     if (this.paused) {
-      if (this.input.pressed.has('KeyR')) { this.paused = false; this.clearRun(); this.sceneName = 'menu'; this.menuT = 0; this.scene = null; this.invalidate(); }
+      if (this.input.pressedAction(ACTIONS.ABANDON_RUN)) { this.paused = false; this.clearRun(); this.sceneName = 'menu'; this.menuT = 0; this.scene = null; this.invalidate(); }
       this.input.endFrame();
       return;
     }
     if (this.sceneName === 'menu') {
       this.menuT += dt;
-      if (this.input.pressed.has('KeyC') && this.loadRun()) {
+      if (this.input.pressedAction(ACTIONS.CONTINUE_RUN) && this.loadRun()) {
         this.sfx.horn(262);
         this.startWorld(this.loadRun());
-      } else if (this.input.pressed.has('KeyH')) {
+      } else if (this.input.pressedAction(ACTIONS.NEW_HARD_RUN)) {
         this.sfx.horn(147);
         this.clearRun();
         this.hardNext = true;
         this.startWorld(null);
-      } else if (this.input.pressed.has('Enter')) {
+      } else if (this.input.pressedAction(ACTIONS.CONFIRM)) {
         this.sfx.horn(262);
         this.clearRun();
         this.startWorld(null);
       }
     } else if (this.sceneName === 'victory') {
       this.victoryT += dt;
-      if (this.victoryT > 1.5 && (this.input.pressed.has('Enter') || this.input.mouse.clicked)) {
+      if (this.victoryT > 1.5 && (this.input.pressedAction(ACTIONS.CONFIRM) || this.input.mouse.clicked)) {
         this.sceneName = 'menu'; this.menuT = 0; this.invalidate();
       }
     } else if (this.scene) {
@@ -299,9 +314,8 @@ class Game {
 }
 
 let game = null;
-resize();
-game = new Game();
-resize();
+let platform = null;
+let saves = null;
 
 // Fixed-timestep loop with rAF; watchdog keeps sim alive if rAF is throttled.
 const DT = 1 / 60;
@@ -313,6 +327,7 @@ let acc = 0, last = performance.now(), lastTick = 0;
 const MAX_ACC = 0.25;
 
 function frame(now) {
+  if (!game) { requestAnimationFrame(frame); return; }
   acc += Math.min(0.1, (now - last) / 1000);
   acc = Math.min(acc, MAX_ACC);
   last = now;
@@ -344,7 +359,7 @@ setInterval(() => {
     try {
       let n = 0;
       while (acc >= DT && n++ < 3) { game.update(DT); acc -= DT; }
-      if (!document.hidden && (n > 0 || game.renderDirty)) game.draw();
+      if (!platform.lifecycle.isBackgrounded() && (n > 0 || game.renderDirty)) game.draw();
     } catch (err) {
       console.error('Bannerfall: recovered from an error in the watchdog loop', err);
       acc = 0;
@@ -353,11 +368,11 @@ setInterval(() => {
   }
 }, 50);
 
+function exposeTestApi() {
 // ---------------------------------------------------------------- test API
 window.__g = game; // raw handle for critics/debugging
-// any call through window.game flips persistence to a separate save slot (see saveKey
-// above) — a critic driving the game headlessly can never read, overwrite, or wipe a
-// real player's campaign.
+// any call through window.game flips persistence to a separate save slot — a critic
+// driving the game headlessly can never read, overwrite, or wipe a real campaign.
 const markTest = () => { game.testMode = true; };
 window.game = {
   scene: () => game.sceneName,
@@ -369,6 +384,7 @@ window.game = {
     return game.sceneName;
   },
   key: (code, down = true) => { markTest(); game.input.injectKey(code, down); },
+  action: (name, down = true) => { markTest(); game.input.injectAction(name, down); },
   tap: (code) => { markTest(); game.input.injectKey(code, true); game.update(DT); game.input.injectKey(code, false); game.draw(); },
   mouse: (x, y, down) => { markTest(); game.input.injectMouse(x, y, down); },
   click: (x, y) => { markTest(); game.input.injectMouse(x, y, true); game.update(DT); game.input.injectMouse(x, y, false); game.draw(); },
@@ -438,3 +454,27 @@ window.game = {
     return game.sceneName;
   },
 };
+}
+
+async function bootstrap() {
+  platform = createWebPlatform();
+  saves = new SaveRepository(platform);
+  await saves.initialize();
+  // Size the canvas before Input captures its initial mouse center. The legacy
+  // synchronous boot performed this resize before constructing Game; preserving
+  // that order keeps seeded battle formations and visual baselines identical.
+  resize();
+  game = new Game({ platform, saves });
+  resize();
+  platform.lifecycle.onSuspend(() => {
+    game.input.clear();
+    if (game.sceneName === 'world') game.persistRun();
+    saves.flush().catch(error => game.reportSaveFailure(error));
+  });
+  exposeTestApi();
+  game.draw();
+}
+
+bootstrap().catch(error => {
+  console.error('Bannerfall failed to initialize', error);
+});

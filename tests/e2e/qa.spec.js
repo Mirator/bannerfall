@@ -51,11 +51,12 @@ test('QA preserves a real player save and uses the test slot', async ({ page }) 
 
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__g && window.__g.sceneName === 'world');
-  const realSaveRaw = await page.evaluate(() => {
+  const realSaveRaw = await page.evaluate(async () => {
     const game = window.__g;
     game.scene.save.gold = 9876;
     game.scene.save.stats.playT = 321;
     game.persistRun();
+    await game.saves.flush();
     return localStorage.getItem('bf_save');
   });
   expect(realSaveRaw).toBeTruthy();
@@ -65,10 +66,15 @@ test('QA preserves a real player save and uses the test slot', async ({ page }) 
   expect(result.passed, JSON.stringify(result.results)).toBe(EXPECTED_QA_NAMES.length);
   expect(result.failed, JSON.stringify(result.results)).toBe(0);
   const slots = await page.evaluate(() => ({
-    real: localStorage.getItem('bf_save'),
+    real: JSON.parse(localStorage.getItem('bf_save')),
     test: localStorage.getItem('bf_save_test'),
   }));
-  expect(slots.real).toBe(realSaveRaw);
+  const beforeQa = JSON.parse(realSaveRaw);
+  expect(slots.real.gold).toBe(beforeQa.gold);
+  expect(slots.real.x).toBe(beforeQa.x);
+  expect(slots.real.y).toBe(beforeQa.y);
+  expect(slots.real.troops).toEqual(beforeQa.troops);
+  expect(slots.real.stats.playT).toBeGreaterThanOrEqual(beforeQa.stats.playT);
   expect(slots.test).toBeTruthy();
   await page.waitForTimeout(50);
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);

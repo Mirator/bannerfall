@@ -8,12 +8,29 @@ function assertNoRuntimeErrors(runtimeErrors) {
 async function openPlayerGame(page, runtimeErrors) {
   await page.goto('/');
   await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.evaluate(() => {
-    localStorage.removeItem('bf_save');
-    localStorage.removeItem('bf_save_test');
-    window.__g.testMode = false;
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('qa-clear-save') !== '1') {
+      localStorage.removeItem('bf_save');
+      localStorage.removeItem('bf_save_test');
+      sessionStorage.setItem('qa-clear-save', '1');
+    }
   });
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.evaluate(() => { window.__g.testMode = false; });
   assertNoRuntimeErrors(runtimeErrors);
+}
+
+async function reloadWithRealSave(page, value) {
+  const token = `qa-seed-${Date.now()}-${Math.random()}`;
+  await page.addInitScript(({ seedToken, raw }) => {
+    if (sessionStorage.getItem(seedToken) !== '1') {
+      localStorage.setItem('bf_save', raw);
+      sessionStorage.setItem(seedToken, '1');
+    }
+  }, { seedToken: token, raw: typeof value === 'string' ? value : JSON.stringify(value) });
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
 }
 
 async function startRawWorld(page, seed = 11) {
@@ -29,12 +46,13 @@ async function currentSave(page) {
 }
 
 async function rejectRealSave(page, payload) {
-  return page.evaluate(value => {
+  await reloadWithRealSave(page, payload);
+  return page.evaluate(async () => {
     window.__g.testMode = false;
-    localStorage.setItem('bf_save', typeof value === 'string' ? value : JSON.stringify(value));
     const loaded = window.__g.loadRun();
+    await window.__g.saves.flush().catch(() => {});
     return { loaded, stored: localStorage.getItem('bf_save') };
-  }, payload);
+  });
 }
 
 test('fresh run stores version 2', async ({ page }) => {
@@ -64,9 +82,7 @@ test('valid unversioned save migrates defaults and is rewritten as version 2', a
   delete legacy.hard;
   delete legacy.battleCount;
 
-  await page.evaluate(value => localStorage.setItem('bf_save', JSON.stringify(value)), legacy);
-  await page.reload();
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await reloadWithRealSave(page, legacy);
   const migratedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
   expect(migratedBeforeContinue.version).toBe(2);
   expect(migratedBeforeContinue.parties).toBe(null);
@@ -100,10 +116,7 @@ test('version-1 roaming parties migrate a missing home from their canonical camp
   const legacy = await currentSave(page);
   legacy.version = 1;
   legacy.parties = [{ camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], waryT: 2 }];
-  await page.evaluate(value => localStorage.setItem('bf_save', JSON.stringify(value)), legacy);
-
-  await page.reload();
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await reloadWithRealSave(page, legacy);
   const migrated = await page.evaluate(() => window.__g.loadRun());
   expect(migrated.version).toBe(2);
   expect(migrated.parties).toEqual([{
@@ -137,9 +150,7 @@ test('complete version-2 save round-trips nested state without losing fields', a
   save.hard = true;
   save.battleCount = 9;
   save.toast = 'Keep the banner high';
-  await page.evaluate(value => localStorage.setItem('bf_save', JSON.stringify(value)), save);
-  await page.reload();
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await reloadWithRealSave(page, save);
   const parsedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
   expect(parsedBeforeContinue.toast).toBe('Keep the banner high');
   await page.keyboard.press('c');

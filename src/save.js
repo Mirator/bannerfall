@@ -1,5 +1,5 @@
-// Campaign save schema — the pure boundary between localStorage and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r2de3fd5a3de7';
+// Campaign save schema — the pure boundary between persisted text and World.
+import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=ra95157210ae5';
 
 // Version 2 makes party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
@@ -206,7 +206,7 @@ export function migrateSave(candidate) {
   return buildV1(candidate, true);
 }
 
-/** Parse localStorage text and return a canonical, detached save or null. */
+/** Parse persisted text and return a canonical, detached save or null. */
 export function parseSave(raw) {
   if (typeof raw !== 'string') return null;
   try {
