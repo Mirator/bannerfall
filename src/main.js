@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=r7584d9e97185';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r7584d9e97185';
-import { Battle } from './battle.js?v=r7584d9e97185';
-import { World } from './world.js?v=r7584d9e97185';
-import { ACTIONS } from './input-actions.js?v=r7584d9e97185';
-import { createWebPlatform } from './platform/web-platform.js?v=r7584d9e97185';
-import { SaveRepository } from './persistence/save-repository.js?v=r7584d9e97185';
+import { PAL } from './data.js?v=rfa73e792131b';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rfa73e792131b';
+import { Battle } from './battle.js?v=rfa73e792131b';
+import { World } from './world.js?v=rfa73e792131b';
+import { ACTIONS } from './input-actions.js?v=rfa73e792131b';
+import { createWebPlatform } from './platform/web-platform.js?v=rfa73e792131b';
+import { SaveRepository } from './persistence/save-repository.js?v=rfa73e792131b';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

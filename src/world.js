@@ -1,8 +1,8 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r7584d9e97185';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r7584d9e97185';
-import { SAVE_VERSION } from './save.js?v=r7584d9e97185';
-import { ACTIONS } from './input-actions.js?v=r7584d9e97185';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rfa73e792131b';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rfa73e792131b';
+import { SAVE_VERSION } from './save.js?v=rfa73e792131b';
+import { ACTIONS } from './input-actions.js?v=rfa73e792131b';
 
 const P = PAL.world;
 
@@ -127,6 +127,7 @@ export class World {
         this.parties.push({
           camp: p.camp, x: p.x, y: p.y, vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
           comp: p.comp, home: p.home, wander: null, wanderT: 0, waryT: p.waryT || 0,
+          clashT: p.clashT || 0,
           navT: this.simRng() * 0.3, navGoal: null, navFor: null,
           _navGoalVisibility: new Float64Array(N), _navGoalX: NaN, _navGoalY: NaN,
         });
@@ -144,7 +145,7 @@ export class World {
   }
 
   persistParties() {
-    this.save.parties = this.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT || 0 }));
+    this.save.parties = this.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT || 0, clashT: p.clashT || 0 }));
   }
 
   syncLiveStateToSave() {
@@ -582,6 +583,9 @@ export class World {
             comp: remaining,
             home: { ...partyMeta.home },
             waryT: partyMeta.waryT || 0,
+            // re-inserted right on top of the hero on disengage — without its own
+            // cooldown it would instantly re-clash the same frame grace expires
+            clashT: BALANCE.battleGrace,
           });
         };
         // camp garrisons no longer resurrect their dead on a failed or abandoned raid —
@@ -784,6 +788,7 @@ export class World {
       const engaged = this.grace <= 0 && !heroSafe;
       if (p.waryT > 0) p.waryT -= dt;
       if (p.chaseT > 0) p.chaseT -= dt;
+      if (p.clashT > 0) p.clashT -= dt;
       const detectR = p.waryT > 0 ? 560 : 430; // a party that fled you once keeps watching for you
       if (engaged && (dh < detectR || p.chaseT > 0)) {
         // chasers aim at where you're GOING — interception geometry beats raw speed
@@ -869,7 +874,11 @@ export class World {
       // but never in the village itself — so village-arena ambushes genuinely happen.
       // Initiative matters: they caught you = ambush; you caught them running = no formup for them;
       // a mutual field meeting = both sides deploy.
-      const canClash = this.grace <= 0 && !this.nearSettlement(130) && dh < 46;
+      // world.grace (ambush immunity) only gates `engaged` above — it must not block
+      // canClash too, or the player can't charge into a party they WANT to fight for the
+      // whole post-battle window. The one party that does need a post-disengage cooldown
+      // (reinserted right under the hero's feet) carries its own p.clashT instead.
+      const canClash = (p.clashT || 0) <= 0 && !this.nearSettlement(130) && dh < 46;
       if ((engaged || (canClash && dh < 46)) && canClash) {
         const idx = this.parties.indexOf(p);
         this.parties.splice(idx, 1);

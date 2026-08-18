@@ -403,6 +403,68 @@ test('AUDIT-03 defeat restores the surviving roaming party', async ({ page }) =>
   expect(result.hero).not.toEqual(encounter);
 });
 
+test('post-battle ambush grace does not block the player from charging into a party', async ({ page }) => {
+  // Regression for: running over a bandit party right after finishing any fight did
+  // nothing at all — world.grace (meant only to stop OTHER parties chasing you) used
+  // to gate the collision check itself, silently blocking player-initiated clashes too.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, { seed: 909 });
+  await installUniqueParty(page);
+  await page.evaluate(() => window.__g.scene.endBattle(false, true)); // retreat
+  await rawStep(page, 3.2);
+  expect(await page.evaluate(() => window.__g.sceneName)).toBe('world');
+
+  const grace = await page.evaluate(() => window.__g.scene.grace);
+  expect(grace).toBeGreaterThan(0); // still inside the post-battle ambush-immunity window
+
+  // an unrelated party dropped right on the hero must still be attackable during that window
+  await page.evaluate(() => {
+    const world = window.__g.scene;
+    world.parties.push({
+      camp: 'c2', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: ['bandit'], home: { x: world.hero.x, y: world.hero.y },
+      wander: null, wanderT: 999, waryT: 0, clashT: 0,
+    });
+  });
+  await rawStep(page, DT);
+  expect(await page.evaluate(() => window.__g.sceneName)).toBe('battle');
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('retreat leaves the fled-from party uncatchable until its own cooldown clears', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, { seed: 910 });
+  await installUniqueParty(page);
+  await page.evaluate(() => window.__g.scene.endBattle(false, true)); // retreat
+  await rawStep(page, 3.2);
+  expect(await page.evaluate(() => window.__g.sceneName)).toBe('world');
+
+  const restored = await page.evaluate(() => {
+    const world = window.__g.scene;
+    const p = world.parties.find(party => party.camp === 'c1');
+    return {
+      clashT: p.clashT,
+      overlapsHero: Math.hypot(p.x - world.hero.x, p.y - world.hero.y) < 46,
+    };
+  });
+  expect(restored.clashT).toBeGreaterThan(0);
+  expect(restored.overlapsHero).toBe(true);
+
+  // still standing on the same party it fled from: must not force an instant rematch
+  await rawStep(page, DT);
+  expect(await page.evaluate(() => window.__g.sceneName)).toBe('world');
+
+  // once that party's own cooldown clears, the same collision is attackable again
+  await page.evaluate(() => {
+    window.__g.scene.parties.find(p => p.camp === 'c1').clashT = 0;
+  });
+  await rawStep(page, DT);
+  expect(await page.evaluate(() => window.__g.sceneName)).toBe('battle');
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('AUDIT-03 fully defeated roaming parties stay removed', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);

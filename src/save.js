@@ -1,5 +1,5 @@
 // Campaign save schema — the pure boundary between persisted text and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r7584d9e97185';
+import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=rfa73e792131b';
 
 // Version 2 makes party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
@@ -110,6 +110,12 @@ function buildParties(raw, migrateLegacyHomes) {
       next.waryT = party.waryT;
     } else {
       next.waryT = 0;
+    }
+    if (hasOwn(party, 'clashT')) {
+      if (!nonNegative(party.clashT)) return undefined;
+      next.clashT = party.clashT;
+    } else {
+      next.clashT = 0;
     }
     result.push(next);
   }

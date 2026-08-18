@@ -120,7 +120,7 @@ test('version-1 roaming parties migrate a missing home from their canonical camp
   const migrated = await page.evaluate(() => window.__g.loadRun());
   expect(migrated.version).toBe(2);
   expect(migrated.parties).toEqual([{
-    camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], home: { x: 1050, y: 1500 }, waryT: 2,
+    camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], home: { x: 1050, y: 1500 }, waryT: 2, clashT: 0,
   }]);
   assertNoRuntimeErrors(runtimeErrors);
 });
@@ -144,7 +144,7 @@ test('complete version-2 save round-trips nested state without losing fields', a
   ];
   save.x = 1711;
   save.y = 944;
-  save.parties = [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], home: { x: 1600, y: 900 }, waryT: 8 }];
+  save.parties = [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], home: { x: 1600, y: 900 }, waryT: 8, clashT: 0 }];
   save.runSeed = 4422;
   save.stats = { won: 2, kills: 19, lost: 3, playT: 47.5 };
   save.hard = true;
