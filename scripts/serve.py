@@ -21,4 +21,5 @@ class H(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    ThreadingHTTPServer(("127.0.0.1", 8474), H).serve_forever()
+    port = int(os.environ.get("PORT", 8474))
+    ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()

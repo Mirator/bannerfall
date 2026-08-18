@@ -591,13 +591,10 @@ export class Battle {
           goal = { x: t.x + (t.x - engage.x), y: t.y + (t.y - engage.y) };
         }
         t.facing = angLerp(t.facing, Math.atan2(engage.y - t.y, engage.x - t.x), 1 - Math.exp(-8 * dt));
-        // attack — the banner matters: troops fight harder near the hero, worse abandoned
         if (t.cd <= 0 && d < (t.d.ranged ? t.d.range : t.d.range + engage.d.radius + 4)) {
           if (this.deployT > 0) { this.deployT = 0; this.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; this.game.sfx.horn(155); }
           t.cd = t.d.cooldown;
-          const dh2 = dist2(t.x, t.y, this.hero.x, this.hero.y);
-          const inspire = dh2 < 240 * 240 ? 1.2 : dh2 > 420 * 420 ? 0.75 : 1.0;
-          const dmg = Math.round(t.d.dmg * inspire);
+          const dmg = t.d.dmg;
           if (t.d.ranged) {
             this.fireArrow(t.x, t.y - 12, engage.x, engage.y, true, dmg, t.d.projSpeed);
           } else {
@@ -1486,28 +1483,6 @@ export class Battle {
     const P = this.palette;
     const h = this.hero;
     const body = h.hurtT > 0 ? '#FFFFFF' : P.hero;
-    // banner rally range: men within sight of the raised banner fight harder — the ring
-    // IS the banner's reach, and it says so while the fight forms up
-    // never two dashed rings in one frame: yield to an active slam telegraph
-    const slamActive = this.enemies.some(e => e.type === 'brute' && e.windupT > 0);
-    if (this.state === 'fight' && this.troops.length > 0 && !slamActive) {
-      ctx.globalAlpha = 0.14;
-      ctx.strokeStyle = P.hero; ctx.lineWidth = 3;
-      ctx.setLineDash([14, 18]);
-      ctx.beginPath(); ctx.arc(h.x, h.y, 240, this.time * 0.15, this.time * 0.15 + TAU); ctx.stroke();
-      ctx.setLineDash([]);
-      if (this.time < 7) {
-        ctx.globalAlpha = Math.min(0.8, (7 - this.time) * 0.4);
-        ctx.fillStyle = P.hero;
-        ctx.font = '700 13px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        // clamp inside the visible view so the line never clips behind the top HUD band
-        const cam = this.game.camera;
-        const topVis = cam.y - cam.h / 2 / cam.zoom;
-        ctx.fillText('⚑ men rally to the raised banner', h.x, Math.max(topVis + 150, h.y - 252));
-      }
-      ctx.globalAlpha = 1;
-    }
     // dust ring while dashing
     if (h.dashT > 0) {
       ctx.globalAlpha = 0.5;
@@ -1692,7 +1667,7 @@ export class Battle {
         ctx.font = '700 14px system-ui, sans-serif';
         const advice = this.enemyStrength > this.playerStrength + 2
           ? `They were stronger (${this.enemyStrength} vs your ${this.playerStrength}) — recruit at a village, then return`
-          : 'Keep your men inside your banner ring and use 3 HOLD to make them stand — they fight harder near you';
+          : 'Use 3 HOLD to make your men stand their ground instead of overextending';
         ctx.fillText(advice, W / 2, Hh * 0.36 + 90);
       }
       ctx.globalAlpha = 1;
