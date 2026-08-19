@@ -9,7 +9,7 @@ in `#qa-status`, so it is useful both to a human opening the page and to
 Playwright.
 
 `tests/e2e/qa.spec.js` is the exit-code-bearing Playwright layer. It starts the
-existing Python server, checks browser/runtime errors, verifies all 17 record
+existing Python server, checks browser/runtime errors, verifies all 18 record
 names, and proves that running QA preserves `bf_save` while using
 `bf_save_test`.
 
@@ -60,6 +60,37 @@ immutable. Replanning must stay seeded and exact: never trade river/bridge
 collision correctness for an approximate cache. Structural budgets are
 intentionally fixed (`<10000` world and `<9000` battle `beginPath` calls over
 20 draws); never raise or weaken them to make CI green.
+
+## Stance and squad balance
+
+`tests/e2e/stance-balance.spec.js` is the balance harness for Plan 019. It runs fixed
+troop/enemy fixtures once per stance with the hero completely idle, so each number
+isolates what the ORDER did rather than what the player did. It asserts that measurements
+replay identically, that the wolf and raider fixtures keep their intended right answer
+(the only stance properties measured to generalize across seeds), and that every stance
+can finish a winnable fight.
+
+It also carries one expected failure recording a confirmed defect: giving no order at all
+beats every deliberate order policy. Do not delete that annotation to make the suite look
+clean — it is the honest state of the mechanic.
+
+Two harness rules matter and must not be dropped. The pointer is pinned to the canvas
+centre and camera shake is zeroed before each run, because an idle hero aims at the
+cursor and FOLLOW formation slots hang off hero facing — an uncontrolled mouse silently
+rewrites the result. And the live scheduler is replaced while the real fixed-step update
+is driven directly, so rAF and watchdog timing cannot contaminate a measurement.
+
+Dominance inside a single-behavior fixture is intended, not a defect: a wolf pack should
+have a right answer.
+
+Fixture results are seed-specific AND viewport-specific. Battle outcomes depend on canvas
+size, because the fit-to-action camera feeds hero aim, hero facing, and therefore FOLLOW
+formation slots. Never assert a balance property from one seed at one canvas size: sweep
+seeds, and pin the canvas.
+
+Note that both legacy determinism records drive `Digit2` (CHARGE), which ignores
+`slotPos()`. That blind spot hid decorative camera shake leaking into fight outcomes
+through `Camera.toWorld`; the harness now replays all three stances for that reason.
 
 ## Canvas visual regression
 
@@ -215,7 +246,7 @@ slot.
 
 ## Legacy check inventory
 
-The 17 deterministic records cover:
+The 18 deterministic records cover:
 
 1. menu-to-world transition;
 2. battle invariants and victory;
@@ -224,16 +255,17 @@ The 17 deterministic records cover:
 5. volunteer rally floor;
 6. victory loot, survivors, and hero regeneration;
 7. troop commands and hold positions;
-8. recruitment costs, capacity, and refusals;
-9. healing refusals and success;
-10. roaming-party victory removal;
-11. camp-raid razing and captives;
-12. captive capacity limits;
-13. post-battle grace decay;
-14. roaming-party strength bounds;
-15. seeded battle determinism;
-16. the 200-step performance smoke budget;
-17. river-pursuit movement without freezing.
+8. squad selection, per-squad orders, and per-squad hold points;
+9. recruitment costs, capacity, and refusals;
+10. healing refusals and success;
+11. roaming-party victory removal;
+12. camp-raid razing and captives;
+13. captive capacity limits;
+14. post-battle grace decay;
+15. roaming-party strength bounds;
+16. seeded battle determinism;
+17. the 200-step performance smoke budget;
+18. river-pursuit movement without freezing.
 
 ## Adding coverage
 

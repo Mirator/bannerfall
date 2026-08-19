@@ -34,6 +34,8 @@ conditions, and update its status row when done.
 | 016 | Introduce a Steam-ready platform and input boundary | P2 | L | 001-015 | DONE |
 | 017 | Replace title-screen shortcuts with safe menu navigation | P0 | M | 016 | DONE |
 | 018 | Recompose the title screen around an animated campaign vignette | P1 | M | 017 | DONE |
+| 019 | Give the player squads to command and stances worth choosing | P0 | L | 018 | DONE as optional depth — premise unmet, see plan |
+| 020 | Make encounters uneven, and make avoiding them cost something | P0 | L | 019 | BLOCKED — needs battles that require a player first |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -75,6 +77,24 @@ explicitly selected because its impact becomes high when battle populations grow
   RNG domains before rearranging high-churn update code.
 - Plan 015 deliberately lands last so its algorithm changes target the phase
   seams characterized by Plan 014.
+- Plans 019-020 come from the phase-4 gameplay audit
+  (`critiques/phase4/gameplay-audit.md` and `critiques/phase4/self-playing-fix-options.md`),
+  which measured that an idle hero wins the ordinary roaming-party fight with zero
+  casualties, and that enemy damage tuning, focus-fire, pincer spawns, staggered
+  waves, and even a fully passive troop AI all fail to change that. They implement
+  the two options that survived measurement: player grip (019) and encounters worth
+  deciding about (020).
+- Plan 019 shipped its plumbing, stance trade-offs and HUD, and every defect found by
+  review is fixed, but its premise was measured false: on organic camp raids pressing no
+  order at all beats every deliberate order policy. Squads are therefore optional depth,
+  not a core mechanic, and no test or document claims otherwise. Plan 020 is blocked on
+  battles that actually require a player; the surviving candidate is Option 1 in
+  `critiques/phase4/self-playing-fix-options.md` (change the win condition).
+- Plan 020 depends on Plan 019 and must not land first. Uneven encounters without
+  squad-level control are unfair rather than difficult. Plan 019 deliberately avoids
+  any save-schema change so that 020 owns the single version-3 bump; 019 owns only
+  battle-scene changes and 020 owns only world-scene changes, so the two never edit
+  the same simulation phase.
 - Plan 016 comes after the completed correctness, QA, deterministic-rendering,
   and simulation-seam work. It introduces only the host-facing persistence,
   lifecycle, and action boundaries; the Electron shell and Steamworks SDK remain

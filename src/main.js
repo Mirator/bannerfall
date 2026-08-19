@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=rfa73e792131b';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rfa73e792131b';
-import { Battle } from './battle.js?v=rfa73e792131b';
-import { World } from './world.js?v=rfa73e792131b';
-import { ACTIONS } from './input-actions.js?v=rfa73e792131b';
-import { createWebPlatform } from './platform/web-platform.js?v=rfa73e792131b';
-import { SaveRepository } from './persistence/save-repository.js?v=rfa73e792131b';
+import { PAL } from './data.js?v=rada68ae0c75b';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rada68ae0c75b';
+import { Battle } from './battle.js?v=rada68ae0c75b';
+import { World } from './world.js?v=rada68ae0c75b';
+import { ACTIONS } from './input-actions.js?v=rada68ae0c75b';
+import { createWebPlatform } from './platform/web-platform.js?v=rada68ae0c75b';
+import { SaveRepository } from './persistence/save-repository.js?v=rada68ae0c75b';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -416,7 +416,7 @@ class Game {
     const headings = {
       new: ['CHOOSE YOUR CAMPAIGN', 'Difficulty cannot be changed after departure.'],
       confirm: ['REPLACE SAVED CAMPAIGN?', 'Your current campaign will be permanently replaced.'],
-      settings: ['SETTINGS', 'WASD ride · mouse aim · LMB swing · Space dash · 1/2/3 troop orders'],
+      settings: ['SETTINGS', 'WASD ride · mouse aim · LMB swing · Space dash · 1/2/3 orders · TAB squad'],
       credits: ['CREDITS', 'Designed and built for the Bannerfall campaign.'],
     };
     const heading = headings[this.menuPanel];

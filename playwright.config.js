@@ -4,6 +4,10 @@ const isCi = process.env.CI === 'true' || process.env.CI === '1';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Scratch specs (screenshot captures, one-off balance sweeps) are named zz-* and must
+  // never join the gate: Playwright collects everything under testDir, so gitignoring
+  // them alone would still let a stray file make `npm test` unreproducible.
+  testIgnore: '**/zz-*.spec.js',
   timeout: 30_000,
   expect: { timeout: 5_000 },
   // Keep visual baselines shared by every local/CI platform. The visual suite

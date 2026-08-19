@@ -73,6 +73,23 @@ each `Battle` instance; never mutate `PAL.battle` or introduce module-global
 palette state. These seams are intentionally methods, not generic managers or
 an ECS, so adding a cross-phase context object requires a new design review.
 
+Battle orders are per-squad. One squad exists per `UNIT_TYPES` key and membership is
+derived from a troop's type, never assigned, so `save.troops` stays `{type, hp}` and
+squad state costs no save-schema version. `Battle.squads` owns per-squad stance;
+`updateTroopPhase()` reads it through `squadStance(t)` and must not read a global command.
+Hold anchors are still per-troop (`holdX`/`holdY`) plus one global `holdPoint`; the
+`squads[type].holdX/holdY` fields are written but not yet read, so do not rely on them. `Battle.command` remains the all-squads aggregate (`'mixed'` when squads
+diverge) because the legacy QA record and the input-action contract assert on it; keep
+that mirror intact. Selection (`selectedSquad`) is input/presentation state and stays out
+of the save. Stance trade-offs live in named constants at the top of `src/battle.js`
+(brace bonus, bow spread, charge exposure, no-death stall) — tune those, not scattered
+literals, and re-run `tests/e2e/stance-balance.spec.js`.
+
+`Camera.toWorld()` is a simulation input: it feeds hero aim, hero facing, and therefore
+FOLLOW formation slots. It must never include the shake offset that `apply()` adds at
+render time. Presentation may read simulation state; simulation must not read
+presentation. A shake term there let a decorative RNG stream change fight outcomes.
+
 Canvas visual QA lives in `tests/e2e/visual-regression.spec.js` and runs in CI
 on every pull request as part of `npm test`; use `npm run test:visual` for the
 focused suite. It uses seeded scenarios,
@@ -95,7 +112,7 @@ npx playwright test tests/e2e/campaign-persistence.spec.js
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,
 pinned world seeds, and fixed timesteps rather than wall-clock sleeps. Preserve
-the existing 17 named legacy records and their result shape. Do not weaken an
+the existing 18 named legacy records and their result shape. Do not weaken an
 assertion, raise a performance budget, or ignore page/console errors to obtain
 green CI.
 

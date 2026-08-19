@@ -9,6 +9,7 @@ const EXPECTED_QA_NAMES = [
   'defeat_volunteer_rally_floor_tops_up_to_two',
   'victory_loot_and_survivors_via_world_battle',
   'command_system_and_hold_positions',
+  'squad_selection_and_independent_squad_orders',
   'economy_recruit_cost_cap_and_gold_refusals',
   'economy_heal_refusals_and_success_path',
   'world_party_battle_decreases_party_count_by_one',
