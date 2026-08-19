@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors } from './test-helpers.js';
+import { WORLD } from '../../src/data.js';
 
 const DT = 1 / 60;
 const PARTY_KEY = 'c1';
 const PARTY_HOME = { x: 1600, y: 900 };
 const PARTY_COMP = ['bandit', 'bandit', 'raider'];
+const OCCUPY_SETTLEMENT = WORLD.settlements.find(s => s.id === 'ashford');
 
 function assertNoRuntimeErrors(runtimeErrors) {
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);
@@ -154,8 +156,8 @@ test('current-schema player save round-trips through Continue', async ({ page })
     troops: ['spear', 'archer', 'knight'],
     hero: { x: 1711, y: 944 },
     parties: [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], waryT: 8 }],
-    version: 2,
-    storedVersion: 2,
+    version: 3,
+    storedVersion: 3,
   });
   expect(restored.stats.playT).toBeGreaterThanOrEqual(47);
   assertNoRuntimeErrors(runtimeErrors);
@@ -329,7 +331,7 @@ test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) =
   });
   assertNoRuntimeErrors(runtimeErrors);
   expect(snapshot.scene).toBe('battle');
-  expect(snapshot.memory.version).toBe(2);
+  expect(snapshot.memory.version).toBe(3);
   expect(snapshot.stored.version).toBe(snapshot.memory.version);
   expect(snapshot.stored.x).toBe(snapshot.memory.x);
   expect(snapshot.stored.y).toBe(snapshot.memory.y);
@@ -486,4 +488,90 @@ test('AUDIT-03 fully defeated roaming parties stay removed', async ({ page }) =>
   });
   assertNoRuntimeErrors(runtimeErrors);
   expect(parties).toEqual([]);
+});
+
+test('an occupied settlement and its occupier survive an explicit save and Continue, service still suspended', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, { seed: 911 });
+
+  await page.evaluate(async ({ settlementId, sx, sy }) => {
+    const world = window.__g.scene;
+    world.save.settlements = world.save.settlements.map(s => ({ id: s.id, occupied: s.id === settlementId }));
+    world.parties = [{
+      camp: 'c1', x: sx, y: sy, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: ['bandit'], home: { x: sx, y: sy }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+      occupying: settlementId, raid: null,
+    }];
+    world.persistParties();
+    window.__g.persistRun();
+    await window.__g.saves.flush();
+  }, { settlementId: OCCUPY_SETTLEMENT.id, sx: OCCUPY_SETTLEMENT.x, sy: OCCUPY_SETTLEMENT.y });
+
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => window.__g.sceneName === 'world');
+
+  const restored = await page.evaluate((settlementId) => {
+    const world = window.__g.scene;
+    const st = world.save.settlements.find(s => s.id === settlementId);
+    const party = world.parties.find(p => p.occupying === settlementId);
+    return { occupied: st && st.occupied, hasOccupier: !!party };
+  }, OCCUPY_SETTLEMENT.id);
+  expect(restored).toEqual({ occupied: true, hasOccupier: true });
+
+  // Standing near the settlement (but not overlapping the occupier, so no clash starts)
+  // must still refuse recruiting after the reload, not just before it.
+  const goldBefore = await page.evaluate(() => window.__g.scene.save.gold);
+  await page.evaluate(({ sx, sy }) => {
+    const world = window.__g.scene;
+    world.hero.x = sx + 80; world.hero.y = sy;
+  }, { sx: OCCUPY_SETTLEMENT.x, sy: OCCUPY_SETTLEMENT.y });
+  await page.evaluate(() => {
+    window.__g.input.injectKey('KeyQ', true);
+    window.__g.scene.updateSettlementInteractions(window.__g.input);
+    window.__g.input.injectKey('KeyQ', false);
+  });
+  const goldAfter = await page.evaluate(() => window.__g.scene.save.gold);
+  expect(goldAfter).toBe(goldBefore);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('recapturing an occupied settlement survives an explicit save and Continue', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, { seed: 912 });
+
+  await page.evaluate(({ settlementId, sx, sy }) => {
+    const world = window.__g.scene;
+    world.save.settlements = world.save.settlements.map(s => ({ id: s.id, occupied: s.id === settlementId }));
+    world.parties = [{
+      camp: 'c1', x: sx, y: sy, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: ['bandit'], home: { x: sx, y: sy }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+      occupying: settlementId, raid: null,
+    }];
+    world.hero.x = sx; world.hero.y = sy;
+    world.hero.vx = 0; world.hero.vy = 0;
+    world.grace = 0;
+  }, { settlementId: OCCUPY_SETTLEMENT.id, sx: OCCUPY_SETTLEMENT.x, sy: OCCUPY_SETTLEMENT.y });
+  await rawStep(page, DT);
+  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('battle');
+
+  await page.evaluate(() => window.__g.scene.endBattle(true));
+  await rawStep(page, 3.2);
+  expect(await page.evaluate(() => window.__g.sceneName)).toBe('world');
+  const occupiedRightAfter = await page.evaluate(
+    (id) => window.__g.scene.save.settlements.find(s => s.id === id).occupied, OCCUPY_SETTLEMENT.id);
+  expect(occupiedRightAfter).toBe(false);
+
+  await page.evaluate(async () => { window.__g.persistRun(); await window.__g.saves.flush(); });
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => window.__g.sceneName === 'world');
+  const restoredOccupied = await page.evaluate(
+    (id) => window.__g.scene.save.settlements.find(s => s.id === id).occupied, OCCUPY_SETTLEMENT.id);
+  expect(restoredOccupied).toBe(false);
+  assertNoRuntimeErrors(runtimeErrors);
 });

@@ -1,8 +1,8 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rada68ae0c75b';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rada68ae0c75b';
-import { SAVE_VERSION } from './save.js?v=rada68ae0c75b';
-import { ACTIONS } from './input-actions.js?v=rada68ae0c75b';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4873a112c73f';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r4873a112c73f';
+import { SAVE_VERSION } from './save.js?v=r4873a112c73f';
+import { ACTIONS } from './input-actions.js?v=r4873a112c73f';
 
 const P = PAL.world;
 
@@ -24,6 +24,7 @@ export class World {
       troops: Array.from({ length: BALANCE.startTroops }, () => ({ type: 'spear' })),
       armyCap: BALANCE.armyCapBase,
       camps: WORLD.camps.map(c => ({ id: c.id, razed: false })),
+      settlements: WORLD.settlements.map(s => ({ id: s.id, occupied: false })),
       won: false,
       x: WORLD.heroStart.x, y: WORLD.heroStart.y,
       parties: null,
@@ -127,7 +128,7 @@ export class World {
         this.parties.push({
           camp: p.camp, x: p.x, y: p.y, vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
           comp: p.comp, home: p.home, wander: null, wanderT: 0, waryT: p.waryT || 0,
-          clashT: p.clashT || 0,
+          clashT: p.clashT || 0, occupying: p.occupying || null, raid: null,
           navT: this.simRng() * 0.3, navGoal: null, navFor: null,
           _navGoalVisibility: new Float64Array(N), _navGoalX: NaN, _navGoalY: NaN,
         });
@@ -145,7 +146,11 @@ export class World {
   }
 
   persistParties() {
-    this.save.parties = this.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT || 0, clashT: p.clashT || 0 }));
+    this.save.parties = this.parties.map(p => {
+      const rec = { camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT || 0, clashT: p.clashT || 0 };
+      if (p.occupying) rec.occupying = p.occupying;
+      return rec;
+    });
   }
 
   syncLiveStateToSave() {
@@ -420,12 +425,25 @@ export class World {
     return items;
   }
 
-  // Spawn a party aimed at a strength band around the player, so the map always
-  // offers fights worth taking (Bannerlord: pick fights you can win — barely).
-  spawnParty(camp, band) {
+  // Weighted tier draw (Plan 020, design decision 1): replaces the deleted flat
+  // 0.6-1.5x fair-band guarantee. Weights shift from `weak` toward `strong` as
+  // non-stronghold camps fall, so the curve rises across a run instead of tracking
+  // the player forever. `razed` is 0..3.
+  rollPartyBand(razed) {
     const R = this.simRng;
-    const mine = this.myStrength();
-    const target = Math.max(2, Math.min(24, Math.round(mine * (band || (0.6 + R() * 0.9)))));
+    const t = clamp(razed / 3, 0, 1);
+    const wWeak = 0.40 - 0.30 * t, wEven = 0.35; // wStrong is the remainder
+    const { weak, even, strong } = BALANCE.partyTiers;
+    const r = R();
+    if (r < wWeak) return weak.min + R() * (weak.max - weak.min);
+    if (r < wWeak + wEven) return even.min + R() * (even.max - even.min);
+    return strong.min + R() * (strong.max - strong.min);
+  }
+
+  // Shared enemy-composition roller, target strength on `simRng` — used by spawnParty
+  // and by the floor guarantee (enforceBeatableFloor) so both draw from one formula.
+  rollComp(target) {
+    const R = this.simRng;
     const comp = [];
     let str = 0;
     while (str < target) {
@@ -435,6 +453,19 @@ export class World {
       else if (r < 0.8) { comp.push('raider'); str += 1; }
       else { comp.push('wolf'); str += 1; }
     }
+    return comp;
+  }
+
+  // Spawn a party aimed at a strength band around the player. `band`, when given
+  // explicitly, overrides the weighted tier draw (used by the floor guarantee's
+  // callers and by QA to probe the [2,24] clamp directly).
+  spawnParty(camp, band) {
+    const R = this.simRng;
+    const mine = this.myStrength();
+    const razed = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
+    const effectiveBand = band ?? this.rollPartyBand(razed);
+    const target = Math.max(2, Math.min(24, Math.round(mine * effectiveBand)));
+    const comp = this.rollComp(target);
     // never spawn a party inside a river or mountain — retry a few scatter offsets
     let px = camp.x, py = camp.y;
     for (let i = 0; i < 8; i++) {
@@ -446,9 +477,73 @@ export class World {
       x: px, y: py,
       vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
       comp, home: { x: camp.x, y: camp.y },
-      wander: null, wanderT: 0, navT: this.simRng() * 0.3, navGoal: null, navFor: null,
+      wander: null, wanderT: 0, occupying: null, raid: null,
+      navT: this.simRng() * 0.3, navGoal: null, navFor: null,
       _navGoalVisibility: new Float64Array(this.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
     });
+  }
+
+  // Design decision 5's floor guarantee: a settlement is "claimed" once some party
+  // occupies or is travelling to raid it. A break-off only ever targets a settlement
+  // when at least one other stays fully unclaimed afterward, so no sequence of
+  // simultaneous break-offs can ever occupy every settlement at once.
+  // Where a raiding party sits once it has taken a settlement: north of centre, clear of
+  // the name/OCCUPIED chips below. Falls back around the compass if terrain blocks it.
+  occupierPost(settlement) {
+    const R = 64;
+    const candidates = [[0, -R], [-R, -R * 0.5], [R, -R * 0.5], [-R, 0], [R, 0]];
+    for (const [dx, dy] of candidates) {
+      const x = clamp(settlement.x + dx, 60, this.W - 60);
+      const y = clamp(settlement.y + dy, 60, this.H - 60);
+      if (!this.blockedAt(x, y)) return { x, y };
+    }
+    return { x: settlement.x, y: Math.max(60, settlement.y - R) };
+  }
+
+  isSettlementClaimed(id) {
+    const st = this.save.settlements.find(s => s.id === id);
+    return !!(st && st.occupied) || this.parties.some(p => p.raid === id || p.occupying === id);
+  }
+
+  // The other half of the floor guarantee (STOP condition): if nothing currently on
+  // the map — including a party occupying a settlement — is within the player's
+  // reach, downgrade the weakest live party to an even-tier fight. This only ever
+  // fires as an emergency correction; it is not a routine crutch like the deleted
+  // fair-band guarantee, which forced nearly every spawn into a narrow band.
+  enforceBeatableFloor() {
+    if (this.parties.length === 0) return;
+    const mine = this.myStrength();
+    const beatable = mine * BALANCE.beatablePartyRatio;
+    if (this.parties.some(p => this.strength(p.comp) <= beatable)) return;
+    const { even } = BALANCE.partyTiers;
+    const evenBand = () => even.min + this.simRng() * (even.max - even.min);
+    // Prefer ADDING a beatable target over rewriting one the player may already have
+    // read off a badge. `rollGarrison` sets the house rule that what you scouted is what
+    // you fight, and silently weakening a party the player scouted breaks the same trust:
+    // a lone 14-strength band used to become a 4 while the player watched.
+    const alive = this.liveCamps();
+    if (alive.length && this.parties.length < this.partyCap()) {
+      const camp = alive[(this.simRng() * alive.length) | 0];
+      this.spawnParty(camp, evenBand());
+      this.particles.ring(camp.x, camp.y, 40, P.ink, 0.5, 3);
+      this.persistParties();
+      return;
+    }
+    // Only at the party cap, with no room to add one, is an existing band rewritten.
+    let weakest = this.parties[0];
+    for (const p of this.parties) if (this.strength(p.comp) < this.strength(weakest.comp)) weakest = p;
+    const target = Math.max(2, Math.min(24, Math.round(mine * evenBand())));
+    weakest.comp = this.rollComp(target);
+  }
+
+  // Camps still fielding parties, and the ceiling on how many may be alive at once.
+  // Shared by the spawn timer and the floor guarantee so the cap formula exists once.
+  liveCamps() {
+    return WORLD.camps.filter(c => !c.stronghold && !this.save.camps.find(s => s.id === c.id).razed);
+  }
+  partyCap() {
+    const alive = this.liveCamps();
+    return alive.length ? 2 + alive.length * 2 : 0;
   }
 
   // brutes hit ~5x harder than a bandit; knights count double. Badges show THIS number.
@@ -574,7 +669,16 @@ export class World {
           // to the recovery village, so those coordinates must come from metadata.
           if (!partyMeta || partyMeta.campId) return;
           const remaining = removeDead(partyMeta.comp);
-          if (remaining.length === 0) return;
+          if (remaining.length === 0) {
+            // A party occupying a settlement that happens to be fully wiped on a
+            // retreat/defeat edge case (not a formal victory) still frees the
+            // settlement — there is no occupier left to hold it.
+            if (partyMeta.occupying) {
+              const st = this.save.settlements.find(s => s.id === partyMeta.occupying);
+              if (st) st.occupied = false;
+            }
+            return;
+          }
           save.parties = save.parties || [];
           save.parties.push({
             camp: partyMeta.camp,
@@ -586,6 +690,7 @@ export class World {
             // re-inserted right on top of the hero on disengage — without its own
             // cooldown it would instantly re-clash the same frame grace expires
             clashT: BALANCE.battleGrace,
+            ...(partyMeta.occupying ? { occupying: partyMeta.occupying } : {}),
           });
         };
         // camp garrisons no longer resurrect their dead on a failed or abandoned raid —
@@ -661,32 +766,45 @@ export class World {
     }
   }
 
+  // occupation state lives on save.settlements, mirroring how save.camps carries razed/garrison
+  isSettlementOccupied(s) {
+    const st = this.save.settlements.find(x => x.id === s.id);
+    return !!(st && st.occupied);
+  }
+
   updateSettlementInteractions(inp) {
     const s = this.nearSettlement();
     if (s) {
-      if (inp.pressedAction(ACTIONS.RECRUIT_SPEAR)) this.recruit('spear');
-      if (inp.pressedAction(ACTIONS.WORLD_PRIMARY)) this.recruit('archer');
-      if (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) this.recruit('knight');
-      if (inp.pressedAction(ACTIONS.HEAL)) {
-        const healCost = s.freeHeal ? 0 : BALANCE.healCost;
-        const heroHurt = this.save.heroHp < this.save.heroMaxHp;
-        const troopsHurt = this.save.troops.some(t => t.hp != null && t.hp < UNIT_TYPES[t.type].hp);
-        if (!heroHurt && !troopsHurt) this.say('Already rested');
-        else if (this.save.gold < healCost) this.say('Not enough gold');
-        else {
-          this.save.gold -= healCost;
-          this.save.heroHp = this.save.heroMaxHp;
-          for (const t of this.save.troops) delete t.hp;
-          this.game.sfx.coin();
-          this.say(s.freeHeal ? 'The hot springs of Coldwell mend every wound — free of charge' : 'Warband rested and healed');
+      const pressedService = inp.pressedAction(ACTIONS.RECRUIT_SPEAR) || inp.pressedAction(ACTIONS.WORLD_PRIMARY) ||
+        (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) || inp.pressedAction(ACTIONS.HEAL) ||
+        (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY));
+      if (this.isSettlementOccupied(s)) {
+        if (pressedService) this.say(`${s.name} is occupied — drive off the raiders to restore its service`);
+      } else {
+        if (inp.pressedAction(ACTIONS.RECRUIT_SPEAR)) this.recruit('spear');
+        if (inp.pressedAction(ACTIONS.WORLD_PRIMARY)) this.recruit('archer');
+        if (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) this.recruit('knight');
+        if (inp.pressedAction(ACTIONS.HEAL)) {
+          const healCost = s.freeHeal ? 0 : BALANCE.healCost;
+          const heroHurt = this.save.heroHp < this.save.heroMaxHp;
+          const troopsHurt = this.save.troops.some(t => t.hp != null && t.hp < UNIT_TYPES[t.type].hp);
+          if (!heroHurt && !troopsHurt) this.say('Already rested');
+          else if (this.save.gold < healCost) this.say('Not enough gold');
+          else {
+            this.save.gold -= healCost;
+            this.save.heroHp = this.save.heroMaxHp;
+            for (const t of this.save.troops) delete t.hp;
+            this.game.sfx.coin();
+            this.say(s.freeHeal ? 'The hot springs of Coldwell mend every wound — free of charge' : 'Warband rested and healed');
+          }
         }
-      }
-      if (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY)) {
-        const cost = 40 + (this.save.armyCap - BALANCE.armyCapBase) * 20;
-        if (this.save.gold >= cost) {
-          this.save.gold -= cost; this.save.armyCap += 2;
-          this.game.sfx.coin(); this.say(`Army capacity is now ${this.save.armyCap}`);
-        } else this.say(`Need ${cost} gold`);
+        if (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY)) {
+          const cost = 40 + (this.save.armyCap - BALANCE.armyCapBase) * 20;
+          if (this.save.gold >= cost) {
+            this.save.gold -= cost; this.save.armyCap += 2;
+            this.game.sfx.coin(); this.say(`Army capacity is now ${this.save.armyCap}`);
+          } else this.say(`Need ${cost} gold`);
+        }
       }
     }
     // Scouting is deliberately after interaction: a newly revealed garrison is visible
@@ -760,6 +878,7 @@ export class World {
     const settlement = this.updateSettlementInteractions(inp);
     if (this.updateCampInteraction(inp, settlement)) return;
 
+    this.enforceBeatableFloor();
     if (this.updateParties(dt)) return;
 
     // camps slowly send out new parties (visible spawn at the camp)
@@ -789,21 +908,77 @@ export class World {
       if (p.waryT > 0) p.waryT -= dt;
       if (p.chaseT > 0) p.chaseT -= dt;
       if (p.clashT > 0) p.clashT -= dt;
-      const detectR = p.waryT > 0 ? 560 : 430; // a party that fled you once keeps watching for you
-      if (engaged && (dh < detectR || p.chaseT > 0)) {
-        // chasers aim at where you're GOING — interception geometry beats raw speed
-        const lead = { x: h.x + h.vx * 1.1, y: h.y + h.vy * 1.1 };
-        const fleeBar = p.waryT > 0 ? 1.1 : 0.75; // spooked parties don't re-try near-even odds
-        if (pStr > mine * 1.3) { goal = lead; speed = 185; p.mood = 'chase'; }
-        else if (pStr >= mine * fleeBar) { goal = lead; speed = 165; p.mood = 'chase'; }
-        else if (dh < detectR) {
-          goal = { x: p.x + (p.x - h.x) * 2, y: p.y + (p.y - h.y) * 2 }; speed = 195;
-          if (p.mood !== 'flee') p.waryT = 25;
-          p.mood = 'flee';
+
+      if (p.raid || p.occupying) {
+        // Design decision 3: a party that broke off no longer cares about the hero at
+        // all — it beelines for its target settlement and, once there, sits occupying
+        // it until defeated. This branch entirely replaces the chase/flee/wander logic.
+        if (p.occupying) {
+          goal = { x: p.x, y: p.y }; speed = 0; p.mood = 'occupying';
+        } else {
+          const target = WORLD.settlements.find(s => s.id === p.raid);
+          if (dist2(p.x, p.y, target.x, target.y) < BALANCE.raidArrivalR * BALANCE.raidArrivalR) {
+            const st = this.save.settlements.find(s => s.id === p.raid);
+            st.occupied = true;
+            p.occupying = p.raid;
+            p.raid = null;
+            // Post at the gate rather than freezing wherever the beeline happened to end.
+            // The settlement's name and OCCUPIED chips are drawn BELOW it, so an occupier
+            // that stopped anywhere south of centre covered its own settlement's name.
+            // A canonical post also makes the fight to retake a settlement look the same
+            // every time instead of depending on the approach angle.
+            const post = this.occupierPost(target);
+            p.x = post.x; p.y = post.y; p.vx = 0; p.vy = 0;
+            goal = { x: p.x, y: p.y }; speed = 0; p.mood = 'occupying';
+            this.say(`${target.name} falls under raider occupation — its service is suspended!`, 3.2);
+          } else {
+            goal = target; speed = BALANCE.raidSpeed; p.mood = 'raiding';
+          }
+        }
+      } else {
+        const detectR = p.waryT > 0 ? 560 : 430; // a party that fled you once keeps watching for you
+        if (engaged && (dh < detectR || p.chaseT > 0)) {
+          // chasers aim at where you're GOING — interception geometry beats raw speed
+          const lead = { x: h.x + h.vx * 1.1, y: h.y + h.vy * 1.1 };
+          const fleeBar = p.waryT > 0 ? 1.1 : 0.75; // spooked parties don't re-try near-even odds
+          if (pStr > mine * 1.3) { goal = lead; speed = 185; p.mood = 'chase'; }
+          else if (pStr >= mine * fleeBar) { goal = lead; speed = 165; p.mood = 'chase'; }
+          else if (dh < detectR) {
+            goal = { x: p.x + (p.x - h.x) * 2, y: p.y + (p.y - h.y) * 2 }; speed = 195;
+            if (p.mood !== 'flee') p.waryT = 25;
+            p.mood = 'flee';
+          } else p.mood = null;
+          // a committed hunt survives the detour: crossing a bridge doesn't make them forget you
+          if (p.mood === 'chase' && dh < detectR) p.chaseT = 16;
         } else p.mood = null;
-        // a committed hunt survives the detour: crossing a bridge doesn't make them forget you
-        if (p.mood === 'chase' && dh < detectR) p.chaseT = 16;
-      } else p.mood = null;
+
+        // Design decision 3: sustained, uncaught chase eventually gives up on the hero and
+        // raids the nearest settlement instead — see BALANCE.raidBreakOffT. The floor
+        // guarantee (design decision 5 / isSettlementClaimed) refuses the break-off rather
+        // than let a break-off claim the last fully unclaimed settlement.
+        if (p.mood === 'chase') {
+          p.chaseHoldT = (p.chaseHoldT || 0) + dt;
+          if (p.chaseHoldT >= BALANCE.raidBreakOffT) {
+            const free = WORLD.settlements.filter(s => !this.isSettlementClaimed(s.id));
+            if (free.length >= 2) {
+              let target = null, bd = Infinity;
+              for (const s of free) {
+                const d = dist2(p.x, p.y, s.x, s.y);
+                if (d < bd) { bd = d; target = s; }
+              }
+              p.raid = target.id;
+              p.mood = 'raiding';
+              p.chaseT = 0;
+              this.say(`A war party gives up the chase and rides for ${target.name}!`, 3.2);
+            } else {
+              p.chaseHoldT = 0; // no settlement left to claim safely — keep hunting instead
+            }
+          }
+        } else {
+          p.chaseHoldT = 0;
+        }
+      }
+
       if (!goal) {
         p.wanderT -= dt;
         if (!p.wander || p.wanderT <= 0) {
@@ -878,20 +1053,31 @@ export class World {
       // canClash too, or the player can't charge into a party they WANT to fight for the
       // whole post-battle window. The one party that does need a post-disengage cooldown
       // (reinserted right under the hero's feet) carries its own p.clashT instead.
-      const canClash = (p.clashT || 0) <= 0 && !this.nearSettlement(130) && dh < 46;
+      // Design decision 5: an occupier is exempt from the settlement-safe-zone block —
+      // it must always be attackable where it sits, or the player has no recapture path.
+      const isOccupier = !!p.occupying;
+      const canClash = (p.clashT || 0) <= 0 && (isOccupier || !this.nearSettlement(130)) && dh < 46;
       if ((engaged || (canClash && dh < 46)) && canClash) {
         const idx = this.parties.indexOf(p);
         this.parties.splice(idx, 1);
         this.persistParties();
         const ambushed = p.mood === 'chase';
         const caughtThem = p.mood === 'flee';
+        const occupiedSettlement = isOccupier ? WORLD.settlements.find(s => s.id === p.occupying) : null;
         this.pendingApproach = this.approachTo(p.x, p.y);
         this.pendingDeploy = caughtThem ? 0 : undefined; // undefined = mutual 8s formup
         this.startBattle(p.comp,
-          ambushed ? 'AMBUSHED!' : caughtThem ? 'RUN THEM DOWN!' : 'BANDIT SKIRMISH',
-          null, null, ambushed,
-          { camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT },
-          caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress');
+          occupiedSettlement ? `RETAKE ${occupiedSettlement.name.toUpperCase()}`
+            : ambushed ? 'AMBUSHED!' : caughtThem ? 'RUN THEM DOWN!' : 'BANDIT SKIRMISH',
+          occupiedSettlement ? () => {
+            const st = this.save.settlements.find(s => s.id === occupiedSettlement.id);
+            if (st) st.occupied = false;
+            this.save.toast = `${occupiedSettlement.name} is free again — its service resumes.`;
+          } : null,
+          null, ambushed,
+          { camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT, occupying: p.occupying },
+          occupiedSettlement ? 'Drive them out and restore the settlement’s service'
+            : caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress');
         return true;
       }
     }
@@ -903,17 +1089,14 @@ export class World {
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       this.spawnT = 40;
-      const alive = WORLD.camps.filter(c => !c.stronghold && !this.save.camps.find(s => s.id === c.id).razed);
-      if (alive.length && this.parties.length < 2 + alive.length * 2) {
-        const mine = this.myStrength();
-        // guarantee a winnable-but-real fight exists: if no party sits in the
-        // 0.7-1.2x band, the next spawn is aimed straight at it
-        const fairExists = this.parties.some(p => {
-          const s = this.strength(p.comp);
-          return s >= mine * 0.7 && s <= mine * 1.2;
-        });
+      const alive = this.liveCamps();
+      if (alive.length && this.parties.length < this.partyCap()) {
+        // Plan 020: the old fair-band guarantee (forcing almost every spawn into a
+        // narrow 0.7-1.2x band) is gone. Every spawn draws from the weighted tiers in
+        // spawnParty()/rollPartyBand(); enforceBeatableFloor() is the only remaining
+        // safety net, and it only intervenes when nothing beatable exists at all.
         const c = alive[(this.simRng() * alive.length) | 0];
-        this.spawnParty(c, fairExists ? null : 0.75 + this.simRng() * 0.4);
+        this.spawnParty(c);
         this.particles.ring(c.x, c.y, 40, P.ink, 0.5, 3);
         this.persistParties();
       }
@@ -1111,6 +1294,31 @@ export class World {
     rrect(ctx, s.x - nw / 2, s.y + 34, nw, 20, 6); ctx.stroke();
     ctx.fillStyle = P.ink;
     ctx.fillText(s.name, s.x, s.y + 45);
+
+    // Plan 020 design decision 4: occupied and threatened settlements carry their own
+    // map markers, on top of the break-off toast — legibility must not depend on having
+    // read a toast that already scrolled away.
+    const occupied = this.isSettlementOccupied(s);
+    const threatened = !occupied && this.parties.some(p => p.raid === s.id);
+    if (occupied) {
+      const label = 'OCCUPIED';
+      ctx.font = '800 12px system-ui, sans-serif';
+      const lw = ctx.measureText(label).width + 16;
+      ctx.fillStyle = P.enemy;
+      rrect(ctx, s.x - lw / 2, s.y + 58, lw, 18, 6); ctx.fill();
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
+      rrect(ctx, s.x - lw / 2, s.y + 58, lw, 18, 6); ctx.stroke();
+      ctx.fillStyle = P.cream;
+      ctx.fillText(label, s.x, s.y + 70);
+    } else if (threatened) {
+      // a pulsing warning ring — a raiding party is inbound but has not arrived yet
+      const pulse = 6 + Math.sin(this.time * 5) * 3;
+      ctx.save();
+      ctx.globalAlpha = 0.7;
+      ctx.strokeStyle = P.enemy; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(s.x, s.y, (town ? 76 : 58) + pulse, 0, TAU); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   drawCamp(ctx, c, razed) {
@@ -1184,12 +1392,23 @@ export class World {
     ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.arc(p.x, p.y - 20 + bobY, 6, 0, TAU); ctx.fill();
     // strength badge (Bannerlord party size): red = stronger than you, ink = weaker
-    const stronger = this.strength(p.comp) > this.myStrength() * 1.15;
+    const pStr = this.strength(p.comp), mineStr = this.myStrength();
+    const stronger = pStr > mineStr * 1.15;
+    // Plan 020 design decision 4: an explicit outmatched marker, readable at scouting
+    // range (i.e. as soon as the party is on screen at all) rather than only once the
+    // hero is close enough to trigger the odds pill below. The threshold matches the
+    // AI's own "will hunt you down regardless" band so the glyph means something real.
+    const outmatched = pStr > mineStr * 1.3;
     ctx.fillStyle = stronger ? P.enemy : P.ink;
     ctx.beginPath(); ctx.arc(p.x + 16, p.y - 26, 9.5, 0, TAU); ctx.fill();
     ctx.fillStyle = P.cream;
     ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(String(this.strength(p.comp)), p.x + 16, p.y - 25);
+    ctx.fillText(String(pStr), p.x + 16, p.y - 25);
+    if (outmatched) {
+      ctx.fillStyle = P.enemy;
+      ctx.font = '800 13px system-ui, sans-serif';
+      ctx.fillText('⚠', p.x + 16, p.y - 40);
+    }
     if (p.mood === 'flee') {
       ctx.fillStyle = P.ink;
       ctx.font = '800 12px system-ui, sans-serif';
@@ -1199,11 +1418,10 @@ export class World {
     // so the floating text carries only the judgment (one number convention per token)
     const dh = dist2(p.x, p.y, this.hero.x, this.hero.y);
     if (dh < 420 * 420) {
-      const ps = this.strength(p.comp), mine = this.myStrength();
       ctx.fillStyle = stronger ? P.enemy : P.ink;
       ctx.font = '800 11px system-ui, sans-serif';
       // odds word sits in the same pill language as every other label
-      const oddsTxt = stronger ? '⚠ they outmatch you' : ps < mine * 0.85 ? 'favored' : 'an even fight';
+      const oddsTxt = stronger ? '⚠ they outmatch you' : pStr < mineStr * 0.85 ? 'favored' : 'an even fight';
       const ow = ctx.measureText(oddsTxt).width + 14;
       ctx.fillStyle = P.cream;
       rrect(ctx, p.x - ow / 2, p.y - 58, ow, 17, 5); ctx.fill();
@@ -1294,7 +1512,9 @@ export class World {
     const s = this.nearSettlement();
     const camp = this.nearCamp();
     let lines = null;
-    if (s) {
+    if (s && this.isSettlementOccupied(s)) {
+      lines = [`${s.name} — OCCUPIED`, 'A raiding party has seized it — its service is suspended', 'Defeat them here to drive them out'];
+    } else if (s) {
       const sc = this.costAt(s, 'spear'), ac = this.costAt(s, 'archer');
       const healTxt = s.freeHeal ? 'F Rest & heal FREE' : `F Rest & heal ${BALANCE.healCost}g`;
       lines = s.kind === 'town'

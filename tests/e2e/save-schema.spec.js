@@ -55,18 +55,24 @@ async function rejectRealSave(page, payload) {
   });
 }
 
-test('fresh run stores version 2', async ({ page }) => {
+test('fresh run stores version 3', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1101);
 
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('bf_save')));
-  expect(stored.version).toBe(2);
+  expect(stored.version).toBe(3);
   expect(stored.camps.map(camp => camp.id)).toEqual(['c1', 'c2', 'c3', 'strong']);
+  expect(stored.settlements).toEqual([
+    { id: 'ashford', occupied: false },
+    { id: 'brindle', occupied: false },
+    { id: 'coldwell', occupied: false },
+    { id: 'keep', occupied: false },
+  ]);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('valid unversioned save migrates defaults and is rewritten as version 2', async ({ page }) => {
+test('valid unversioned save migrates defaults and is rewritten as version 3', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1102);
@@ -81,13 +87,20 @@ test('valid unversioned save migrates defaults and is rewritten as version 2', a
   delete legacy.stats;
   delete legacy.hard;
   delete legacy.battleCount;
+  delete legacy.settlements;
 
   await reloadWithRealSave(page, legacy);
   const migratedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
-  expect(migratedBeforeContinue.version).toBe(2);
+  expect(migratedBeforeContinue.version).toBe(3);
   expect(migratedBeforeContinue.parties).toBe(null);
   expect(migratedBeforeContinue.heroHp).toBe(120);
   expect(migratedBeforeContinue.heroMaxHp).toBe(120);
+  expect(migratedBeforeContinue.settlements).toEqual([
+    { id: 'ashford', occupied: false },
+    { id: 'brindle', occupied: false },
+    { id: 'coldwell', occupied: false },
+    { id: 'keep', occupied: false },
+  ]);
   await page.keyboard.press('c');
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
 
@@ -95,7 +108,7 @@ test('valid unversioned save migrates defaults and is rewritten as version 2', a
     save: structuredClone(window.__g.scene.save),
     stored: JSON.parse(localStorage.getItem('bf_save')),
   }));
-  expect(migrated.save.version).toBe(2);
+  expect(migrated.save.version).toBe(3);
   expect(migrated.save.heroHp).toBe(120);
   expect(migrated.save.heroMaxHp).toBe(120);
   expect(migrated.save.armyCap).toBe(12);
@@ -105,7 +118,13 @@ test('valid unversioned save migrates defaults and is rewritten as version 2', a
   expect(migrated.save.stats).toEqual({ won: 0, kills: 0, lost: 0, playT: expect.any(Number) });
   expect(migrated.save.hard).toBe(false);
   expect(migrated.save.battleCount).toBe(0);
-  expect(migrated.stored.version).toBe(2);
+  expect(migrated.save.settlements).toEqual([
+    { id: 'ashford', occupied: false },
+    { id: 'brindle', occupied: false },
+    { id: 'coldwell', occupied: false },
+    { id: 'keep', occupied: false },
+  ]);
+  expect(migrated.stored.version).toBe(3);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
@@ -116,21 +135,51 @@ test('version-1 roaming parties migrate a missing home from their canonical camp
   const legacy = await currentSave(page);
   legacy.version = 1;
   legacy.parties = [{ camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], waryT: 2 }];
+  delete legacy.settlements;
   await reloadWithRealSave(page, legacy);
   const migrated = await page.evaluate(() => window.__g.loadRun());
-  expect(migrated.version).toBe(2);
+  expect(migrated.version).toBe(3);
   expect(migrated.parties).toEqual([{
     camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], home: { x: 1050, y: 1500 }, waryT: 2, clashT: 0,
   }]);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('complete version-2 save round-trips nested state without losing fields', async ({ page }) => {
+test('version-2 save migrates to version 3 with every settlement unoccupied, safe for world construction', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1111);
+  const legacy = await currentSave(page);
+  legacy.version = 2;
+  delete legacy.settlements; // version 2 never had this field
+  await reloadWithRealSave(page, legacy);
+  const migratedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
+  expect(migratedBeforeContinue.version).toBe(3);
+  expect(migratedBeforeContinue.settlements).toEqual([
+    { id: 'ashford', occupied: false },
+    { id: 'brindle', occupied: false },
+    { id: 'coldwell', occupied: false },
+    { id: 'keep', occupied: false },
+  ]);
+  await page.keyboard.press('c');
+  // "immediately safe for world construction": the world must boot from the migrated save
+  // without a runtime error, and the settlements it exposes must match what was migrated.
+  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
+  const restored = await page.evaluate(() => ({
+    version: window.__g.scene.save.version,
+    settlements: window.__g.scene.save.settlements,
+  }));
+  expect(restored.version).toBe(3);
+  expect(restored.settlements).toEqual(migratedBeforeContinue.settlements);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('complete version-3 save round-trips nested state without losing fields', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1103);
   const save = await currentSave(page);
-  save.version = 2;
+  save.version = 3;
   save.gold = 731;
   save.heroHp = 87;
   save.heroMaxHp = 140;
@@ -142,9 +191,18 @@ test('complete version-2 save round-trips nested state without losing fields', a
     { id: 'c3', razed: false, garrison: ['brute'] },
     { id: 'strong', razed: false },
   ];
+  save.settlements = [
+    { id: 'ashford', occupied: true },
+    { id: 'brindle', occupied: false },
+    { id: 'coldwell', occupied: false },
+    { id: 'keep', occupied: false },
+  ];
   save.x = 1711;
   save.y = 944;
-  save.parties = [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], home: { x: 1600, y: 900 }, waryT: 8, clashT: 0 }];
+  save.parties = [
+    { camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], home: { x: 1600, y: 900 }, waryT: 8, clashT: 0 },
+    { camp: 'c2', x: 700, y: 1150, comp: ['bandit'], home: { x: 1850, y: 500 }, waryT: 0, clashT: 0, occupying: 'ashford' },
+  ];
   save.runSeed = 4422;
   save.stats = { won: 2, kills: 19, lost: 3, playT: 47.5 };
   save.hard = true;
@@ -157,12 +215,13 @@ test('complete version-2 save round-trips nested state without losing fields', a
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
 
   const restored = await page.evaluate(() => structuredClone(window.__g.scene.save));
-  expect(restored.version).toBe(2);
+  expect(restored.version).toBe(3);
   expect(restored.gold).toBe(731);
   expect(restored.heroHp).toBe(87);
   expect(restored.heroMaxHp).toBe(140);
   expect(restored.troops).toEqual([{ type: 'spear', hp: 73 }, { type: 'archer', hp: 44 }, { type: 'knight' }]);
   expect(restored.camps).toEqual(save.camps);
+  expect(restored.settlements).toEqual(save.settlements);
   expect(restored.x).toBe(1711);
   expect(restored.y).toBe(944);
   expect(restored.parties).toEqual(save.parties);
@@ -220,7 +279,7 @@ test('unknown future version is cleared and cannot Continue', async ({ page }) =
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1105);
   const save = await currentSave(page);
-  save.version = 3;
+  save.version = 4;
   const result = await rejectRealSave(page, save);
   expect(result).toEqual({ loaded: null, stored: null });
   assertNoRuntimeErrors(runtimeErrors);
@@ -235,6 +294,29 @@ test('missing, duplicate, and unknown camp IDs are rejected and clear bf_save', 
     ['missing', value => value.camps.pop()],
     ['duplicate', value => { value.camps[1].id = value.camps[0].id; }],
     ['unknown', value => { value.camps[0].id = 'invented'; }],
+  ];
+  for (const [name, mutate] of cases) {
+    const candidate = structuredClone(base);
+    mutate(candidate);
+    const result = await rejectRealSave(page, candidate);
+    expect(result, name).toEqual({ loaded: null, stored: null });
+  }
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('missing, duplicate, unknown, and malformed settlement entries are rejected', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1112);
+  const base = await currentSave(page);
+  const cases = [
+    ['missing', value => value.settlements.pop()],
+    ['duplicate', value => { value.settlements[1].id = value.settlements[0].id; }],
+    ['unknown', value => { value.settlements[0].id = 'invented'; }],
+    ['non-boolean occupied', value => { value.settlements[0].occupied = 'yes'; }],
+    ['party occupying an unknown settlement', value => {
+      value.parties = [{ camp: 'c1', x: 100, y: 100, comp: ['bandit'], home: { x: 1050, y: 1500 }, occupying: 'invented' }];
+    }],
   ];
   for (const [name, mutate] of cases) {
     const candidate = structuredClone(base);

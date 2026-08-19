@@ -9,7 +9,7 @@ in `#qa-status`, so it is useful both to a human opening the page and to
 Playwright.
 
 `tests/e2e/qa.spec.js` is the exit-code-bearing Playwright layer. It starts the
-existing Python server, checks browser/runtime errors, verifies all 18 record
+existing Python server, checks browser/runtime errors, verifies all 22 record
 names, and proves that running QA preserves `bf_save` while using
 `bf_save_test`.
 
@@ -213,15 +213,21 @@ npx playwright test tests/e2e/campaign-persistence.spec.js
 ## Save schema and migration
 
 `src/save.js` is the authoritative save boundary. Unversioned browser saves
-are treated as version 0 and version-1 browser saves are migrated to the
-current version 2 shape with documented legacy defaults. Version-1 roaming
-parties missing `home` receive the matching canonical camp coordinate during
-migration; current-version parties must carry a finite, valid `home`. Unknown
-future versions, unknown production IDs, malformed nested values, impossible
-HP/max-HP relationships, and out-of-range numbers are rejected and the active
-save slot is cleared before `World` sees the payload. The validator returns a
-detached canonical object, so accepted saves are safe for immediate world and
-battle construction.
+are treated as version 0, and version-1 and version-2 browser saves are
+migrated to the current version 3 shape with documented legacy defaults.
+Version-1 roaming parties missing `home` receive the matching canonical camp
+coordinate during migration; current-version parties must carry a finite,
+valid `home`. Version 3 (Plan 020) adds `save.settlements` — one
+`{id, occupied}` entry per `WORLD.settlements`, recording whether a party that
+broke off from a chase currently occupies it — and an optional party
+`occupying` field naming that settlement; pre-version-3 saves never had
+either, so migration defaults every settlement to unoccupied. Unknown future
+versions, unknown production IDs (including an unknown settlement `id` or a
+non-boolean `occupied`), malformed nested values, impossible HP/max-HP
+relationships, and out-of-range numbers are rejected and the active save slot
+is cleared before `World` sees the payload. The validator returns a detached
+canonical object, so accepted saves are safe for immediate world and battle
+construction.
 
 Run the focused schema coverage with:
 
@@ -229,8 +235,10 @@ Run the focused schema coverage with:
 npx playwright test tests/e2e/save-schema.spec.js
 ```
 
-The focused schema suite covers v0/v1 migration, current-version round trips,
-zero-seed preservation, battle maximum-HP propagation, malformed fixtures, and
+The focused schema suite covers v0/v1/v2 migration (including the version-2 ->
+3 settlements default), current-version round trips, zero-seed preservation,
+battle maximum-HP propagation, malformed fixtures (including malformed
+settlement entries and a party occupying an unknown settlement), and
 save-slot clearing. Run it together with campaign coverage after changing
 `src/save.js`, `src/world.js`, or `src/battle.js`:
 
@@ -238,15 +246,15 @@ save-slot clearing. Run it together with campaign coverage after changing
 npx playwright test tests/e2e/save-schema.spec.js tests/e2e/campaign-persistence.spec.js
 ```
 
-Construct fixtures from current `WORLD.camps`, `UNIT_TYPES`, and
-`ENEMY_TYPES` production values. Do not invent camp or troop/enemy IDs, and
-keep real-player persistence fixtures in isolated contexts using `bf_save`
-and raw `window.__g`; calls through `window.game` belong to the `bf_save_test`
-slot.
+Construct fixtures from current `WORLD.camps`, `WORLD.settlements`,
+`UNIT_TYPES`, and `ENEMY_TYPES` production values. Do not invent camp,
+settlement, or troop/enemy IDs, and keep real-player persistence fixtures in
+isolated contexts using `bf_save` and raw `window.__g`; calls through
+`window.game` belong to the `bf_save_test` slot.
 
 ## Legacy check inventory
 
-The 18 deterministic records cover:
+The 22 deterministic records cover:
 
 1. menu-to-world transition;
 2. battle invariants and victory;
@@ -263,9 +271,17 @@ The 18 deterministic records cover:
 13. captive capacity limits;
 14. post-battle grace decay;
 15. roaming-party strength bounds;
-16. seeded battle determinism;
-17. the 200-step performance smoke budget;
-18. river-pursuit movement without freezing.
+16. weighted spawn-tier distribution, swept over several seeds, shifting toward
+    `strong` as camps are razed (Plan 020);
+17. break-off-and-raid: occupying a settlement suspends its service, and
+    defeating the occupier there restores it (Plan 020);
+18. the deadlock floor guarantee, driven at its worst case: nothing beatable on
+    the map still yields a winnable target, and the last unclaimed settlement
+    is never claimed (Plan 020, the plan's STOP-condition risk);
+19. seeded battle determinism;
+20. the RNG-domain effects-independence check;
+21. the 200-step performance smoke budget;
+22. river-pursuit movement without freezing.
 
 ## Adding coverage
 

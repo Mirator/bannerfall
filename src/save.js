@@ -1,11 +1,15 @@
 // Campaign save schema — the pure boundary between persisted text and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=rada68ae0c75b';
+import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r4873a112c73f';
 
 // Version 2 makes party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
-export const SAVE_VERSION = 2;
+// Version 3 (Plan 020) adds save.settlements — settlement-occupation state for the
+// break-off-and-raid mechanic — and an optional party.occupying field naming the
+// settlement a roaming party currently occupies.
+export const SAVE_VERSION = 3;
 
 const CAMP_IDS = new Set(WORLD.camps.map(c => c.id));
+const SETTLEMENT_IDS = new Set(WORLD.settlements.map(s => s.id));
 const UNIT_IDS = new Set(Object.keys(UNIT_TYPES));
 const ENEMY_IDS = new Set(Object.keys(ENEMY_TYPES));
 const MAX_HERO_HP = 10000;
@@ -80,6 +84,28 @@ function buildCamps(raw) {
   return result;
 }
 
+// Plan 020: one entry per WORLD.settlement recording whether a broken-off roaming
+// party currently occupies it (suspending its recruiting/healing/army-cap service).
+// `legacy` is true when migrating a pre-version-3 save, which never had this field —
+// every settlement starts unoccupied, matching the fresh-save default.
+function buildSettlements(raw, legacy) {
+  if (raw === undefined) {
+    return legacy ? WORLD.settlements.map(s => ({ id: s.id, occupied: false })) : null;
+  }
+  if (!Array.isArray(raw) || raw.length !== WORLD.settlements.length) return null;
+  const seen = new Set();
+  const result = [];
+  for (const settlement of raw) {
+    if (!plain(settlement) || typeof settlement.id !== 'string' ||
+        !SETTLEMENT_IDS.has(settlement.id) || seen.has(settlement.id)) return null;
+    if (typeof settlement.occupied !== 'boolean') return null;
+    seen.add(settlement.id);
+    result.push({ id: settlement.id, occupied: settlement.occupied });
+  }
+  if (seen.size !== SETTLEMENT_IDS.size) return null;
+  return result;
+}
+
 function canonicalCampHome(campId) {
   const camp = WORLD.camps.find(candidate => candidate.id === campId);
   return camp ? { x: camp.x, y: camp.y } : null;
@@ -117,6 +143,10 @@ function buildParties(raw, migrateLegacyHomes) {
     } else {
       next.clashT = 0;
     }
+    if (hasOwn(party, 'occupying')) {
+      if (typeof party.occupying !== 'string' || !SETTLEMENT_IDS.has(party.occupying)) return undefined;
+      next.occupying = party.occupying;
+    }
     result.push(next);
   }
   return result;
@@ -145,6 +175,8 @@ function buildV1(candidate, legacy) {
   if (!troops) return null;
   const camps = buildCamps(candidate.camps);
   if (!camps) return null;
+  const settlements = buildSettlements(candidate.settlements, legacy);
+  if (!settlements) return null;
   const heroMaxHp = readNumber(candidate, 'heroMaxHp', HERO.hp,
     value => finite(value) && value > 0 && value <= MAX_HERO_HP, legacy);
   const heroHp = readNumber(candidate, 'heroHp', HERO.hp,
@@ -182,6 +214,7 @@ function buildV1(candidate, legacy) {
     troops,
     armyCap,
     camps,
+    settlements,
     won,
     x,
     y,
