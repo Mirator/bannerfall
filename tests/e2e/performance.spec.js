@@ -75,6 +75,51 @@ test('world rendering reuses static paths and culls offscreen scenery', async ({
   expect(runtimeErrors).toEqual([]);
 });
 
+test('world rendering stays within its own budget with hover latched on and a brief open', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await startWorld(page);
+  const result = await page.evaluate(() => {
+    const g = window.__g, world = g.scene;
+    world.hero.x = 1600; world.hero.y = 900; // clear of every settlement's safe zone
+    const mine = world.myStrength();
+    world.parties.length = 0;
+    world.parties.push({
+      camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: Array.from({ length: Math.max(1, Math.round(mine)) }, () => 'bandit'),
+      home: { x: world.hero.x, y: world.hero.y }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+      occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+      _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+    });
+    world.grace = 0;
+    g.update(1 / 60); // opens the pre-battle brief
+    // Latch the hover pointer on over the hero token (not just the untouched boot
+    // default) so the hover panel is actually drawn every frame below too.
+    g.camera.x = world.hero.x; g.camera.y = world.hero.y;
+    const cx = g.camera.w / 2, cy = g.camera.h / 2;
+    window.game.mouse(cx + 4, cy);
+    window.game.mouse(cx, cy);
+    let beginPath = 0;
+    const original = CanvasRenderingContext2D.prototype.beginPath;
+    CanvasRenderingContext2D.prototype.beginPath = function (...args) { beginPath++; return original.apply(this, args); };
+    for (let i = 0; i < 20; i++) g.draw();
+    CanvasRenderingContext2D.prototype.beginPath = original;
+    return {
+      beginPath,
+      screenKind: world.screen && world.screen.kind,
+      hoverKind: world.hoverTarget && world.hoverTarget.kind,
+    };
+  });
+  expect(result.screenKind).toBe('brief');
+  // Hover is suppressed while a modal is open (world.js draw()), so this exercises the
+  // pointer-moved latch's own per-frame coordinate comparison every draw without ever
+  // actually drawing the hover panel over the brief.
+  expect(result.hoverKind).toBeNull();
+  // Its own, separate budget — the existing un-briefed <10000 case (above) stays
+  // untouched, since hover there is latched off with no pointer movement at all.
+  expect(result.beginPath).toBeLessThan(12000);
+  expect(runtimeErrors).toEqual([]);
+});
+
 test('battle rendering reuses scratch storage and static terrain', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await page.goto('/');

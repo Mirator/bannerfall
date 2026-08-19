@@ -140,6 +140,11 @@ async function raidSweep(page, orders, seeds, campIds) {
           world.hero.x = camp.x; world.hero.y = camp.y; world.grace = 0;
           game.input.injectMouse(640, 360, false);
           game.input.injectKey('KeyE', true); real(dt); game.input.injectKey('KeyE', false);
+          // Plan 021: KeyE now opens a pre-battle brief (still scene 'world') before
+          // committing — confirm it to reach the same battle entry this sweep measures.
+          if (game.sceneName === 'world' && world.screen && world.screen.kind === 'brief') {
+            game.input.injectKey('Enter', true); real(dt); game.input.injectKey('Enter', false);
+          }
           if (game.sceneName !== 'battle') continue;
           const b = game.scene;
           game.camera.shakeT = 0; game.camera.shakeAmp = 0; game.camera.sx = 0; game.camera.sy = 0;

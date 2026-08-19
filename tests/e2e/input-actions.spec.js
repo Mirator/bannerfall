@@ -54,3 +54,41 @@ test('named combat commands, pause, mute, and abandon actions preserve keyboard 
   expect(commands.muted).toBe(true);
   expect(commands.scene).toBe('menu');
 });
+
+test('named WITHDRAW action and its keyboard binding (KeyX) cancel a pre-battle brief identically', async ({ page }) => {
+  await boot(page);
+  async function withdraw(page, useNamed) {
+    return page.evaluate((named) => {
+      window.game.scenario('world', { seed: 424242 });
+      const world = window.__g.scene;
+      world.hero.x = 1600; world.hero.y = 900; // clear of every settlement's safe zone
+      const mine = world.myStrength();
+      world.parties.length = 0;
+      world.parties.push({
+        camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
+        // weak enough to flee -> caught fleeing -> withdraw offered (decision 5)
+        comp: Array.from({ length: Math.max(1, Math.round(mine * 0.4)) }, () => 'bandit'),
+        home: { x: world.hero.x, y: world.hero.y }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+        occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+        _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+      });
+      const party = world.parties[0];
+      world.grace = 0;
+      window.__g.update(1 / 60); // opens the brief
+      if (named) window.__g.input.injectAction('withdraw', true);
+      else window.__g.input.injectKey('KeyX', true);
+      window.__g.update(1 / 60);
+      if (named) window.__g.input.injectAction('withdraw', false);
+      else window.__g.input.injectKey('KeyX', false);
+      return {
+        scene: window.__g.sceneName, screenGone: !world.screen,
+        partyPresent: world.parties.includes(party), clashT: party.clashT, waryT: party.waryT,
+      };
+    }, useNamed);
+  }
+  const keyboard = await withdraw(page, false);
+  const named = await withdraw(page, true);
+  expect(named).toEqual(keyboard);
+  expect(named.screenGone).toBe(true);
+  expect(named.partyPresent).toBe(true);
+});

@@ -55,6 +55,26 @@ test('world road river and bridge landmark remains visible', async ({ page }) =>
   await expect(canvas).toHaveScreenshot('world-bridge.png', VISUAL_OPTIONS);
 });
 
+test('pre-battle brief for a fleeing party remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_brief', { kind: 'partyFlee', seed: 424242 });
+  await expect(canvas).toHaveScreenshot('world-brief-party.png', VISUAL_OPTIONS);
+});
+
+test('pre-battle brief for a camp assault with withdraw remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_brief', { kind: 'campScouted', seed: 424242 });
+  await expect(canvas).toHaveScreenshot('world-brief-camp-withdraw.png', VISUAL_OPTIONS);
+});
+
+test('victory aftermath remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_aftermath', { seed: 424242, result: { victory: true } });
+  await expect(canvas).toHaveScreenshot('world-aftermath-victory.png', VISUAL_OPTIONS);
+});
+
+test('defeat aftermath remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_aftermath', { seed: 424242, result: { victory: false } });
+  await expect(canvas).toHaveScreenshot('world-aftermath-defeat.png', VISUAL_OPTIONS);
+});
+
 test('small road battle composition remains visually stable', async ({ page }) => {
   const canvas = await settle(page, 'battle_small', { steps: 1.5 });
   await expect(canvas).toHaveScreenshot('battle-small.png', VISUAL_OPTIONS);
