@@ -49,6 +49,22 @@ async function rawStep(page, seconds) {
   }, steps);
 }
 
+// Plan 021: every map-initiated fight now opens a pre-battle brief first (a world-scene
+// modal — sceneName stays 'world') instead of committing straight to battle. Confirming
+// it (Enter, bound to ACTIONS.CONFIRM) is the one extra step every raw collision fixture
+// in this file needs to reach the same battle-entry point it relied on before this plan.
+async function confirmBrief(page) {
+  await expect.poll(() => page.evaluate(() =>
+    window.__g.sceneName === 'world' && !!(window.__g.scene.screen && window.__g.scene.screen.kind === 'brief'),
+  )).toBe(true);
+  await page.evaluate(() => {
+    window.__g.input.injectKey('Enter', true);
+    window.__g.update(1 / 60);
+    window.__g.input.injectKey('Enter', false);
+    window.__g.draw();
+  });
+}
+
 async function installUniqueParty(page, { camp = PARTY_KEY, comp = PARTY_COMP } = {}) {
   await page.evaluate(({ partyCamp, partyComp, home }) => {
     const world = window.__g.scene;
@@ -73,6 +89,7 @@ async function installUniqueParty(page, { camp = PARTY_KEY, comp = PARTY_COMP } 
     world.grace = 0;
   }, { partyCamp: camp, partyComp: comp, home: PARTY_HOME });
   await rawStep(page, DT);
+  await confirmBrief(page);
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('battle');
 }
 
@@ -83,6 +100,21 @@ async function injectKeyAndStep(page, code) {
     window.__g.input.injectKey(keyCode, false);
     window.__g.draw();
   }, code);
+}
+
+// Plan 021: battle end now opens an aftermath modal (also a world-scene screen) before
+// play resumes. Every fixture that ends a battle and then wants the world simulation to
+// actually keep running (a further collision, grace decay, …) must dismiss it first.
+async function dismissAftermath(page) {
+  await expect.poll(() => page.evaluate(() =>
+    window.__g.sceneName === 'world' && !!(window.__g.scene.screen && window.__g.scene.screen.kind === 'aftermath'),
+  )).toBe(true);
+  await page.evaluate(() => {
+    window.__g.input.injectKey('Enter', true);
+    window.__g.update(1 / 60);
+    window.__g.input.injectKey('Enter', false);
+    window.__g.draw();
+  });
 }
 
 async function battleResult(page, action) {
@@ -229,6 +261,7 @@ test('final stronghold victory enters the victory scene and clears the run save'
     world.save.y = world.hero.y;
   });
   await injectKeyAndStep(page, 'KeyE');
+  await confirmBrief(page);
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('battle');
   await page.evaluate(() => window.__g.scene.endBattle(true));
   await rawStep(page, 3.2);
@@ -416,6 +449,7 @@ test('post-battle ambush grace does not block the player from charging into a pa
   await page.evaluate(() => window.__g.scene.endBattle(false, true)); // retreat
   await rawStep(page, 3.2);
   expect(await page.evaluate(() => window.__g.sceneName)).toBe('world');
+  await dismissAftermath(page); // Plan 021: must close before any further world tick runs
 
   const grace = await page.evaluate(() => window.__g.scene.grace);
   expect(grace).toBeGreaterThan(0); // still inside the post-battle ambush-immunity window
@@ -430,6 +464,7 @@ test('post-battle ambush grace does not block the player from charging into a pa
     });
   });
   await rawStep(page, DT);
+  await confirmBrief(page);
   expect(await page.evaluate(() => window.__g.sceneName)).toBe('battle');
   assertNoRuntimeErrors(runtimeErrors);
 });
@@ -442,6 +477,7 @@ test('retreat leaves the fled-from party uncatchable until its own cooldown clea
   await page.evaluate(() => window.__g.scene.endBattle(false, true)); // retreat
   await rawStep(page, 3.2);
   expect(await page.evaluate(() => window.__g.sceneName)).toBe('world');
+  await dismissAftermath(page); // Plan 021: must close before any further world tick runs
 
   const restored = await page.evaluate(() => {
     const world = window.__g.scene;
@@ -463,6 +499,7 @@ test('retreat leaves the fled-from party uncatchable until its own cooldown clea
     window.__g.scene.parties.find(p => p.camp === 'c1').clashT = 0;
   });
   await rawStep(page, DT);
+  await confirmBrief(page);
   expect(await page.evaluate(() => window.__g.sceneName)).toBe('battle');
   assertNoRuntimeErrors(runtimeErrors);
 });
@@ -556,6 +593,7 @@ test('recapturing an occupied settlement survives an explicit save and Continue'
     world.grace = 0;
   }, { settlementId: OCCUPY_SETTLEMENT.id, sx: OCCUPY_SETTLEMENT.x, sy: OCCUPY_SETTLEMENT.y });
   await rawStep(page, DT);
+  await confirmBrief(page);
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('battle');
 
   await page.evaluate(() => window.__g.scene.endBattle(true));

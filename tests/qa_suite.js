@@ -350,7 +350,12 @@ function runQaSuiteImpl() {
     assert(target, 'could not find a party outside a settlement safe zone to engage');
     scene.hero.x = target.x; scene.hero.y = target.y; scene.grace = 0;
     g.step(0.1);
-    assert(g.scene() === 'battle', 'hero-party collision did not start a battle, scene=' + g.scene());
+    // Plan 021: the clash now opens a pre-battle brief first (world-scene modal) —
+    // confirm it to actually enter battle.
+    assert(g.scene() === 'world' && G.scene.screen && G.scene.screen.kind === 'brief',
+      'hero-party collision did not open the pre-battle brief, scene=' + g.scene());
+    g.tap('Enter');
+    assert(g.scene() === 'battle', 'confirming the brief did not start a battle, scene=' + g.scene());
     G.scene.endBattle(true);
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world after party battle, scene=' + g.scene());
@@ -370,7 +375,11 @@ function runQaSuiteImpl() {
     scene.hero.x = CAMP_C1.x; scene.hero.y = CAMP_C1.y;
     const goldBefore = scene.save.gold, troopsBefore = scene.save.troops.length;
     g.tap('KeyE');
-    assert(g.scene() === 'battle', 'KeyE near camp did not start a battle, scene=' + g.scene());
+    // Plan 021: E on a camp now opens the assault brief; confirm it to actually raid.
+    assert(g.scene() === 'world' && G.scene.screen && G.scene.screen.kind === 'brief',
+      'KeyE near camp did not open the assault brief, scene=' + g.scene());
+    g.tap('Enter');
+    assert(g.scene() === 'battle', 'confirming the assault brief did not start a battle, scene=' + g.scene());
     const nEnemies = G.scene.totalEnemies;
     G.scene.endBattle(true);
     g.step(3);
@@ -397,7 +406,10 @@ function runQaSuiteImpl() {
     const campState = scene.save.camps.find(c => c.id === 'c2');
     assert(campState && !campState.razed, 'camp c2 expected un-razed at fresh world start');
     g.tap('KeyE');
-    assert(g.scene() === 'battle', 'KeyE near camp c2 did not start a battle, scene=' + g.scene());
+    assert(g.scene() === 'world' && G.scene.screen && G.scene.screen.kind === 'brief',
+      'KeyE near camp c2 did not open the assault brief, scene=' + g.scene());
+    g.tap('Enter');
+    assert(g.scene() === 'battle', 'confirming the assault brief did not start a battle, scene=' + g.scene());
     G.scene.endBattle(true);
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world after camp raid, scene=' + g.scene());
@@ -433,10 +445,21 @@ function runQaSuiteImpl() {
     assert(target, 'no engageable party found');
     scene.hero.x = target.x; scene.hero.y = target.y; scene.grace = 0;
     g.step(0.1);
-    assert(g.scene() === 'battle', 'did not enter battle');
+    // Plan 021: the clash opens the pre-battle brief first; confirm it to enter battle.
+    assert(g.scene() === 'world' && G.scene.screen && G.scene.screen.kind === 'brief',
+      'party collision did not open the pre-battle brief, scene=' + g.scene());
+    g.tap('Enter');
+    assert(g.scene() === 'battle', 'confirming the brief did not start a battle, scene=' + g.scene());
     G.scene.endBattle(true);
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world');
+    // Plan 021: battle end now opens an aftermath modal, which freezes `grace` (it only
+    // decays inside updateParties, which the modal gate skips) — dismiss it before
+    // sampling decay below, or the timer would never move while it sits open.
+    assert(G.scene.screen && G.scene.screen.kind === 'aftermath',
+      'expected the aftermath screen to be open after battle end');
+    g.tap('Enter');
+    assert(!G.scene.screen, 'aftermath did not dismiss on confirm');
     // isolate the rest of the observation from any other roaming party
     G.scene.hero.x = SETTLEMENT_ASHFORD.x; G.scene.hero.y = SETTLEMENT_ASHFORD.y;
     const graceAtStart = G.scene.grace;
@@ -571,7 +594,11 @@ function runQaSuiteImpl() {
     // recapture: walking onto the occupier and winning restores the service
     scene.hero.x = party.x; scene.hero.y = party.y;
     g.step(0.1);
-    assert(g.scene() === 'battle', 'walking onto the occupier did not start a battle, scene=' + g.scene());
+    // Plan 021: the clash opens the pre-battle brief first; confirm it to enter battle.
+    assert(g.scene() === 'world' && G.scene.screen && G.scene.screen.kind === 'brief',
+      'walking onto the occupier did not open the pre-battle brief, scene=' + g.scene());
+    g.tap('Enter');
+    assert(g.scene() === 'battle', 'confirming the brief did not start a battle, scene=' + g.scene());
     G.scene.endBattle(true);
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world after defeating the occupier, scene=' + g.scene());
@@ -759,6 +786,11 @@ function runQaSuiteImpl() {
       for (let i = 0; i < 40; i++) {
         g.step(1);
         if (g.scene() !== 'world') { resolved = true; break; } // battle = pursuit succeeded
+        // Plan 021: reaching the hero now opens a pre-battle brief (still scene 'world')
+        // instead of committing straight to battle — equally conclusive proof the party
+        // was NOT stuck, since it demonstrably reached its target. Confirm it so the
+        // party is actually removed rather than leaving a screen open into the next case.
+        if (G.scene.screen && G.scene.screen.kind === 'brief') { g.tap('Enter'); resolved = true; break; }
         if (Math.hypot(p.x - c.px, p.y - c.py) > 200) { resolved = true; break; } // moving with purpose
       }
       assert(resolved, 'party frozen at (' + c.px + ',' + c.py + ') vs hero (' + c.hx + ',' + c.hy + ') — moved <200px in 40s');

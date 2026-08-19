@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=r4873a112c73f';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r4873a112c73f';
-import { Battle } from './battle.js?v=r4873a112c73f';
-import { World } from './world.js?v=r4873a112c73f';
-import { ACTIONS } from './input-actions.js?v=r4873a112c73f';
-import { createWebPlatform } from './platform/web-platform.js?v=r4873a112c73f';
-import { SaveRepository } from './persistence/save-repository.js?v=r4873a112c73f';
+import { PAL, WORLD } from './data.js?v=r4a9430492e50';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r4a9430492e50';
+import { Battle } from './battle.js?v=r4a9430492e50';
+import { World } from './world.js?v=r4a9430492e50';
+import { ACTIONS } from './input-actions.js?v=r4a9430492e50';
+import { createWebPlatform } from './platform/web-platform.js?v=r4a9430492e50';
+import { SaveRepository } from './persistence/save-repository.js?v=r4a9430492e50';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -252,7 +252,11 @@ class Game {
       // autosave the campaign every few seconds while on the map
       this.saveTimer += dt;
       if (this.saveTimer > 4) { this.saveTimer = 0; this.persistRun(); }
-      if (this._lastSave && this._lastSave.stats) this._lastSave.stats.playT += dt;
+      // Plan 021: a world-scene modal (brief/aftermath) genuinely pauses the campaign —
+      // leaving one open must not inflate reported campaign time. isBlocking() is a
+      // documented World predicate; other scenes (menu/battle/victory) never define it.
+      const blocking = !!(this.scene && typeof this.scene.isBlocking === 'function' && this.scene.isBlocking());
+      if (this._lastSave && this._lastSave.stats && !blocking) this._lastSave.stats.playT += dt;
     }
     this.camera.update(dt, this.shakeRng);
     this.input.endFrame();
@@ -608,6 +612,21 @@ window.game = {
         parties: sc.parties.length,
         camps: sc.save.camps,
         settlements: sc.save.settlements,
+        // Plan 021: the numbers actually drawn — same convention (bodies, not strength)
+        // and same heavy-marker rule (comp includes a brute) as World.drawParty/drawHero.
+        badges: {
+          hero: sc.save.troops.length + 1,
+          parties: sc.parties.map(p => ({ bodies: p.comp.length, heavy: p.comp.includes('brute') })),
+        },
+        // presentation-only hover model — exactly what drawHoverPanel would draw this frame
+        hover: sc.hoverTarget,
+        screen: sc.screen,
+        // Derived, not the raw internal bookkeeping (which may hold a live party
+        // reference) — battleCountAtRequest and whether that party is still on the map.
+        pending: sc.pending ? {
+          battleCountAtRequest: sc.pending.battleCountAtRequest,
+          partyStillPresent: sc.pending.descriptor.party ? sc.parties.includes(sc.pending.descriptor.party) : null,
+        } : null,
       };
     }
     return s;
@@ -650,6 +669,83 @@ window.game = {
         seed: 21, title: 'AMBUSHED!', arena: 'bridge', biome: 'meadow', ambush: true,
         onEnd: () => game.startWorld(null),
       });
+    } else if (name === 'world_brief') {
+      // Plan 021: opens the brief through the PRODUCTION requestBattle path (a real
+      // party clash or a real WORLD_PRIMARY press), never by assigning world.screen
+      // directly. `kind` selects which of the real trigger shapes to drive:
+      // 'party' (mutual skirmish, no withdraw), 'partyFlee' (caught a fleeing party,
+      // withdraw offered), 'ambush' (they caught you, no withdraw), 'campScouted' (an
+      // ordinary camp — standing close enough to assault it always auto-scouts it the
+      // same tick, so this is simply what a normal camp assault looks like), and
+      // 'stronghold' (Wolfsjaw: never auto-scouted by proximity, so its brief shows an
+      // unknown garrison unless it happens to have been scouted some other way first —
+      // it is the ONE camp decision 6's "unscouted force" case actually applies to).
+      if (opts && opts.seed != null) game.testSeed = opts.seed;
+      game.startWorld(null);
+      const world = game.scene;
+      const kind = (opts && opts.kind) || 'party';
+      if (kind === 'campScouted' || kind === 'stronghold') {
+        const campId = kind === 'stronghold' ? 'strong' : 'c1';
+        const camp = WORLD.camps.find(c => c.id === campId);
+        if (kind === 'stronghold') for (const c of world.save.camps) c.razed = c.id !== 'strong';
+        world.parties.length = 0; // isolate: no incidental party collision on the ride in
+        world.hero.x = camp.x; world.hero.y = camp.y;
+        world.grace = 0;
+        game.input.injectAction(ACTIONS.WORLD_PRIMARY, true);
+        game.update(DT);
+        game.input.injectAction(ACTIONS.WORLD_PRIMARY, false);
+      } else {
+        // Away from every settlement's canClash-blocking safe zone (WORLD.heroStart
+        // itself sits ~128px from Ashford, just inside the 130px radius).
+        world.hero.x = 1600; world.hero.y = 900;
+        const mine = world.myStrength();
+        const n = kind === 'ambush' ? Math.max(3, Math.ceil(mine * 1.6 / 5))
+          : kind === 'partyFlee' ? Math.max(1, Math.round(mine * 0.4))
+          : Math.max(1, Math.round(mine));
+        const comp = kind === 'ambush' ? Array.from({ length: n }, () => 'brute')
+          : Array.from({ length: n }, () => 'bandit');
+        world.parties.length = 0;
+        world.parties.push({
+          camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
+          comp, home: { x: WORLD.camps[0].x, y: WORLD.camps[0].y }, wander: null, wanderT: 999,
+          waryT: 0, clashT: 0, occupying: null, raid: null,
+          navT: 0, navGoal: null, navFor: null,
+          _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+        });
+        world.grace = 0;
+        game.update(DT);
+      }
+    } else if (name === 'world_aftermath') {
+      // Drives a real party clash through requestBattle -> confirm -> a real
+      // Battle.endBattle() -> the real onEnd path, never by assigning world.screen
+      // directly. opts.result selects the outcome: {victory:true} (default),
+      // {victory:false} (defeat), {retreated:true}.
+      if (opts && opts.seed != null) game.testSeed = opts.seed;
+      game.startWorld(null);
+      const world = game.scene;
+      // Away from every settlement's canClash-blocking safe zone (WORLD.heroStart
+      // itself sits ~128px from Ashford, just inside the 130px radius).
+      world.hero.x = 1600; world.hero.y = 900;
+      world.parties.length = 0;
+      world.parties.push({
+        camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
+        comp: ['bandit', 'bandit'], home: { x: WORLD.camps[0].x, y: WORLD.camps[0].y }, wander: null, wanderT: 999,
+        waryT: 0, clashT: 0, occupying: null, raid: null,
+        navT: 0, navGoal: null, navFor: null,
+        _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+      });
+      world.grace = 0;
+      game.update(DT); // opens the brief via the real party-clash path
+      game.input.injectAction(ACTIONS.CONFIRM, true);
+      game.update(DT); // confirms it -> real Battle.startBattle()
+      game.input.injectAction(ACTIONS.CONFIRM, false);
+      const battle = game.scene;
+      const result = (opts && opts.result) || {};
+      if (result.retreated) battle.endBattle(false, true);
+      else battle.endBattle(result.victory !== false);
+      // Flush the real end-banner hold (Battle gates onEnd on stateT > 2.6) so onEnd
+      // actually fires and the new World picks up game.pendingAftermath.
+      for (let i = 0; i < 200 && game.sceneName === 'battle'; i++) game.update(1 / 60);
     }
     game.draw();
     return game.sceneName;
