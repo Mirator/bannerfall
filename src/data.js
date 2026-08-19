@@ -10,6 +10,7 @@ export const PAL = {
     cream: '#F2E3C1',      // lit faces, roads
     accent: '#E0622F',     // trees, banners
     water: '#2E9BB5',
+    waterLight: '#7FD9E6',
     hero: '#FFD34D',
     enemy: '#C23A2E',
   },

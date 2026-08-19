@@ -1,8 +1,8 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4a9430492e50';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r4a9430492e50';
-import { SAVE_VERSION } from './save.js?v=r4a9430492e50';
-import { ACTIONS } from './input-actions.js?v=r4a9430492e50';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rcba1d144dd28';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rcba1d144dd28';
+import { SAVE_VERSION } from './save.js?v=rcba1d144dd28';
+import { ACTIONS } from './input-actions.js?v=rcba1d144dd28';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud,
   buildBriefModel, drawBriefPanel,
@@ -201,17 +201,19 @@ export class World {
     return false;
   }
 
+  // Shared by every river-collision query below — kept as one method so the 95px bridge
+  // exemption radius can never drift out of sync between blockedAt and riverBlockedAt.
+  nearAnyBridge(x, y) {
+    for (const [bx, by] of this.bridgePts) {
+      if (dist2(x, y, bx, by) < 95 * 95) return true;
+    }
+    return false;
+  }
   // Terrain rules: rivers block except within reach of a bridge; mountains and rocks are solid.
   // The bridge exemption (95) must overlap the river-block band (22) with margin from every
   // approach angle, or a dead pocket forms where units freeze against the bank.
   blockedAt(x, y) {
-    let nearBridge = false;
-    for (const [bx, by] of this.bridgePts) {
-      if (dist2(x, y, bx, by) < 95 * 95) { nearBridge = true; break; }
-    }
-    if (!nearBridge) {
-      if (this.riverDistanceAt(x, y, 22) < 22) return true;
-    }
+    if (!this.nearAnyBridge(x, y) && this.riverDistanceAt(x, y, 22) < 22) return true;
     for (const o of this.solids) {
       if (dist2(x, y, o.x, o.y) < o.r * o.r) return true;
     }
@@ -258,18 +260,19 @@ export class World {
     // Each river anchor is a control point. Consecutive quadratic pieces end at the midpoint
     // between controls, and the final piece explicitly reaches the final anchor. This keeps
     // the existing hand-authored course while making both map-edge endpoints canonical.
+    // Each piece must START where the previous one actually ended (a midpoint) — starting
+    // it back at the raw anchor instead double-backs the curve at every interior point.
     const rivers = this.rivers.map(r => {
       const pts = r.pts;
       const pieces = [];
+      let start = pts[0];
       for (let i = 0; i < pts.length - 2; i++) {
         const end = [(pts[i + 1][0] + pts[i + 2][0]) / 2, (pts[i + 1][1] + pts[i + 2][1]) / 2];
-        pieces.push(sampleQuadratic(pts[i], pts[i + 1], end));
+        pieces.push(sampleQuadratic(start, pts[i + 1], end));
+        start = end;
       }
       const last = pts.length - 1;
-      pieces.push(sampleQuadratic(
-        [(pts[last - 1][0] + pts[last][0]) / 2, (pts[last - 1][1] + pts[last][1]) / 2],
-        pts[last], pts[last]
-      ));
+      pieces.push(sampleQuadratic(start, pts[last], pts[last]));
       return join(pieces);
     });
     return { roads, rivers };
@@ -285,6 +288,12 @@ export class World {
     }
     return segments;
   }
+  // A bounded "is anything within `pad`" query, not a general nearest-distance function:
+  // the per-segment bbox cull is only guaranteed to keep every segment truly within `pad`
+  // (provable via triangle inequality, since a segment's bbox contains it), so a result is
+  // exact whenever it's < pad, but calling this with a pad smaller than the true distance
+  // can under-report (even return Infinity) instead of the real value. Every caller must
+  // compare the result against this same `pad`, never against a stricter threshold.
   riverDistanceAt(x, y, pad = 0) {
     let best = Infinity;
     for (const band of this.riverBands) {
@@ -303,14 +312,9 @@ export class World {
   // paths through the mountains (soft-steered around them instead of hard-blocked) — this
   // keeps the coherent river/bridge rule while making AI freezes structurally impossible.
   riverBlockedAt(x, y, pad) {
-    let nearBridge = false;
-    for (const [bx, by] of this.bridgePts) {
-      if (dist2(x, y, bx, by) < 95 * 95) { nearBridge = true; break; }
-    }
-    if (!nearBridge) {
-      if (this.riverDistanceAt(x, y, 22 + (pad || 0)) < 22 + (pad || 0)) return true;
-    }
-    return false;
+    if (this.nearAnyBridge(x, y)) return false;
+    const reach = 22 + (pad || 0);
+    return this.riverDistanceAt(x, y, reach) < reach;
   }
   blockedAtPad(x, y, pad) {
     return this.riverBlockedAt(x, y, pad);
@@ -425,9 +429,17 @@ export class World {
       }
       this.blotches.push(pts);
     }
+    // A ridge/forest origin can pass this check while its individual pieces (offset up to
+    // ~250px away below) still drift onto the river — see the per-piece recheck in each loop.
     const clearOf = (x, y, r) => {
       for (const s of WORLD.settlements) if (dist2(x, y, s.x, s.y) < (r + 130) ** 2) return false;
       for (const c of WORLD.camps) if (dist2(x, y, c.x, c.y) < (r + 130) ** 2) return false;
+      for (const riv of this.rivers) {
+        const pts = riv.pts;
+        for (let i = 1; i < pts.length; i++) {
+          if (distToSegment(x, y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) < r + 40) return false;
+        }
+      }
       return true;
     };
     // mountain ridges
@@ -435,14 +447,22 @@ export class World {
       const x = 100 + R() * (this.W - 200), y = 100 + R() * (this.H - 200);
       if (!clearOf(x, y, 80)) continue;
       const n = 2 + (R() * 3 | 0);
-      for (let j = 0; j < n; j++) items.push({ kind: 'mtn', x: x + j * 70 * (R() < 0.5 ? 1 : -1) + R() * 40, y: y + (R() - 0.5) * 60, s: 45 + R() * 55, z: 2 });
+      for (let j = 0; j < n; j++) {
+        const mx = x + j * 70 * (R() < 0.5 ? 1 : -1) + R() * 40, my = y + (R() - 0.5) * 60;
+        if (!clearOf(mx, my, 60)) continue;
+        items.push({ kind: 'mtn', x: mx, y: my, s: 45 + R() * 55, z: 2 });
+      }
     }
     // forests
     for (let i = 0; i < 40; i++) {
       const x = 80 + R() * (this.W - 160), y = 80 + R() * (this.H - 160);
       if (!clearOf(x, y, 40)) continue;
       const n = 2 + (R() * 4 | 0);
-      for (let j = 0; j < n; j++) items.push({ kind: 'tree', x: x + (R() - 0.5) * 110, y: y + (R() - 0.5) * 90, s: 14 + R() * 12, z: 1 });
+      for (let j = 0; j < n; j++) {
+        const tx = x + (R() - 0.5) * 110, ty = y + (R() - 0.5) * 90;
+        if (!clearOf(tx, ty, 20)) continue;
+        items.push({ kind: 'tree', x: tx, y: ty, s: 14 + R() * 12, z: 1 });
+      }
     }
     for (let i = 0; i < 30; i++) {
       const x = 80 + R() * (this.W - 160), y = 80 + R() * (this.H - 160);
@@ -1354,25 +1374,30 @@ export class World {
     ctx.fill(this._staticPaths.shade);
     ctx.restore();
 
-    // rivers with bridges
+    // rivers with bridges — solid ink-outlined bands, same hard-edge language as every
+    // other shape on this map (no alpha washes: layered translucency self-intersects into
+    // visible gaps at the river's sharper hand-authored bends, and reads as hazy against
+    // the flat-color rest of the scene). A narrow solid highlight + one animated dash pass
+    // is enough to sell current without stacking soft bands.
     for (let ri = 0; ri < this.rivers.length; ri++) {
       const r = this.rivers[ri];
-      ctx.strokeStyle = P.water; ctx.lineWidth = 34; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      ctx.stroke(this._staticPaths.rivers[ri]);
-      ctx.strokeStyle = '#7FD9E6'; ctx.lineWidth = 5;
-      ctx.setLineDash([12, 26]);
-      ctx.stroke(this._staticPaths.rivers[ri]);
-      ctx.setLineDash([]);
-      for (const [bx, by] of r.bridges) {
-        ctx.save();
-        ctx.translate(bx, by);
-        ctx.fillStyle = P.cream;
-        ctx.fillRect(-26, -20, 52, 40);
-        ctx.strokeStyle = P.ink; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.moveTo(-26, -20); ctx.lineTo(26, -20); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-26, 20); ctx.lineTo(26, 20); ctx.stroke();
-        ctx.restore();
-      }
+      const path = this._staticPaths.rivers[ri];
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      // crisp ink bank, solid like every other outline on the map
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 38;
+      ctx.stroke(path);
+      // deep water body
+      ctx.strokeStyle = P.water; ctx.lineWidth = 32;
+      ctx.stroke(path);
+      // shallow center channel — a solid lighter band reads as depth, not a soft glow
+      ctx.strokeStyle = P.waterLight; ctx.lineWidth = 12;
+      ctx.stroke(path);
+      // flowing current: a dashed pass drifting downstream sells live water
+      ctx.strokeStyle = P.cream; ctx.lineWidth = 4;
+      ctx.setLineDash([12, 26]); ctx.lineDashOffset = -this.time * 50;
+      ctx.stroke(path);
+      ctx.setLineDash([]); ctx.lineDashOffset = 0;
+      for (const [bx, by] of r.bridges) this.drawBridge(ctx, bx, by);
     }
 
     // roads between settlements
@@ -1439,6 +1464,39 @@ export class World {
     } else {
       this.screenButtons = null;
     }
+  }
+
+  // a built wooden crossing, not a bare cream slab: planks, rail posts, and piers
+  // sunk into the water, plus a cast shadow so the deck reads as sitting above the current
+  drawBridge(ctx, bx, by) {
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.fillStyle = P.ink; ctx.globalAlpha = 0.22;
+    ctx.beginPath(); ctx.ellipse(2, 4, 29, 23, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1;
+    const planks = 6, pw = 52 / planks;
+    for (let i = 0; i < planks; i++) {
+      ctx.fillStyle = i % 2 ? '#E8D7A8' : P.cream;
+      ctx.fillRect(-26 + i * pw, -20, pw, 40);
+    }
+    ctx.strokeStyle = P.ink; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.4;
+    for (let i = 1; i < planks; i++) {
+      ctx.beginPath(); ctx.moveTo(-26 + i * pw, -18); ctx.lineTo(-26 + i * pw, 18); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = P.ink; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-26, -20); ctx.lineTo(26, -20); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-26, 20); ctx.lineTo(26, 20); ctx.stroke();
+    ctx.lineWidth = 2.5;
+    for (let px = -19; px <= 19; px += 12.5) {
+      ctx.beginPath(); ctx.moveTo(px, -20); ctx.lineTo(px, -25); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px, 20); ctx.lineTo(px, 25); ctx.stroke();
+    }
+    ctx.fillStyle = P.ink;
+    for (const [px, py] of [[-26, -20], [26, -20], [-26, 20], [26, 20]]) {
+      ctx.beginPath(); ctx.arc(px, py, 3.5, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
   }
 
   drawSettlement(ctx, s) {
