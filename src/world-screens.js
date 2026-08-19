@@ -9,6 +9,28 @@ import { SQUAD_LABELS } from './battle.js?v=r4873a112c73f';
 
 const ENEMY_LABELS = Object.freeze({ bandit: 'bandit', raider: 'raider', wolf: 'wolf', brute: 'brute' });
 const ENEMY_LABELS_PLURAL = Object.freeze({ bandit: 'bandits', raider: 'raiders', wolf: 'wolves', brute: 'brutes' });
+const UNIT_LABELS = Object.freeze({ spear: 'spearman', archer: 'archer', knight: 'knight' });
+const UNIT_LABELS_PLURAL = Object.freeze({ spear: 'spearmen', archer: 'archers', knight: 'knights' });
+
+// Frequency-count rows for a flat list of dead enemy types (result.deadTypes already
+// names exactly who died — no before/after subtraction needed).
+function countRows(list, singular, plural) {
+  const counts = countByType(list, Object.keys(singular));
+  return Object.keys(singular).filter(t => counts[t] > 0)
+    .map(t => ({ count: counts[t], label: counts[t] === 1 ? singular[t] : plural[t] }));
+}
+// Before/after subtraction for the player roster: "losses" is not directly reported,
+// only the pre-battle roster and result.survivors.
+function lossRows(beforeTypes, afterTypes, singular, plural) {
+  const before = countByType(beforeTypes, Object.keys(singular));
+  const after = countByType(afterTypes, Object.keys(singular));
+  const rows = [];
+  for (const t of Object.keys(singular)) {
+    const lost = Math.max(0, before[t] - (after[t] || 0));
+    if (lost > 0) rows.push({ count: lost, label: lost === 1 ? singular[t] : plural[t] });
+  }
+  return rows;
+}
 
 function countByType(list, types) {
   const counts = Object.create(null);
@@ -168,6 +190,7 @@ export function buildBriefModel(descriptor, save) {
     approach: descriptor.approach || 'E',
     canWithdraw: !!descriptor.canWithdraw,
     odds,
+    options: { confirm: true, withdraw: !!descriptor.canWithdraw },
     player: { roster: playerRoster, bodies: playerBodies, strength: playerStr },
     enemy: { roster: enemyRoster, bodies: enemyBodies, strength: enemyStr, scouted },
   };
@@ -216,17 +239,59 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.font = '600 13px system-ui, sans-serif';
   ctx.fillStyle = '#F2E3C1';
   ctx.fillText(`Arena: ${model.arena || 'field'}`, W / 2, colY + 110);
-  ctx.font = '800 15px system-ui, sans-serif';
-  const footerY = py + ph - 30;
-  ctx.fillText(
-    model.canWithdraw ? 'ENTER — Confirm    ·    X — Withdraw' : 'ENTER — Confirm',
-    W / 2, footerY,
-  );
+
+  // Real clickable buttons, not just a text footer — updateWorldScreens() hit-tests
+  // clicks against the rects returned here (drawn last frame, one frame of lag, the
+  // same idiom src/main.js's menuHitRegions already uses).
+  const footerY = py + ph - 30, btnH = 30;
+  ctx.font = '800 13px system-ui, sans-serif';
+  const confirmLabel = 'ENTER — Confirm', withdrawLabel = 'X — Withdraw';
+  const confirmW = ctx.measureText(confirmLabel).width + 28;
+  let confirmRect, withdrawRect = null;
+  if (model.canWithdraw) {
+    const withdrawW = ctx.measureText(withdrawLabel).width + 28, gap = 20;
+    const startX = W / 2 - (confirmW + gap + withdrawW) / 2;
+    confirmRect = { x: startX, y: footerY - btnH / 2, w: confirmW, h: btnH };
+    withdrawRect = { x: startX + confirmW + gap, y: footerY - btnH / 2, w: withdrawW, h: btnH };
+  } else {
+    confirmRect = { x: W / 2 - confirmW / 2, y: footerY - btnH / 2, w: confirmW, h: btnH };
+  }
+  drawButton(ctx, confirmRect, confirmLabel, true);
+  if (withdrawRect) drawButton(ctx, withdrawRect, withdrawLabel, false);
+  ctx.textBaseline = 'alphabetic';
+  return { confirm: confirmRect, withdraw: withdrawRect };
+}
+
+function drawButton(ctx, rect, label, accent) {
+  ctx.fillStyle = accent ? '#FFD34D' : '#F2E3C1';
+  rrect(ctx, rect.x, rect.y, rect.w, rect.h, 8); ctx.fill();
+  ctx.strokeStyle = '#1E2A4A'; ctx.lineWidth = 2;
+  rrect(ctx, rect.x, rect.y, rect.w, rect.h, 8); ctx.stroke();
+  ctx.fillStyle = '#1E2A4A';
+  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 1);
 }
 
 // ---------------------------------------------------------------- aftermath
+// `payload` (game.pendingAftermath, built in World's onEnd closure and consumed/cleared
+// in the next World's constructor) carries raw snapshots; this builds the display model
+// — per-side casualties by unit type — the same way hover/brief build theirs from raw
+// state rather than being handed already-formatted text.
 export function buildAftermathModel(payload) {
-  return { kind: 'aftermath', ...payload };
+  const playerLosses = lossRows(payload.preTroopTypes, payload.survivorTypes, UNIT_LABELS, UNIT_LABELS_PLURAL);
+  const enemyLosses = countRows(payload.deadTypes, ENEMY_LABELS, ENEMY_LABELS_PLURAL);
+  return {
+    kind: 'aftermath',
+    victory: !!payload.victory,
+    retreated: !!payload.retreated,
+    loot: payload.loot || 0,
+    heroHp: payload.heroHp,
+    heroMaxHp: payload.heroMaxHp,
+    consequence: payload.consequence || null,
+    playerLosses,
+    enemyLosses,
+  };
 }
 
 export function drawAftermathPanel(ctx, cam, model) {
@@ -287,7 +352,11 @@ export function drawAftermathPanel(ctx, cam, model) {
     if (line) ctx.fillText(line, W / 2, lineY);
   }
   ctx.textAlign = 'center';
-  ctx.font = '800 15px system-ui, sans-serif';
-  ctx.fillStyle = '#F2E3C1';
-  ctx.fillText('ENTER — Continue', W / 2, py + ph - 24);
+  const continueLabel = 'ENTER — Continue';
+  ctx.font = '800 13px system-ui, sans-serif';
+  const btnW = ctx.measureText(continueLabel).width + 28, btnH = 30, footerY = py + ph - 24;
+  const confirmRect = { x: W / 2 - btnW / 2, y: footerY - btnH / 2, w: btnW, h: btnH };
+  drawButton(ctx, confirmRect, continueLabel, true);
+  ctx.textBaseline = 'alphabetic';
+  return { confirm: confirmRect, withdraw: null };
 }

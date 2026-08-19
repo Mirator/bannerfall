@@ -1,8 +1,8 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rcfb47ddabe5b';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rcfb47ddabe5b';
-import { SAVE_VERSION } from './save.js?v=rcfb47ddabe5b';
-import { ACTIONS } from './input-actions.js?v=rcfb47ddabe5b';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4a9430492e50';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r4a9430492e50';
+import { SAVE_VERSION } from './save.js?v=r4a9430492e50';
+import { ACTIONS } from './input-actions.js?v=r4a9430492e50';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud,
   buildBriefModel, drawBriefPanel,
@@ -658,8 +658,12 @@ export class World {
     return Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'E' : 'W') : (dy >= 0 ? 'S' : 'N');
   }
 
-  startBattle(comp, title, onWinExtra, arena, ambush, partyMeta, subtitle) {
+  startBattle(comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief = false) {
     const save = this.save;
+    // Plan 021 step 9: the roster ENTERING the fight, captured before anything about it
+    // can change — result.survivors alone can't say how many of each type were lost.
+    const preTroopTypes = save.troops.map(t => t.type);
+    const enemyCompSnapshot = comp.slice();
     save.x = this.hero.x; save.y = this.hero.y;
     save.battleCount = (save.battleCount || 0) + 1;
     this.persistParties();
@@ -674,6 +678,10 @@ export class World {
       biome: this.biomeAt(this.hero.x),
       ambush,
       subtitle,
+      // Plan 021 step 5: setup.brief keys the battle intro's trim so the three
+      // scenario('battle_*') visual baselines (never routed through a brief) are
+      // provably untouched — only fights reached via confirmBrief() set this.
+      brief,
       deploy: this.pendingDeploy,
       approach: this.pendingApproach || 'E',
       // (pending* are per-battle one-shots)
@@ -776,10 +784,127 @@ export class World {
           // after the teleport so restoration cannot accidentally use the new hero position.
           restoreRoamingParty();
         }
+        // Plan 021 step 9: the aftermath payload rides on game.pendingAftermath, never on
+        // `save` (no new save field, no schema bump — decision 9). Skipped when save.won:
+        // a won stronghold raid's final victory screen already IS that fight's aftermath,
+        // and consuming save.toast here would rob the pre-existing one-frame toast replay
+        // of its message for no reason (the victory scene replaces it immediately anyway).
+        if (!save.won) {
+          const consequence = save.toast || null;
+          save.toast = null; // consumed — must not be shown again behind a frozen msgT timer
+          this.game.pendingAftermath = {
+            victory: result.victory,
+            retreated: result.retreated,
+            loot: result.loot || 0,
+            preTroopTypes,
+            survivorTypes: (result.survivors || []).map(t => t.type),
+            deadTypes: (result.deadTypes || []).slice(),
+            enemyCompSnapshot,
+            heroHp: save.heroHp, // POST-regen — result.heroHp would contradict the HUD
+            heroMaxHp: save.heroMaxHp,
+            consequence,
+          };
+        }
         this.game.startWorld(save);
       },
     });
   }
+
+  // Plan 021 decision 8: World.startBattle() keeps committing immediately — legacy QA
+  // records and window.__g call it directly and assert battle on the next line. Every
+  // map-initiated fight now reaches it only through requestBattle()/confirmBrief() below.
+  //
+  // `descriptor` fields: title, subtitle, arena, ambush, approach, deploy, comp (display
+  // snapshot; null means unscouted), canWithdraw, partyMeta, and EITHER `party` (a live
+  // roaming-party reference, for a clash) OR `campId` (for a camp/stronghold assault) —
+  // never both. onWinExtra is precomputed for a party (nothing mutates it while the brief
+  // blocks every other world phase) but rebuilt at confirm for a camp via
+  // campVictoryExtra(), since an unscouted garrison does not exist yet at request time.
+  requestBattle(descriptor) {
+    this.pending = { descriptor, battleCountAtRequest: this.save.battleCount || 0 };
+    this.screen = buildBriefModel(descriptor, this.save);
+  }
+
+  // Cancel charges the fled-from party (decision 6): it saw you flinch. Camps have no
+  // equivalent cooldown field — cancelling one just closes the brief, and the garrison
+  // (rolled only at confirm) stays unrolled, so it is never revealed for free.
+  cancelBrief() {
+    const d = this.pending && this.pending.descriptor;
+    if (d && d.party) {
+      d.party.clashT = BALANCE.battleGrace;
+      d.party.waryT = 25;
+    }
+    this.screen = null;
+    this.pending = null;
+  }
+
+  confirmBrief() {
+    const d = this.pending.descriptor;
+    let comp = d.comp, onWinExtra = d.onWinExtra;
+    if (d.party) {
+      // Hold the party OBJECT, resolve indexOf at confirm — nothing else can touch
+      // `this.parties` while the brief blocks every other world phase, but bail cleanly
+      // rather than assume the index is still valid.
+      const idx = this.parties.indexOf(d.party);
+      if (idx < 0) { this.screen = null; this.pending = null; return; }
+      this.parties.splice(idx, 1);
+    } else if (d.campId) {
+      const camp = WORLD.camps.find(c => c.id === d.campId);
+      const st = this.save.camps.find(c => c.id === d.campId);
+      // Decision 6: the garrison roll for an unscouted camp happens HERE, at confirm —
+      // never at request time, or backing out would permanently reveal it for free.
+      if (!st.garrison) st.garrison = this.rollGarrison(camp);
+      comp = st.garrison; // the live alias startBattle()'s onEnd already expects
+      onWinExtra = this.campVictoryExtra(camp, st, comp);
+    }
+    // Splice/garrison-roll above must finish before startBattle() calls persistParties()
+    // and persistRun() (AGENTS.md: finish all map-side mutations, then persist once,
+    // while still `world`) — the encounter must already be gone from the checkpoint it
+    // writes, not merely gone from the next one.
+    this.pendingApproach = d.approach;
+    this.pendingDeploy = d.deploy;
+    this.screen = null;
+    this.pending = null;
+    this.startBattle(comp, d.title, onWinExtra, d.arena, d.ambush, d.partyMeta, d.subtitle, true);
+  }
+
+  // Named modal phase (Plan 021 decision 7/step 6): first phase in update(), and it must
+  // return immediately whenever a screen is open so the SAME keypress that just opened
+  // or resolved a screen cannot also fall through into a world phase this tick. Opening
+  // a screen is handled by the callers (requestBattle()'s two call sites already `return
+  // true` right after calling it); this method only ever handles a screen that is
+  // ALREADY open, so returning true unconditionally on that branch is correct.
+  updateWorldScreens(inp) {
+    if (!this.screen) return false;
+    const btn = this.screenButtons || {};
+    const clickedRect = (r) => !!r && inp.mouse.clicked &&
+      inp.mouse.x >= r.x && inp.mouse.x <= r.x + r.w && inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h;
+    if (this.screen.kind === 'brief') {
+      const canWithdraw = !!(this.pending && this.pending.descriptor.canWithdraw);
+      if (canWithdraw && (inp.pressedAction(ACTIONS.WITHDRAW) || clickedRect(btn.withdraw))) {
+        this.cancelBrief();
+        return true;
+      }
+      if (inp.pressedAction(ACTIONS.CONFIRM) || clickedRect(btn.confirm)) {
+        this.confirmBrief();
+        return true;
+      }
+      return true;
+    }
+    if (this.screen.kind === 'aftermath') {
+      if (inp.pressedAction(ACTIONS.CONFIRM) || clickedRect(btn.confirm)) {
+        this.screen = null;
+        return true;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // Documented predicate (Plan 021 step 6) so main.js can gate stats.playT accrual
+  // without reaching into World internals — a modal genuinely pauses the campaign, so
+  // leaving it open must not inflate reported campaign time.
+  isBlocking() { return !!this.screen; }
 
   updateHeroMovement(dt, inp, h) {
     // Movement is the first world phase: interactions and party AI observe its result.
@@ -858,20 +983,13 @@ export class World {
     return s;
   }
 
-  updateCampInteraction(inp, settlement) {
-    const camp = this.nearCamp();
-    if (!camp || !inp.pressedAction(ACTIONS.WORLD_PRIMARY) || settlement) return false;
-    const razedCount = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
-    if (camp.stronghold && razedCount < 3) {
-      this.say(`Wolfsjaw won't fall while its camps still feed it — cut the supply lines (${razedCount}/3)`);
-      return true;
-    }
-    const st = this.save.camps.find(c => c.id === camp.id);
-    if (!st.garrison) st.garrison = this.rollGarrison(camp);
-    const comp = st.garrison;
-    this.pendingApproach = this.approachTo(camp.x, camp.y);
-    this.pendingDeploy = 4; // YOU are storming THEM — they scramble to arms, not a parade formup
-    this.startBattle(comp, camp.stronghold ? `ASSAULT ON ${camp.name.toUpperCase()}` : 'RAID THE CAMP', () => {
+  // Plan 021: the razing/absorption logic that used to be an inline onWinExtra closure
+  // built at press time. It now must be rebuildable at CONFIRM time (decision 6: the
+  // garrison roll for an unscouted camp is deferred to confirm, so `comp` may not exist
+  // yet when the brief opens), so it lives here as a plain method parameterized on the
+  // camp/save-camp-state/comp it needs instead of closing over press-time locals.
+  campVictoryExtra(camp, st, comp) {
+    return () => {
       st.razed = true;
       this.save.gold += camp.stronghold ? 200 : 60;
       if (camp.stronghold) this.save.won = true;
@@ -902,14 +1020,45 @@ export class World {
         this.save.toast = `Camp razed (${razedNow}/3)!` +
           (freed > 0 ? ` ${freed} freed captives join your warband.` : '') + remnantNote;
       }
-    }, 'camp', false, { campId: camp.id },
-    camp.stronghold ? 'The final battle — for the realm!' : 'One of the 3 camps — raze it to reach Wolfsjaw');
+    };
+  }
+
+  // Plan 021 decision 8: WORLD_PRIMARY on a camp/stronghold now opens the brief instead
+  // of committing immediately. `comp` in the descriptor is display-only — an unscouted
+  // camp shows unknown in the brief (decision 6) and the real roll happens at confirm.
+  updateCampInteraction(inp, settlement) {
+    const camp = this.nearCamp();
+    if (!camp || !inp.pressedAction(ACTIONS.WORLD_PRIMARY) || settlement) return false;
+    const razedCount = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
+    if (camp.stronghold && razedCount < 3) {
+      this.say(`Wolfsjaw won't fall while its camps still feed it — cut the supply lines (${razedCount}/3)`);
+      return true;
+    }
+    const st = this.save.camps.find(c => c.id === camp.id);
+    this.requestBattle({
+      campId: camp.id,
+      title: camp.stronghold ? `ASSAULT ON ${camp.name.toUpperCase()}` : 'RAID THE CAMP',
+      subtitle: camp.stronghold ? 'The final battle — for the realm!' : 'One of the 3 camps — raze it to reach Wolfsjaw',
+      arena: 'camp',
+      ambush: false,
+      approach: this.approachTo(camp.x, camp.y),
+      deploy: 4, // YOU are storming THEM — they scramble to arms, not a parade formup
+      comp: st.garrison ? st.garrison.slice() : null,
+      canWithdraw: true, // explicit WORLD_PRIMARY press — always player-initiated
+      partyMeta: { campId: camp.id },
+    });
     return true;
   }
 
   update(dt) {
     this.time += dt;
     const inp = this.game.input, h = this.hero;
+    // Plan 021: the brief/aftermath modal phase runs FIRST, mirroring the
+    // updateCampInteraction pre-empt idiom below. Returning true here blocks every other
+    // world phase for the tick — hero movement, interactions, party AI (so `grace` freezes
+    // for free, since it only decays inside updateParties), and spawns/victory — so a
+    // modal genuinely pauses the campaign rather than just visually covering it.
+    if (this.updateWorldScreens(inp)) return;
     if (this.msgT > 0) this.msgT -= dt;
     this.updateHeroMovement(dt, inp, h);
     const settlement = this.updateSettlementInteractions(inp);
@@ -1095,26 +1244,34 @@ export class World {
       const isOccupier = !!p.occupying;
       const canClash = (p.clashT || 0) <= 0 && (isOccupier || !this.nearSettlement(130)) && dh < 46;
       if ((engaged || (canClash && dh < 46)) && canClash) {
-        const idx = this.parties.indexOf(p);
-        this.parties.splice(idx, 1);
-        this.persistParties();
+        // Plan 021 decision 8/step 7: request instead of committing. The party splice,
+        // persistParties(), battleCount++ and persistRun() all move to confirmBrief() —
+        // this party stays exactly where it is, still fightable, until the player decides.
         const ambushed = p.mood === 'chase';
         const caughtThem = p.mood === 'flee';
         const occupiedSettlement = isOccupier ? WORLD.settlements.find(s => s.id === p.occupying) : null;
-        this.pendingApproach = this.approachTo(p.x, p.y);
-        this.pendingDeploy = caughtThem ? 0 : undefined; // undefined = mutual 8s formup
-        this.startBattle(p.comp,
-          occupiedSettlement ? `RETAKE ${occupiedSettlement.name.toUpperCase()}`
+        this.requestBattle({
+          party: p,
+          title: occupiedSettlement ? `RETAKE ${occupiedSettlement.name.toUpperCase()}`
             : ambushed ? 'AMBUSHED!' : caughtThem ? 'RUN THEM DOWN!' : 'BANDIT SKIRMISH',
-          occupiedSettlement ? () => {
+          subtitle: occupiedSettlement ? 'Drive them out and restore the settlement’s service'
+            : caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress',
+          arena: null,
+          ambush: ambushed,
+          approach: this.approachTo(p.x, p.y),
+          deploy: caughtThem ? 0 : undefined, // undefined = mutual 8s formup
+          comp: p.comp.slice(),
+          // Plan 021 decision 5: withdraw is offered only when the player initiated the
+          // fight — an explicit camp/stronghold press (handled in updateCampInteraction)
+          // or running down a fleeing party. An ambush or a mutual skirmish is committed.
+          canWithdraw: caughtThem,
+          onWinExtra: occupiedSettlement ? () => {
             const st = this.save.settlements.find(s => s.id === occupiedSettlement.id);
             if (st) st.occupied = false;
             this.save.toast = `${occupiedSettlement.name} is free again — its service resumes.`;
           } : null,
-          null, ambushed,
-          { camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT, occupying: p.occupying },
-          occupiedSettlement ? 'Drive them out and restore the settlement’s service'
-            : caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress');
+          partyMeta: { camp: p.camp, x: p.x, y: p.y, comp: p.comp.slice(), home: p.home, waryT: p.waryT, occupying: p.occupying },
+        });
         return true;
       }
     }
@@ -1272,10 +1429,15 @@ export class World {
     }
     this.drawHud(ctx);
     if (this.hoverTarget) drawHoverPanel(ctx, cam, this.hoverTarget);
-    // World-scene modals (Plan 021 Slice B) draw last, over everything else.
+    // World-scene modals draw last, over everything else. Each draw*Panel returns the
+    // screen-space button rects it just laid out; updateWorldScreens() hit-tests clicks
+    // against whatever was drawn last frame, the same lag the existing menuHitRegions
+    // pattern (src/main.js) already accepts.
     if (this.screen) {
-      if (this.screen.kind === 'brief') drawBriefPanel(ctx, cam, this.screen);
-      else if (this.screen.kind === 'aftermath') drawAftermathPanel(ctx, cam, this.screen);
+      if (this.screen.kind === 'brief') this.screenButtons = drawBriefPanel(ctx, cam, this.screen);
+      else if (this.screen.kind === 'aftermath') this.screenButtons = drawAftermathPanel(ctx, cam, this.screen);
+    } else {
+      this.screenButtons = null;
     }
   }
 

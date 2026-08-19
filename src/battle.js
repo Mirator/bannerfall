@@ -1,8 +1,8 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rcfb47ddabe5b';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rcfb47ddabe5b';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=rcfb47ddabe5b';
-import { ACTIONS } from './input-actions.js?v=rcfb47ddabe5b';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4a9430492e50';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r4a9430492e50';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r4a9430492e50';
+import { ACTIONS } from './input-actions.js?v=r4a9430492e50';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -506,7 +506,13 @@ export class Battle {
       // Orders land during the intro banner. They used to be swallowed for ~1.1s - exactly
       // while the banner tells the player to position their men.
       this.updateCommandPhase(this.game.input);
-      if (this.stateT > 1.1 || (this.stateT > 0.6 && this.game.input.pressed.size > 0)) { this.state = 'fight'; this.game.sfx.horn(175); }
+      // Plan 021 step 5: a fight reached through the pre-battle brief already showed
+      // both rosters and the N vs M total once — shorten the intro so the beat isn't
+      // stated a third time (brief -> this banner -> the deploy countdown detail line).
+      // Keyed strictly off setup.brief so scenario('battle_*') (never brief-routed) is
+      // provably untouched.
+      const introDur = this.setup.brief ? 0.6 : 1.1;
+      if (this.stateT > introDur || (this.stateT > 0.6 && this.game.input.pressed.size > 0)) { this.state = 'fight'; this.game.sfx.horn(175); }
       this.updateCamera(dt);
       this.particles.update(dt);
       return true;
@@ -1833,7 +1839,11 @@ export class Battle {
       const k = Math.min(1, this.stateT / 0.35);
       ctx.globalAlpha = k;
       ctx.fillStyle = P.ink;
-      ctx.fillRect(0, Hh * 0.36, W, this.setup.subtitle ? 104 : 86);
+      // Plan 021 step 5: a brief-routed fight already stated N vs M once (and the
+      // deploy countdown states it a third time in words) — drop this repeat, keyed
+      // strictly off setup.brief so the un-briefed baselines are pixel-identical.
+      const showCount = !this.setup.brief;
+      ctx.fillRect(0, Hh * 0.36, W, this.setup.subtitle ? (showCount ? 104 : 82) : (showCount ? 86 : 64));
       ctx.fillStyle = P.cream;
       ctx.font = '900 34px system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -1842,10 +1852,12 @@ export class Battle {
         ctx.font = '700 15px system-ui, sans-serif';
         ctx.fillStyle = P.hero;
         ctx.fillText(this.setup.subtitle, W / 2, Hh * 0.36 + 60);
-        ctx.fillStyle = P.cream;
-        ctx.font = '600 14px system-ui, sans-serif';
-        ctx.fillText(`${this.troops.length + 1} vs ${this.enemies.length}`, W / 2, Hh * 0.36 + 84);
-      } else {
+        if (showCount) {
+          ctx.fillStyle = P.cream;
+          ctx.font = '600 14px system-ui, sans-serif';
+          ctx.fillText(`${this.troops.length + 1} vs ${this.enemies.length}`, W / 2, Hh * 0.36 + 84);
+        }
+      } else if (showCount) {
         ctx.font = '600 15px system-ui, sans-serif';
         ctx.fillText(`${this.troops.length + 1} vs ${this.enemies.length}`, W / 2, Hh * 0.36 + 62);
       }
