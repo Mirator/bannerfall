@@ -92,11 +92,82 @@ Note that both legacy determinism records drive `Digit2` (CHARGE), which ignores
 `slotPos()`. That blind spot hid decorative camera shake leaking into fight outcomes
 through `Camera.toWorld`; the harness now replays all three stances for that reason.
 
+## Map legibility, hover, and the pre-battle brief/aftermath (Plan 021)
+
+`tests/e2e/world-hover.spec.js` covers the presentation-only map hover system:
+no panel until the pointer actually moves (asserted at boot and after
+stepping with the pointer untouched), composition/fighting-weight/intent for
+a roaming party, "you count for 3" for the warband, nothing compositional for
+an unscouted camp, the true composition for a scouted one, Wolfsjaw reading
+unscouted before its camps are razed, and that `state()` after N steps is
+byte-identical whether the pointer is parked on a party or on empty ground —
+hover cannot touch simulation. Its fixtures read a live position (a roaming
+party moves in real time) and act on it inside one `page.evaluate()` call,
+since splitting that across two round trips races the live `requestAnimationFrame`
+loop.
+
+`tests/e2e/world-screens.spec.js` covers the pre-battle brief and the
+post-battle aftermath, both built through the same production
+`requestBattle`/`confirmBrief`/`onEnd` path `scenario('world_brief', {kind,
+seed})` and `scenario('world_aftermath', {seed, result})` drive (never by
+assigning `world.screen` directly): requesting opens the brief without
+mutating anything; confirming persists exactly once while still `world`,
+after the encounter is already removed from `this.parties`/rolled into
+`st.garrison`, then enters battle; withdraw keeps the party present, charged
+(`clashT`, `waryT`), and blocks an instant rematch; withdraw is offered only
+for a camp/stronghold assault and a caught-fleeing party, never an ambush or
+a mutual skirmish; an unscouted stronghold brief shows the enemy as unknown
+while an ordinary camp (auto-scouted the instant you are close enough to
+assault it) always shows the real composition; the aftermath blocks every
+world phase and freezes `grace` while open, decays only after dismissal, and
+is suppressed in favor of the victory scene when `save.won`.
+
+Two structural specs extend to cover the modal: `world-battle-seams.spec.js`
+asserts the wrapped world phases produce an empty order while a brief blocks
+the pipeline, and `performance.spec.js` adds a `<12000` `beginPath` budget
+(separate from the existing untouched `<10000` case) for a world frame with
+the hover latch on and a brief open. `input-actions.spec.js` compares the
+named `withdraw` action against its `KeyX` binding cancelling a brief.
+
+New visual baselines: `world-brief-party.png` (a caught-fleeing-party brief,
+withdraw offered), `world-brief-camp-withdraw.png` (a camp assault brief),
+`world-aftermath-victory.png`, `world-aftermath-defeat.png`. The existing
+menu and all three battle baselines are unchanged — confirmed by inspecting
+`npm run test:visual` after the change: the battle intro's `setup.brief`-keyed
+trim (dropping the now-thrice-stated `N vs M` line and shortening the intro
+banner for a brief-routed fight) only ever applies when `setup.brief` is
+true, which `scenario('battle_*')` never sets. The two pre-existing world
+baselines (`world-overview.png`, `world-bridge.png`) also needed no update
+for the body-count badges or the heavy-unit marker — reviewed with no diff
+artifacts generated, same as Plan 020's spawn-tier change before it.
+
+Five legacy records in `tests/qa_suite.js` gained a confirm (and, for the
+grace-timer record, also a dismiss) step, since a party clash or a
+`WORLD_PRIMARY` press now opens a brief instead of committing straight to
+battle: `world_party_battle_decreases_party_count_by_one`,
+`world_camp_raid_razes_camp_and_grants_captives`,
+`world_camp_raid_captives_capped_at_army_cap`,
+`world_grace_timer_active_after_battle_then_decays`, and
+`world_party_break_off_occupies_settlement_and_recapture_restores_service`.
+`world_no_party_freezes_at_rivers` — not one of those five — also needed its
+success criterion extended: reaching the hero now opens a brief (still scene
+`world`) rather than committing to battle, which is equally conclusive proof
+a party was not stuck (it demonstrably reached its target), so the record now
+accepts an open brief as a third resolution alongside "battle started" and
+"moved with purpose". `tests/e2e/campaign-persistence.spec.js`'s
+`installUniqueParty` gained the same confirm step, and two of its raw
+collision fixtures plus `stance-balance.spec.js`'s camp-raid policy sweep
+needed the same treatment to keep exercising real battle entry (the latter's
+own numbers are unchanged — the fixture was silently measuring zero runs
+before the fix, not a balance change).
+
 ## Canvas visual regression
 
-`tests/e2e/visual-regression.spec.js` captures five representative, deterministic
-Canvas states: a seeded world overview, a road/river/bridge landmark, a small
-road battle, a large night camp battle, and a bridge ambush. Each scenario is
+`tests/e2e/visual-regression.spec.js` captures representative, deterministic
+Canvas states: a seeded world overview, a road/river/bridge landmark, a
+pre-battle brief for a fleeing party and one for a camp assault, a victory and
+a defeat aftermath (Plan 021), a small road battle, a large night camp
+battle, and a bridge ambush. Each scenario is
 created through the existing `window.game.scenario()` API, advanced with the
 synchronous fixed-step `window.game.step()`, then frozen before capture so rAF
 and watchdog timing cannot affect the image. The test replaces only the page's

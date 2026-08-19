@@ -56,12 +56,26 @@ rendering, collision, navigation, and movement bonuses cannot diverge.
 Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
 
-Simulation ownership: `World.update()` is the ordered campaign pipeline. Hero
+Simulation ownership: `World.update()` is the ordered campaign pipeline.
+`updateWorldScreens()` (Plan 021) runs FIRST and returns `true` whenever a
+world-scene modal — the pre-battle brief or the post-battle aftermath — is
+open, pre-empting every phase below it for that tick, the same pre-empt idiom
+`updateCampInteraction()` already uses. It must never fall through in the same
+tick a screen opens, or that tick's opening keypress is still in `pressed` and
+instantly resolves the screen it just opened. After the gate: hero
 movement/terrain runs first, settlement and scouting interactions run second,
 camp assault input runs third, roaming-party AI owns navigation and encounter
 handoff, then party spawning and camera/effects maintenance finish the tick.
 Keep campaign arrays (`parties`, `save.troops`, `save.camps`) and their timers in
 those world phases; do not add a second map snapshot boundary.
+
+A world-scene modal genuinely pauses the campaign, not just visually covers
+it: gating the pipeline on `updateWorldScreens()` freezes `grace` for free
+(it only decays inside `updateParties()`, which never runs while a screen is
+open), and `World.isBlocking()` — `true` whenever `this.screen` is set — lets
+`main.js` gate `stats.playT` accrual the same way, so leaving a screen open
+cannot inflate reported campaign time. Both freezes are deliberate and
+covered by tests, not incidental side effects to "fix".
 
 `Battle.update()` owns the ordered fight pipeline. `updateSceneState()` handles
 intro/end gates, `updateActivePhases()` runs live commands, hero, troop/enemy,
@@ -89,6 +103,18 @@ literals, and re-run `tests/e2e/stance-balance.spec.js`.
 FOLLOW formation slots. It must never include the shake offset that `apply()` adds at
 render time. Presentation may read simulation state; simulation must not read
 presentation. A shake term there let a decorative RNG stream change fight outcomes.
+
+The world map's hover panel (Plan 021) is presentation-only state
+(`World.pointerBootX/Y`, `pointerEverMoved`, `hoverTarget`), written and read
+only in `World.draw()`. Its boot-safe latch compares the pointer's current,
+persistent `input.mouse.x/y` against their value at `World` construction
+rather than the transient `input.mouse.moved` flag: `Input.endFrame()` clears
+`moved` at the end of every `Game.update()` call, and a render only ever
+happens after at least one `update()` in the same tick, so `moved` is already
+false again by the time `draw()` would read it in the ordinary case of one
+update per rendered frame. The coordinate comparison sidesteps that ordering
+entirely while staying just as boot-safe, since the default pointer sits on
+the hero token (canvas centre) at construction.
 
 Canvas visual QA lives in `tests/e2e/visual-regression.spec.js` and runs in CI
 on every pull request as part of `npm test`; use `npm run test:visual` for the
@@ -151,6 +177,26 @@ coherent map checkpoint; it does not serialize or resume an in-progress battle.
 Adding resumable battles or pending encounters requires an explicit versioned
 save-schema design, migration, and dedicated coverage rather than expanding
 this checkpoint casually.
+
+Plan 021 splits that transition into a request and a commit. `World.startBattle()`
+keeps committing immediately and unconditionally — legacy QA records and
+`window.__g` call it directly and assert `battle` on the next line, so its
+signature and behavior stay put. Every map-initiated fight instead reaches it
+through `World.requestBattle(descriptor)`, which opens the pre-battle brief
+(a world-scene modal; `sceneName` stays `world`) and defers the encounter
+removal, `battleCount` increment, and `persistRun()` to `confirmBrief()`. The
+descriptor holds everything the eventual `startBattle()` call needs — comp
+snapshot, title/subtitle/arena/approach/deploy, `canWithdraw`, and either a
+live `party` reference (index resolved at confirm, bailing cleanly if it is
+no longer present) or a `campId` (whose garrison, if unscouted, is rolled only
+at confirm — never at request — so backing out never reveals it for free).
+Cancelling charges the party the same way a spooked flee already does
+(`clashT = BALANCE.battleGrace`, `waryT = 25`) and leaves every camp/save field
+untouched. The aftermath modal that follows battle end rides on
+`game.pendingAftermath`, consumed and cleared in the next `World`'s
+constructor beside the existing toast replay — never on `save`, so no schema
+change and a refresh mid-aftermath simply loses the screen. It is skipped
+when `save.won`: the final victory screen already is that fight's aftermath.
 
 Roaming-party lifecycle: removing a party for an encounter is temporary unless
 all enemies die. Both retreat and ordinary defeat restore the surviving enemy
