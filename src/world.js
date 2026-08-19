@@ -1,8 +1,13 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4873a112c73f';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r4873a112c73f';
-import { SAVE_VERSION } from './save.js?v=r4873a112c73f';
-import { ACTIONS } from './input-actions.js?v=r4873a112c73f';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rcfb47ddabe5b';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rcfb47ddabe5b';
+import { SAVE_VERSION } from './save.js?v=rcfb47ddabe5b';
+import { ACTIONS } from './input-actions.js?v=rcfb47ddabe5b';
+import {
+  hoverTargetAt, drawHoverPanel, isOverHud,
+  buildBriefModel, drawBriefPanel,
+  buildAftermathModel, drawAftermathPanel,
+} from './world-screens.js?v=r4873a112c73f';
 
 const P = PAL.world;
 
@@ -15,6 +20,25 @@ export class World {
     this.W = WORLD.w; this.H = WORLD.h;
     this.time = 0;
     this.msg = null; this.msgT = 0;
+    // Plan 021: presentation-only hover state. Written and read only in draw() —
+    // AGENTS.md: "simulation must not read presentation." pointerEverMoved is a latch,
+    // not `input.mouse.moved` itself: `moved` is cleared by endFrame() (engine.js) at
+    // the end of EVERY Game.update() call, and Game.draw() always runs after at least
+    // one update() in the same tick whenever a render actually happens — so by the time
+    // draw() can read it, `moved` has already gone false again for the ordinary case of
+    // one update per rendered frame. `mouse.x`/`mouse.y` are not reset by endFrame(),
+    // only `moved`/`clicked` are, so the latch instead remembers the pointer's position
+    // at construction time and fires once the CURRENT position differs from it — this
+    // is unaffected by the update/draw ordering and still boot-safe, since the default
+    // pointer sits on the hero token (canvas centre) at construction.
+    this.pointerBootX = game.input.mouse.x;
+    this.pointerBootY = game.input.mouse.y;
+    this.pointerEverMoved = false;
+    this.hoverTarget = null;
+    // world-scene modals (Plan 021 Slice B): the pre-battle brief and the aftermath.
+    // sceneName stays 'world' for both — see requestBattle()/updateWorldScreens().
+    this.screen = null;
+    this.pending = null;
 
     // persistent campaign state (survives battles)
     this.save = save || {
@@ -47,6 +71,16 @@ export class World {
     this.simRng = makeRng(deriveSeed(campaignSeed, RNG_DOMAINS.WORLD_SIM));
     this.fxRng = makeRng(deriveSeed(campaignSeed, RNG_DOMAINS.WORLD_FX));
     if (this.save.toast) { this.say(this.save.toast, 3.5); this.save.toast = null; }
+    // Plan 021 design decision 9: the aftermath payload rides on game.pendingAftermath,
+    // never on `save` — a refresh mid-aftermath loses the screen, which is correct (the
+    // checkpoint is a map snapshot, not a battle). Consumed and cleared exactly once,
+    // beside the toast replay above, and only when this world is not the victory ending
+    // (a won stronghold raid's aftermath IS the victory screen — see updateCampInteraction/
+    // startVictory ordering in update()).
+    if (game.pendingAftermath && !this.save.won) {
+      this.screen = buildAftermathModel(game.pendingAftermath);
+    }
+    game.pendingAftermath = null;
 
     // scenery uses a fixed authored seed: it is static map input, not a campaign
     // stream, so changing effects can never perturb collision geometry.
@@ -814,7 +848,10 @@ export class World {
       if (st.razed || st.garrison || c.stronghold) continue;
       if (dist2(this.hero.x, this.hero.y, c.x, c.y) < 340 * 340) {
         st.garrison = this.rollGarrison(c);
-        this.say(`Your scouts count the tents — the camp holds ~${this.strength(st.garrison)} bandits`, 3);
+        // Plan 021 design decision 3: report an honest headcount (bodies), not the
+        // strength scalar the toast used to print while calling it a headcount.
+        const bodies = st.garrison.length, heavy = st.garrison.includes('brute');
+        this.say(`Your scouts count the tents — ${bodies} raider${bodies === 1 ? '' : 's'} hold the camp${heavy ? ', brutes among them' : ''}`, 3);
         this.particles.ring(c.x, c.y, 50, P.ink, 0.5, 3);
       }
     }
@@ -1123,6 +1160,20 @@ export class World {
   // ---------------------------------------------------------------- draw
   draw(ctx) {
     const cam = this.game.camera, h = this.hero;
+    const inp = this.game.input;
+    // Plan 021: presentation-only hover pass, computed and stored ONLY here — never in
+    // update() (AGENTS.md: "simulation must not read presentation"). See the constructor
+    // comment for why the latch compares persistent pointer coordinates rather than the
+    // transient `moved` flag. Also suppressed while a modal is open or the pointer sits
+    // on a HUD rect.
+    this.pointerEverMoved = this.pointerEverMoved ||
+      inp.mouse.x !== this.pointerBootX || inp.mouse.y !== this.pointerBootY;
+    if (this.pointerEverMoved && !this.screen && !isOverHud(inp.mouse.x, inp.mouse.y, cam.w, cam.h)) {
+      const wp = cam.toWorld(inp.mouse.x, inp.mouse.y);
+      this.hoverTarget = hoverTargetAt(this, wp.x, wp.y);
+    } else {
+      this.hoverTarget = null;
+    }
     ctx.fillStyle = P.ink;
     ctx.fillRect(0, 0, cam.w, cam.h);
     cam.apply(ctx);
@@ -1220,6 +1271,12 @@ export class World {
       ctx.beginPath(); ctx.arc(-16 + ox, cam.h + 20 + oy, r, 0, TAU); ctx.fill();
     }
     this.drawHud(ctx);
+    if (this.hoverTarget) drawHoverPanel(ctx, cam, this.hoverTarget);
+    // World-scene modals (Plan 021 Slice B) draw last, over everything else.
+    if (this.screen) {
+      if (this.screen.kind === 'brief') drawBriefPanel(ctx, cam, this.screen);
+      else if (this.screen.kind === 'aftermath') drawAftermathPanel(ctx, cam, this.screen);
+    }
   }
 
   drawSettlement(ctx, s) {
@@ -1391,8 +1448,12 @@ export class World {
     ctx.beginPath(); ctx.arc(p.x + Math.cos(p.facing) * 8, p.y - 18 + bobY, 5, 0, TAU); ctx.fill();
     ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.arc(p.x, p.y - 20 + bobY, 6, 0, TAU); ctx.fill();
-    // strength badge (Bannerlord party size): red = stronger than you, ink = weaker
+    // Plan 021 design decision 1: the badge shows BODIES (p.comp.length), never strength —
+    // strength stays internal and keeps driving stronger/outmatched/the odds pill below.
+    // Strength itself is unchanged and still computed here for those judgments.
     const pStr = this.strength(p.comp), mineStr = this.myStrength();
+    const bodies = p.comp.length;
+    const heavy = p.comp.includes('brute');
     const stronger = pStr > mineStr * 1.15;
     // Plan 020 design decision 4: an explicit outmatched marker, readable at scouting
     // range (i.e. as soon as the party is on screen at all) rather than only once the
@@ -1401,9 +1462,17 @@ export class World {
     const outmatched = pStr > mineStr * 1.3;
     ctx.fillStyle = stronger ? P.enemy : P.ink;
     ctx.beginPath(); ctx.arc(p.x + 16, p.y - 26, 9.5, 0, TAU); ctx.fill();
+    // Plan 021 design decision 2: a brute-bearing party gets a non-numeric heavy-unit
+    // marker — a dark ring around the badge — instead of a second number. Drawn against
+    // the background (radius 12.5 vs the badge's 9.5), so it reads regardless of the
+    // badge's own fill color.
+    if (heavy) {
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(p.x + 16, p.y - 26, 12.5, 0, TAU); ctx.stroke();
+    }
     ctx.fillStyle = P.cream;
     ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(String(pStr), p.x + 16, p.y - 25);
+    ctx.fillText(String(bodies), p.x + 16, p.y - 25);
     if (outmatched) {
       ctx.fillStyle = P.enemy;
       ctx.font = '800 13px system-ui, sans-serif';
@@ -1481,12 +1550,13 @@ export class World {
     ctx.fillStyle = P.enemy;
     const wave = Math.sin(this.time * 6) * 2;
     ctx.beginPath(); ctx.moveTo(h.x - 7, h.y - 52 + bobY); ctx.lineTo(h.x + 12, h.y - 46 + bobY + wave * 0.3); ctx.lineTo(h.x - 7, h.y - 40 + bobY); ctx.closePath(); ctx.fill();
-    // warband strength badge — same scale as enemy badges, so numbers compare honestly
+    // Plan 021 design decision 1: warband badge shows BODIES (troops + the hero
+    // himself), same convention as party/camp badges — strength stays internal.
     ctx.fillStyle = P.ink;
     ctx.beginPath(); ctx.arc(h.x + 18, h.y - 30, 9.5, 0, TAU); ctx.fill();
     ctx.fillStyle = P.hero;
     ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(String(this.myStrength()), h.x + 18, h.y - 29);
+    ctx.fillText(String(this.save.troops.length + 1), h.x + 18, h.y - 29);
   }
 
   drawHud(ctx) {
@@ -1523,10 +1593,13 @@ export class World {
     } else if (camp) {
       const razedC = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
       const est = this.garrisonStrength(camp), mine = this.myStrength();
-      const odds = est == null ? 'ride closer to scout it' : est > mine ? '⚠ they outmatch you — recruit first?' : 'a fair fight';
+      // Plan 021 design decision 3: proximity prompts carry only the odds WORD, never a
+      // strength number — badges are bodies, prompts are words, hover shows both. Hover
+      // the camp for the full breakdown.
+      const odds = est == null ? 'ride closer to scout it' : est > mine * 1.15 ? '⚠ they outmatch you' : est < mine * 0.85 ? 'favored' : 'an even fight';
       lines = camp.stronghold
-        ? (razedC < 3 ? [`${camp.name} — enemy stronghold`, `Its camps still feed it: cut the supply lines (${razedC}/3)`] : [`${camp.name} — enemy stronghold`, `Garrison ~${est == null ? '?' : est} vs your ${mine}`, 'E Storm the hold!'])
-        : [`Bandit camp — garrison ${est == null ? 'unscouted' : '~' + est + ' vs your ' + mine + ' (' + odds + ')'}`, 'E Raid the camp (counts toward the 3)'];
+        ? (razedC < 3 ? [`${camp.name} — enemy stronghold`, `Its camps still feed it: cut the supply lines (${razedC}/3)`] : [`${camp.name} — enemy stronghold`, odds, 'E Storm the hold!'])
+        : [`Bandit camp — ${odds}`, 'E Raid the camp (counts toward the 3)'];
     }
     if (lines) {
       const bw = 420, bx = W / 2 - bw / 2, by = H - 96;

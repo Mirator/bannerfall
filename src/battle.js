@@ -1,15 +1,17 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4873a112c73f';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r4873a112c73f';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r4873a112c73f';
-import { ACTIONS } from './input-actions.js?v=r4873a112c73f';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rcfb47ddabe5b';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rcfb47ddabe5b';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=rcfb47ddabe5b';
+import { ACTIONS } from './input-actions.js?v=rcfb47ddabe5b';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
 // One squad per unit type, in HUD order. Derived from the unit table so a new unit
 // type can never exist without a squad to command it.
 const SQUAD_TYPES = Object.freeze(Object.keys(UNIT_TYPES));
-const SQUAD_LABELS = Object.freeze({ spear: 'SPEARS', archer: 'BOWS', knight: 'HORSE' });
+// Exported so world-screens.js (Plan 021) can label the player's roster on the brief
+// screen with the exact same strings instead of duplicating them.
+export const SQUAD_LABELS = Object.freeze({ spear: 'SPEARS', archer: 'BOWS', knight: 'HORSE' });
 
 // Stance trade-offs. A braced melee line hits harder against anything closing faster than
 // BRACE_SPEED, and a standing bow line shoots tighter than a walking one. See plans/019 for

@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=r4873a112c73f';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r4873a112c73f';
-import { Battle } from './battle.js?v=r4873a112c73f';
-import { World } from './world.js?v=r4873a112c73f';
-import { ACTIONS } from './input-actions.js?v=r4873a112c73f';
-import { createWebPlatform } from './platform/web-platform.js?v=r4873a112c73f';
-import { SaveRepository } from './persistence/save-repository.js?v=r4873a112c73f';
+import { PAL } from './data.js?v=rcfb47ddabe5b';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rcfb47ddabe5b';
+import { Battle } from './battle.js?v=rcfb47ddabe5b';
+import { World } from './world.js?v=rcfb47ddabe5b';
+import { ACTIONS } from './input-actions.js?v=rcfb47ddabe5b';
+import { createWebPlatform } from './platform/web-platform.js?v=rcfb47ddabe5b';
+import { SaveRepository } from './persistence/save-repository.js?v=rcfb47ddabe5b';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -608,6 +608,16 @@ window.game = {
         parties: sc.parties.length,
         camps: sc.save.camps,
         settlements: sc.save.settlements,
+        // Plan 021: the numbers actually drawn — same convention (bodies, not strength)
+        // and same heavy-marker rule (comp includes a brute) as World.drawParty/drawHero.
+        badges: {
+          hero: sc.save.troops.length + 1,
+          parties: sc.parties.map(p => ({ bodies: p.comp.length, heavy: p.comp.includes('brute') })),
+        },
+        // presentation-only hover model — exactly what drawHoverPanel would draw this frame
+        hover: sc.hoverTarget,
+        screen: sc.screen,
+        pending: sc.pending,
       };
     }
     return s;
