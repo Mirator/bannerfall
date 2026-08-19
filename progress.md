@@ -93,3 +93,10 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
   no occupier left to fight.
 - No STOP condition was hit; the sanctuary exemption for occupiers is a single added
   boolean in the existing `canClash` check, with no weakening of the safe zone otherwise.
+
+## Plan 020 review fixes
+
+- Verified the Sonnet implementation independently: tiers swept over 10 seeds span 0.43-2.14 with all three bands present and the curve rising 1.13 -> 1.54 as camps fall; break-off, occupation, service suspension, safe-zone exemption and recapture all drive end to end; the deadlock invariant holds with three settlements occupied and a break-off refused the last free one.
+- Fixed: `enforceBeatableFloor()` silently rewrote a scouted party (a lone 14-strength band became a 4). It now adds an even-tier party and only rewrites an existing one at the party cap, sharing `partyCap()`/`liveCamps()` with the spawn timer.
+- Fixed: an occupying party covered its settlement's name chip. Arrival snaps to `occupierPost()`, 64px north of centre with compass fallbacks.
+- `npm test` 54/54, `test:tooling` 7/7, release token verified, `git diff --check` clean.

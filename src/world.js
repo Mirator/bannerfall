@@ -1,8 +1,8 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r2fb26069b18e';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r2fb26069b18e';
-import { SAVE_VERSION } from './save.js?v=r2fb26069b18e';
-import { ACTIONS } from './input-actions.js?v=r2fb26069b18e';
+import { PAL, WORLD, UNIT_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4873a112c73f';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r4873a112c73f';
+import { SAVE_VERSION } from './save.js?v=r4873a112c73f';
+import { ACTIONS } from './input-actions.js?v=r4873a112c73f';
 
 const P = PAL.world;
 
@@ -487,6 +487,19 @@ export class World {
   // occupies or is travelling to raid it. A break-off only ever targets a settlement
   // when at least one other stays fully unclaimed afterward, so no sequence of
   // simultaneous break-offs can ever occupy every settlement at once.
+  // Where a raiding party sits once it has taken a settlement: north of centre, clear of
+  // the name/OCCUPIED chips below. Falls back around the compass if terrain blocks it.
+  occupierPost(settlement) {
+    const R = 64;
+    const candidates = [[0, -R], [-R, -R * 0.5], [R, -R * 0.5], [-R, 0], [R, 0]];
+    for (const [dx, dy] of candidates) {
+      const x = clamp(settlement.x + dx, 60, this.W - 60);
+      const y = clamp(settlement.y + dy, 60, this.H - 60);
+      if (!this.blockedAt(x, y)) return { x, y };
+    }
+    return { x: settlement.x, y: Math.max(60, settlement.y - R) };
+  }
+
   isSettlementClaimed(id) {
     const st = this.save.settlements.find(s => s.id === id);
     return !!(st && st.occupied) || this.parties.some(p => p.raid === id || p.occupying === id);
@@ -502,11 +515,35 @@ export class World {
     const mine = this.myStrength();
     const beatable = mine * BALANCE.beatablePartyRatio;
     if (this.parties.some(p => this.strength(p.comp) <= beatable)) return;
+    const { even } = BALANCE.partyTiers;
+    const evenBand = () => even.min + this.simRng() * (even.max - even.min);
+    // Prefer ADDING a beatable target over rewriting one the player may already have
+    // read off a badge. `rollGarrison` sets the house rule that what you scouted is what
+    // you fight, and silently weakening a party the player scouted breaks the same trust:
+    // a lone 14-strength band used to become a 4 while the player watched.
+    const alive = this.liveCamps();
+    if (alive.length && this.parties.length < this.partyCap()) {
+      const camp = alive[(this.simRng() * alive.length) | 0];
+      this.spawnParty(camp, evenBand());
+      this.particles.ring(camp.x, camp.y, 40, P.ink, 0.5, 3);
+      this.persistParties();
+      return;
+    }
+    // Only at the party cap, with no room to add one, is an existing band rewritten.
     let weakest = this.parties[0];
     for (const p of this.parties) if (this.strength(p.comp) < this.strength(weakest.comp)) weakest = p;
-    const { even } = BALANCE.partyTiers;
-    const target = Math.max(2, Math.min(24, Math.round(mine * (even.min + this.simRng() * (even.max - even.min)))));
+    const target = Math.max(2, Math.min(24, Math.round(mine * evenBand())));
     weakest.comp = this.rollComp(target);
+  }
+
+  // Camps still fielding parties, and the ceiling on how many may be alive at once.
+  // Shared by the spawn timer and the floor guarantee so the cap formula exists once.
+  liveCamps() {
+    return WORLD.camps.filter(c => !c.stronghold && !this.save.camps.find(s => s.id === c.id).razed);
+  }
+  partyCap() {
+    const alive = this.liveCamps();
+    return alive.length ? 2 + alive.length * 2 : 0;
   }
 
   // brutes hit ~5x harder than a bandit; knights count double. Badges show THIS number.
@@ -885,6 +922,13 @@ export class World {
             st.occupied = true;
             p.occupying = p.raid;
             p.raid = null;
+            // Post at the gate rather than freezing wherever the beeline happened to end.
+            // The settlement's name and OCCUPIED chips are drawn BELOW it, so an occupier
+            // that stopped anywhere south of centre covered its own settlement's name.
+            // A canonical post also makes the fight to retake a settlement look the same
+            // every time instead of depending on the approach angle.
+            const post = this.occupierPost(target);
+            p.x = post.x; p.y = post.y; p.vx = 0; p.vy = 0;
             goal = { x: p.x, y: p.y }; speed = 0; p.mood = 'occupying';
             this.say(`${target.name} falls under raider occupation — its service is suspended!`, 3.2);
           } else {
@@ -1045,8 +1089,8 @@ export class World {
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       this.spawnT = 40;
-      const alive = WORLD.camps.filter(c => !c.stronghold && !this.save.camps.find(s => s.id === c.id).razed);
-      if (alive.length && this.parties.length < 2 + alive.length * 2) {
+      const alive = this.liveCamps();
+      if (alive.length && this.parties.length < this.partyCap()) {
         // Plan 020: the old fair-band guarantee (forcing almost every spawn into a
         // narrow 0.7-1.2x band) is gone. Every spawn draws from the weighted tiers in
         // spawnParty()/rollPartyBand(); enforceBeatableFloor() is the only remaining

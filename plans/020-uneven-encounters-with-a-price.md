@@ -90,6 +90,27 @@ These are settled; an executor changing one needs a new review.
 - If Plan 019 is not DONE, stop. Uneven fights without squad-level grip are unfair, not difficult — that ordering is the whole reason this plan is second.
 - If the sanctuary exemption in design decision 5 cannot be made to work without letting ordinary parties clash inside settlements, stop and redesign the recapture path rather than weakening the safe zone.
 
+## Post-implementation review fixes
+
+Independent verification of the slice confirmed every acceptance criterion (tiers swept over
+10 seeds produce weak/even/strong at 0.43-2.14 with the curve rising 1.13 -> 1.54 as camps
+fall; break-off, occupation, service suspension, safe-zone exemption and recapture all drive
+end to end; the deadlock invariant holds with three settlements occupied). Two defects were
+found and fixed on top:
+
+1. **The floor guarantee silently rewrote a scouted party.** With a single strong party on the
+   map, `enforceBeatableFloor()` downgraded it: a 14-strength band became a 4 while the player
+   watched its badge. That contradicts the house rule `rollGarrison()` documents - what you
+   scouted is what you fight. The floor now **adds** an even-tier party (sharing the spawn
+   timer's `partyCap()`/`liveCamps()` helpers) and only rewrites an existing band as a last
+   resort when the cap leaves no room. Verified: the 14 survives and a beatable 5 appears; at
+   the cap of 8 the downgrade fallback still fires.
+2. **An occupier covered its own settlement's name.** Parties froze wherever their beeline
+   ended, and the name/OCCUPIED chips draw *below* a settlement, so any occupier stopping south
+   of centre clipped the label. Arrival now snaps the party to `occupierPost()` - 64px north of
+   centre, compass fallbacks if terrain blocks it - which also makes retaking a settlement look
+   the same regardless of approach angle. Verified across all four settlements.
+
 ## Verification
 
 ```powershell

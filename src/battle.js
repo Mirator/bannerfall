@@ -1,8 +1,8 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r2fb26069b18e';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r2fb26069b18e';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r2fb26069b18e';
-import { ACTIONS } from './input-actions.js?v=r2fb26069b18e';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r4873a112c73f';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r4873a112c73f';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r4873a112c73f';
+import { ACTIONS } from './input-actions.js?v=r4873a112c73f';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
