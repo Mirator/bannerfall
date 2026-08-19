@@ -15,3 +15,6 @@ node_modules/
 test-results/
 playwright-report/
 blob-report/
+
+# scratch Playwright specs (captures, balance sweeps) — see playwright.config.js testIgnore
+tests/e2e/zz-*.spec.js

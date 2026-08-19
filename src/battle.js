@@ -1,10 +1,42 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rfa73e792131b';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rfa73e792131b';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=rfa73e792131b';
-import { ACTIONS } from './input-actions.js?v=rfa73e792131b';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rada68ae0c75b';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rada68ae0c75b';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=rada68ae0c75b';
+import { ACTIONS } from './input-actions.js?v=rada68ae0c75b';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
+
+// One squad per unit type, in HUD order. Derived from the unit table so a new unit
+// type can never exist without a squad to command it.
+const SQUAD_TYPES = Object.freeze(Object.keys(UNIT_TYPES));
+const SQUAD_LABELS = Object.freeze({ spear: 'SPEARS', archer: 'BOWS', knight: 'HORSE' });
+
+// Stance trade-offs. A braced melee line hits harder against anything closing faster than
+// BRACE_SPEED, and a standing bow line shoots tighter than a walking one. See plans/019 for
+// measured effects.
+//
+// BRACE_SPEED only ever catches wolves (158). Bandits are 92, raiders 82 and brutes 55, so
+// nothing else in the roster can trigger it: this is a wolf counter, not a general
+// anti-charge rule. HOLD does still beat CHARGE against brutes, but through slam avoidance
+// and charge exposure rather than bracing. Do not describe it as a brute counter.
+const BRACE_SPEED = 120;
+const BRACE_BONUS = 1.8;
+const BOW_SPREAD = 0.12;
+const BOW_SPREAD_BRACED = 0.05;
+// Men running at the enemy have their shields down and their formation open. This is what
+// CHARGE pays for its speed, and the reason ordering everyone to charge is not free.
+const CHARGE_EXPOSURE = 1.35;
+// How long shields stay down after a charge order is rescinded.
+const CHARGE_RECOVER = 1.1;
+// A fight in which nobody has died for this long is not a battle, it is a grind.
+const STALL_NO_DEATH = 14;
+// What each order costs or buys, per squad kind — shown on the squad's own HUD row so the
+// trade-off is legible during the fight. FOLLOW is deliberately absent: it is the neutral
+// order and has nothing to advertise.
+const STANCE_NOTES = Object.freeze({
+  hold: { melee: 'braced', ranged: 'steady aim' },
+  charge: { melee: 'shields down', ranged: 'bows down' },
+});
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -35,8 +67,15 @@ export class Battle {
     this.state = 'intro';
     this.stateT = 0;
     this.freeze = 0;               // hit-stop timer
+    // Squads are derived from unit type, never assigned: a recruit's role IS his squad,
+    // so `save.troops` stays `{type, hp}` and no save-schema version is spent here.
+    // `this.command` remains the all-squads aggregate that the QA and input-action
+    // contracts assert on; a per-squad order only ever narrows what it describes.
+    this.squads = Object.create(null);
+    for (const type of SQUAD_TYPES) this.squads[type] = { stance: 'follow', holdX: null, holdY: null };
+    this.selectedSquad = null;   // null = the whole warband
+
     this.command = 'follow';
-    this.holdPoint = null;
     this.commandFlash = { text: '', t: 0 };
     this.projectiles = [];
     this.time = 0;
@@ -79,6 +118,8 @@ export class Battle {
       x: cx0 - adx * this.W * 0.24, y: cy0 - ady * this.H * 0.26, vx: 0, vy: 0, facing: 0,
       hp: heroHp, maxHp: heroMaxHp,
       swingT: 0, dashT: 0, dashCdT: 0, hurtT: 0, bob: 0, iframesT: 0,
+      // last heading actually travelled - drives formation, unlike `facing` which follows aim
+      travelFacing: 0,
     };
 
     // terrain: arena template (road | camp | village) + scattered props
@@ -212,6 +253,7 @@ export class Battle {
     this.kills = 0;
     this.deadEnemyTypes = [];   // exactly which enemy types died — not just how many
     this.lastAction = 0;      // sim time of the last hit dealt or taken
+    this.lastDeath = 0;       // sim time anyone last actually died
     this.bloodlust = false;   // stalemate breaker: survivors stop kiting and close in
     // deploy window scales with WHO holds the initiative:
     // mutual field battle = 8s (both sides form up), you storming them = 4s scramble,
@@ -227,6 +269,7 @@ export class Battle {
       type, team: 'friendly', d, x: this.hero.x - 60 - this.simRng() * 80, y: this.hero.y + (this.simRng() - 0.5) * 160,
       vx: 0, vy: 0, hp: hp != null ? hp : d.hp, maxHp: d.hp, cd: this.simRng() * d.cooldown,
       facing: 0, slot: null, target: null, lunge: 0, bob: this.fxRng() * TAU, holdX: null, holdY: null, flash: 0,
+      exposedT: 0,
     });
   }
   spawnEnemy(type, x, y) {
@@ -258,7 +301,14 @@ export class Battle {
   slotPos(t) {
     const h = this.hero;
     const back = Math.atan2(-h.vy, -h.vx);
-    const a = (len(h.vx, h.vy) > 30) ? back : h.facing + Math.PI;
+    // Formation hangs off the direction the commander is TRAVELLING, never where he is
+    // aiming. Aim comes from the cursor through `Camera.toWorld`, whose origin is the
+    // fit-to-action camera - which is positioned from the viewport. Reading `h.facing`
+    // here made formation, and so fight outcomes, depend on window size: the same seed
+    // and stance measured 41.2s/1 lost at 1280x720 and 28.4s/0 lost at 1600x900.
+    // Presentation must not reach the simulation. `travelFacing` holds the last real
+    // heading, so an idle commander keeps the line he rode in with.
+    const a = (len(h.vx, h.vy) > 30) ? back : h.travelFacing + Math.PI;
     const s = t.slot;
     const behind = 40 + s.row * 30;
     const side = (s.col - (s.rowCount - 1) / 2) * 30;
@@ -267,19 +317,55 @@ export class Battle {
     return { x: px, y: py };
   }
 
-  issueCommand(cmd) {
+  // The order every squad is currently under, or 'mixed' when they diverge. This is
+  // what `this.command` reports, so a caller reading it always sees the whole warband.
+  aggregateStance() {
+    let seen = null;
+    // Manned squads only. Counting empty ones left `command` stuck on 'mixed' for the rest
+    // of a fight once a squad was wiped, which also silently disabled the hold banner.
+    const manned = this.mannedSquads();
+    for (const type of (manned.length ? manned : SQUAD_TYPES)) {
+      const stance = this.squads[type].stance;
+      if (seen === null) seen = stance;
+      else if (seen !== stance) return 'mixed';
+    }
+    return seen || 'follow';
+  }
+
+  squadStance(t) {
+    // never fall back to `command`: it can read 'mixed', which is not a stance
+    const squad = this.squads[t.type];
+    return squad ? squad.stance : 'follow';
+  }
+
+  issueCommand(cmd, squadType = null) {
     const P = this.palette;
-    if (this.command === cmd && cmd !== 'hold') return;
-    this.command = cmd;
+    // An order aimed at a squad with nobody left in it is a misfire, not a command. It used
+    // to set a stance on zero troops while still flashing HOLD and sounding the horn, so the
+    // player believed they had commanded an army they no longer had.
+    if (squadType && !this.troops.some(t => t.type === squadType)) return;
+    const targets = squadType ? [squadType] : this.mannedSquads();
+    if (!targets.length) return;
+    // Re-issuing the same order is a no-op except for HOLD, which re-anchors the line.
+    if (cmd !== 'hold' && targets.every(type => this.squads[type].stance === cmd)) return;
+    for (const type of targets) this.squads[type].stance = cmd;
+    this.command = this.aggregateStance();
     const sfx = this.game.sfx;
     if (cmd === 'charge') { sfx.horn(196); this.commandFlash = { text: 'CHARGE!', t: 0.9 }; }
     if (cmd === 'follow') { sfx.horn(262); this.commandFlash = { text: 'TO ME!', t: 0.9 }; }
     if (cmd === 'hold') {
       sfx.horn(220); this.commandFlash = { text: 'HOLD!', t: 0.9 };
-      for (const t of this.troops) { t.holdX = t.x; t.holdY = t.y; }
-      this.holdPoint = { x: this.hero.x, y: this.hero.y };
+      for (const t of this.troops) {
+        if (squadType && t.type !== squadType) continue;
+        t.holdX = t.x; t.holdY = t.y;
+      }
+      // Each squad anchors its own banner where the commander stood when it was ordered.
+      for (const type of targets) { this.squads[type].holdX = this.hero.x; this.squads[type].holdY = this.hero.y; }
     }
-    for (const t of this.troops) this.particles.ring(t.x, t.y, 16, P.cream, 0.3, 2);
+    for (const t of this.troops) {
+      if (squadType && t.type !== squadType) continue;
+      this.particles.ring(t.x, t.y, 16, P.cream, 0.3, 2);
+    }
   }
 
   nearestEnemy(x, y, maxR = 1e9) {
@@ -316,6 +402,7 @@ export class Battle {
         this.enemies.splice(idx, 1);
         this._enemyGrid.rebuild(this.enemies);
       }
+      this.lastDeath = this.time;
       this.particles.shards(e.x, e.y, e.type === 'brute' ? P.enemyDark : P.enemy, e.type === 'brute' ? 16 : 10, this.fxRng);
       this.particles.dust(e.x, e.y, P.groundShade, 5, this.fxRng);
       this.particles.ring(e.x, e.y, e.type === 'brute' ? 44 : 30, '#FFFFFF', 0.3, 4);
@@ -331,6 +418,12 @@ export class Battle {
       this.particles.text(f.x, f.y - 40, 'MISS', P.cream, 13);
       return;
     }
+    // A charging squad is running with shields down: the speed is paid for in blood.
+    // Hero damage is deliberately untouched - the hero has no stance. Exposure lingers for
+    // CHARGE_RECOVER seconds after the order changes, because reading the live stance let a
+    // player tap HOLD for one tick mid-swing and take a charge's speed for none of its cost
+    // (measured strictly better on both time and losses).
+    if (!isHero && (this.squadStance(f) === 'charge' || (f.exposedT || 0) > 0)) dmg *= CHARGE_EXPOSURE;
     f.hp -= dmg;
     if (isHero) {
       f.hurtT = 0.25;
@@ -359,6 +452,11 @@ export class Battle {
           this.troops.splice(idx, 1);
           this._friendlyGrid.rebuild(this.troops);
         }
+        this.lastDeath = this.time;
+        // losing the last man of the selected squad hands command back to the whole warband
+        if (this.selectedSquad && !this.troops.some(t => t.type === this.selectedSquad)) {
+          this.selectedSquad = null;
+        }
         this.particles.shards(f.x, f.y, P.friend, 7, this.fxRng);
         this.particles.ring(f.x, f.y, 18, P.friend, 0.3, 2);
         this.game.sfx.kill();
@@ -367,10 +465,10 @@ export class Battle {
     }
   }
 
-  fireArrow(sx, sy, tx, ty, friendly, dmg, speed, srcType) {
+  fireArrow(sx, sy, tx, ty, friendly, dmg, speed, srcType, spread = BOW_SPREAD) {
     const d = Math.max(1, len(tx - sx, ty - sy));
     // slight inaccuracy
-    const off = (this.simRng() - 0.5) * d * 0.12;
+    const off = (this.simRng() - 0.5) * d * spread;
     const a = Math.atan2(ty - sy, tx - sx) + Math.PI / 2;
     tx += Math.cos(a) * off; ty += Math.sin(a) * off;
     this.projectiles.push({ sx, sy, tx, ty, t: 0, T: d / speed, friendly, dmg, srcType });
@@ -403,6 +501,9 @@ export class Battle {
 
   updateSceneState(dt) {
     if (this.state === 'intro') {
+      // Orders land during the intro banner. They used to be swallowed for ~1.1s - exactly
+      // while the banner tells the player to position their men.
+      this.updateCommandPhase(this.game.input);
       if (this.stateT > 1.1 || (this.stateT > 0.6 && this.game.input.pressed.size > 0)) { this.state = 'fight'; this.game.sfx.horn(175); }
       this.updateCamera(dt);
       this.particles.update(dt);
@@ -498,6 +599,7 @@ export class Battle {
     const moving = len(h.vx, h.vy) > 40;
     const aimA = Math.atan2(mw.y - h.y, mw.x - h.x);
     h.facing = angLerp(h.facing, moving ? Math.atan2(h.vy, h.vx) : aimA, 1 - Math.exp(-10 * dt));
+    if (moving) h.travelFacing = angLerp(h.travelFacing, Math.atan2(h.vy, h.vx), 1 - Math.exp(-10 * dt));
     if (moving) { h.bob += dt * 11; sfx.gallop(); if (this.fxRng() < dt * 14) this.particles.dust(h.x - h.vx * 0.04, h.y + 8 - h.vy * 0.04, P.cream, 1, this.fxRng); }
     if (h.hurtT > 0) h.hurtT -= dt;
     if (h.iframesT > 0) h.iframesT -= dt;
@@ -551,12 +653,17 @@ export class Battle {
       if (t.flash > 0) t.flash -= dt;
       if (t.lunge > 0) t.lunge -= dt * 5;
       let goal = null, engage = null;
+      // exposure is refreshed while charging and decays after the order changes
+      const squadStanceNow = this.squadStance(t);
+      if (squadStanceNow === 'charge') t.exposedT = CHARGE_RECOVER;
+      else if (t.exposedT > 0) t.exposedT = Math.max(0, t.exposedT - dt);
 
       // troops always defend the commander: any enemy near the hero is fair game
       const heroThreat = this.nearestEnemy(this.hero.x, this.hero.y, 90);
-      if (this.command === 'charge') {
+      const stance = squadStanceNow;
+      if (stance === 'charge') {
         engage = this.nearestEnemy(t.x, t.y);
-      } else if (this.command === 'hold') {
+      } else if (stance === 'hold') {
         engage = this.nearestEnemy(t.x, t.y, t.d.ranged ? t.d.range : 140);
         if (!engage && heroThreat && dist2(t.x, t.y, this.hero.x, this.hero.y) < 260 * 260) engage = heroThreat;
         if (!engage) goal = { x: t.holdX, y: t.holdY };
@@ -569,7 +676,7 @@ export class Battle {
       if (engage) {
         const d = Math.sqrt(dist2(t.x, t.y, engage.x, engage.y));
         const wantR = t.d.ranged ? t.d.range * 0.8 : t.d.range + engage.d.radius - 6;
-        if (t.d.ranged && this.command === 'hold') {
+        if (t.d.ranged && stance === 'hold') {
           goal = null; // archers on hold stand ground
         } else if (d > wantR) {
           // surround: each unit approaches its own point on the target's circle
@@ -591,12 +698,22 @@ export class Battle {
           goal = { x: t.x + (t.x - engage.x), y: t.y + (t.y - engage.y) };
         }
         t.facing = angLerp(t.facing, Math.atan2(engage.y - t.y, engage.x - t.x), 1 - Math.exp(-8 * dt));
-        if (t.cd <= 0 && d < (t.d.ranged ? t.d.range : t.d.range + engage.d.radius + 4)) {
+        // A charge forfeits the bow line: archers ordered forward are running with their
+        // bows down, so CHARGE trades the ranged screen for speed instead of keeping both.
+        const advancingBow = t.d.ranged && stance === 'charge' && d > wantR;
+        if (t.cd <= 0 && !advancingBow && d < (t.d.ranged ? t.d.range : t.d.range + engage.d.radius + 4)) {
           if (this.deployT > 0) { this.deployT = 0; this.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; this.game.sfx.horn(155); }
           t.cd = t.d.cooldown;
-          const dmg = t.d.dmg;
+          // A set line receives a charge: melee holding position hit harder against anything
+          // closing at speed (wolves sprint at 158, a brute commits at 55). This is what makes
+          // HOLD the answer to a pack instead of a strictly slower FOLLOW.
+          const closingFast = stance === 'hold' && !t.d.ranged &&
+            len(engage.vx, engage.vy) > BRACE_SPEED;
+          const dmg = t.d.dmg * (closingFast ? BRACE_BONUS : 1);
           if (t.d.ranged) {
-            this.fireArrow(t.x, t.y - 12, engage.x, engage.y, true, dmg, t.d.projSpeed);
+            // Archers standing still shoot straighter than archers walking.
+            const spread = stance === 'hold' ? BOW_SPREAD_BRACED : BOW_SPREAD;
+            this.fireArrow(t.x, t.y - 12, engage.x, engage.y, true, dmg, t.d.projSpeed, null, spread);
           } else {
             t.lunge = 1;
             this.damageEnemy(engage, dmg,
@@ -608,7 +725,7 @@ export class Battle {
       if (goal) {
         const dx = goal.x - t.x, dy = goal.y - t.y, d = len(dx, dy);
         if (d > 6) {
-          const sp = t.d.speed * (this.command === 'charge' ? 1.15 : 1) * clamp(d / 40, 0.5, 1.6);
+          const sp = t.d.speed * (stance === 'charge' ? 1.15 : 1) * clamp(d / 40, 0.5, 1.6);
           t.vx = lerp(t.vx, dx / d * sp, 1 - Math.exp(-8 * dt));
           t.vy = lerp(t.vy, dy / d * sp, 1 - Math.exp(-8 * dt));
           if (!engage) t.facing = angLerp(t.facing, Math.atan2(dy, dx), 1 - Math.exp(-6 * dt));
@@ -630,6 +747,7 @@ export class Battle {
     if (this.deployT > 0) {
       this.deployT -= dt;
       this.lastAction = this.time; // no stalemate clock during forming-up
+      this.lastDeath = this.time;
       const ne = this.nearestEnemy(h.x, h.y, 250);
       if (ne) this.deployT = 0; // riding into their line starts the fight on the spot
       if (this.deployT <= 0) {
@@ -709,10 +827,46 @@ export class Battle {
 
   }
 
+  // Stance glyphs, shared by every squad row: an arrow to follow, crossed swords to
+  // charge, a heater shield to hold. Drawn at native scale so they read at 1x.
+  stanceIcon(ctx, id, cx, cy, scale = 1.55) {
+    const P = this.palette;
+    ctx.save();
+    ctx.strokeStyle = P.cream; ctx.fillStyle = P.hero; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    const ix = 0, iy = 0;
+    if (id === 'follow') {
+      ctx.beginPath(); ctx.moveTo(ix, iy + 5); ctx.lineTo(ix, iy - 5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ix, iy - 5); ctx.lineTo(ix + 6, iy - 3); ctx.lineTo(ix, iy - 1); ctx.closePath(); ctx.fill();
+    } else if (id === 'charge') {
+      // crossed swords: two angled blades with triangular tips, not a bare X
+      for (const dir of [1, -1]) {
+        ctx.beginPath(); ctx.moveTo(ix - 4 * dir, iy + 4); ctx.lineTo(ix + 3 * dir, iy - 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ix + 3 * dir, iy - 3); ctx.lineTo(ix + 5.5 * dir, iy - 5.5);
+        ctx.lineTo(ix + 4.5 * dir, iy - 2); ctx.closePath(); ctx.fill();
+      }
+    } else {
+      // heater shield: straight top edge, squared shoulders, point at the base
+      ctx.beginPath(); ctx.moveTo(ix - 4.5, iy - 4.5); ctx.lineTo(ix + 4.5, iy - 4.5);
+      ctx.lineTo(ix + 4.5, iy - 0.5); ctx.lineTo(ix, iy + 5.5); ctx.lineTo(ix - 4.5, iy - 0.5);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = P.cream; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(ix - 4.5, iy - 4.5); ctx.lineTo(ix + 4.5, iy - 4.5); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   updateStalematePhase() {
     const P = this.palette;
-    // Survivors stop kiting and close in after 10s without blood.
-    if (!this.bloodlust && this.time - this.lastAction > 10 && this.enemies.length > 0) {
+    // Survivors stop kiting and close in after 10s without blood — or after STALL_NO_DEATH
+    // seconds in which nobody actually died. The second clock matters because kiting
+    // raiders keep landing hits, so `lastAction` never goes stale even while the fight
+    // makes no progress at all: melee on FOLLOW hold formation and never close, and the
+    // whole battle grinds past the 90s mark. Damage is not progress; bodies are.
+    const stalled = this.time - this.lastAction > 10 ||
+      this.time - this.lastDeath > STALL_NO_DEATH;
+    if (!this.bloodlust && stalled && this.enemies.length > 0) {
       this.bloodlust = true;
       this.commandFlash = { text: 'THEY CLOSE IN!', t: 1.1 };
       this.game.sfx.horn(110);
@@ -841,10 +995,32 @@ export class Battle {
     }
   }
 
+  // Squads the player can actually address: an empty squad is skipped so cycling never
+  // lands on a banner with nobody under it.
+  mannedSquads() {
+    return SQUAD_TYPES.filter(type => this.troops.some(t => t.type === type));
+  }
+
+  // ALL → first manned squad → … → ALL. Selection is presentation-and-input state, so it
+  // deliberately never reaches the save.
+  cycleSquad() {
+    const manned = this.mannedSquads();
+    if (manned.length < 2) { this.selectedSquad = null; return; }
+    const at = this.selectedSquad === null ? -1 : manned.indexOf(this.selectedSquad);
+    this.selectedSquad = at + 1 >= manned.length ? null : manned[at + 1];
+    this.game.sfx.horn(this.selectedSquad ? 294 : 233);
+    const squad = this.selectedSquad;
+    this.commandFlash = { text: squad ? SQUAD_LABELS[squad] : 'WHOLE WARBAND', t: 0.7 };
+    this.game.invalidate();
+  }
+
   updateCommandPhase(inp) {
-    if (inp.pressedAction(ACTIONS.COMMAND_FOLLOW)) this.issueCommand('follow');
-    if (inp.pressedAction(ACTIONS.COMMAND_CHARGE)) this.issueCommand('charge');
-    if (inp.pressedAction(ACTIONS.COMMAND_HOLD)) this.issueCommand('hold');
+    if (inp.pressedAction(ACTIONS.SQUAD_CYCLE)) this.cycleSquad();
+    // A selected squad narrows the order; with ALL selected these behave exactly as
+    // before, which is what the legacy QA and input-action contracts assert.
+    if (inp.pressedAction(ACTIONS.COMMAND_FOLLOW)) this.issueCommand('follow', this.selectedSquad);
+    if (inp.pressedAction(ACTIONS.COMMAND_CHARGE)) this.issueCommand('charge', this.selectedSquad);
+    if (inp.pressedAction(ACTIONS.COMMAND_HOLD)) this.issueCommand('hold', this.selectedSquad);
   }
 
   resolveBattleResult(dt, h, ax) {
@@ -946,13 +1122,19 @@ export class Battle {
     ctx.drawImage(this._staticLayer, -64, -64);
     this.drawProps(ctx, true);
 
-    // hold banner
-    if (this.command === 'hold' && this.holdPoint) {
-      const hp = this.holdPoint;
+    // Hold banners: one per squad actually holding, drawn from that squad's own anchor.
+    // This was gated on the aggregate `command === 'hold'`, which is never 'hold' under a
+    // split order - so the feature's in-world affordance vanished exactly when squads were
+    // used independently, and the per-squad anchors were written but never read.
+    for (const type of SQUAD_TYPES) {
+      const squad = this.squads[type];
+      if (squad.stance !== 'hold' || squad.holdX == null) continue;
+      if (!this.troops.some(t => t.type === type)) continue;
       ctx.strokeStyle = P.ink; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(hp.x, hp.y); ctx.lineTo(hp.x, hp.y - 34); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(squad.holdX, squad.holdY); ctx.lineTo(squad.holdX, squad.holdY - 34); ctx.stroke();
       ctx.fillStyle = P.friend;
-      ctx.beginPath(); ctx.moveTo(hp.x, hp.y - 34); ctx.lineTo(hp.x + 18, hp.y - 28); ctx.lineTo(hp.x, hp.y - 22); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(squad.holdX, squad.holdY - 34); ctx.lineTo(squad.holdX + 18, squad.holdY - 28);
+      ctx.lineTo(squad.holdX, squad.holdY - 22); ctx.closePath(); ctx.fill();
     }
 
     // depth sort drawables
@@ -1513,10 +1695,20 @@ export class Battle {
     ctx.textAlign = 'left';
     ctx.fillText(`Warband ${this.troops.length}   ·   Slain ${this.kills}/${this.totalEnemies}`, 26, 31);
 
-    // bottom center: hero hp + dash + commands
-    const bw = 320, bx = W / 2 - bw / 2, by = Hh - 74;
+    // bottom center: hero hp + dash + one row per squad.
+    // Three rows instead of one chip strip: the player must be able to see, at a glance,
+    // that his squads can be under DIFFERENT orders — that is the whole feature.
+    // Rows exist only for squads the player actually has. A starting warband is four
+    // spearmen, so the old fixed three rows showed BOWS 0 / HORSE 0 and advertised
+    // "TAB pick squad" for a key that is a deliberate no-op below two squads - the first
+    // thing a new player tried, and it did nothing.
+    const squadRows = this.mannedSquads();
+    const canPickSquads = squadRows.length > 1;
+    const rowsH = squadRows.length * 21;
+    const bw = 360, bh = 35 + rowsH + (canPickSquads ? 18 : 6);
+    const bx = W / 2 - bw / 2, by = Hh - bh - 12;
     ctx.fillStyle = P.ink;
-    rrect(ctx, bx, by, bw, 60, 10); ctx.fill();
+    rrect(ctx, bx, by, bw, bh, 10); ctx.fill();
     // hp
     ctx.fillStyle = P.hpBack;
     rrect(ctx, bx + 14, by + 10, bw - 28, 10, 5); ctx.fill();
@@ -1529,44 +1721,47 @@ export class Battle {
     ctx.fillStyle = P.cream;
     const dfrac = 1 - Math.max(0, h.dashCdT) / HERO.dashCd;
     rrect(ctx, bx + 14, by + 24, 60 * clamp(dfrac, 0, 1), 5, 2.5); ctx.fill();
-    // commands
-    ctx.font = '700 13px system-ui, sans-serif';
-    const cmds = [['1', 'FOLLOW', 'follow'], ['2', 'CHARGE', 'charge'], ['3', 'HOLD', 'hold']];
-    cmds.forEach(([key, label, id], i) => {
-      const cx = bx + 16 + i * 100, cy = by + 36;
-      const active = this.command === id;
-      ctx.fillStyle = active ? P.cream : 'rgba(239,230,206,0.25)';
-      rrect(ctx, cx, cy, 92, 18, 5); ctx.fill();
-      const fg = active ? P.ink : P.cream;
-      // icon-first, sized to read at native scale (18px box, heavy stroke, gold accent)
-      ctx.strokeStyle = fg; ctx.fillStyle = active ? '#B8860B' : '#D9B36A'; ctx.lineWidth = 1.8; ctx.lineCap = 'round';
-      ctx.save();
-      ctx.translate(cx + 13, cy + 9);
-      ctx.scale(1.55, 1.55);
-      const ix = 0, iy = 0;
-      if (id === 'follow') {
-        ctx.beginPath(); ctx.moveTo(ix, iy + 5); ctx.lineTo(ix, iy - 5); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(ix, iy - 5); ctx.lineTo(ix + 6, iy - 3); ctx.lineTo(ix, iy - 1); ctx.closePath(); ctx.fill();
-      } else if (id === 'charge') {
-        // crossed swords: two angled blades with triangular tips, not a bare X
-        for (const dir of [1, -1]) {
-          ctx.beginPath(); ctx.moveTo(ix - 4 * dir, iy + 4); ctx.lineTo(ix + 3 * dir, iy - 3); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(ix + 3 * dir, iy - 3); ctx.lineTo(ix + 5.5 * dir, iy - 5.5);
-          ctx.lineTo(ix + 4.5 * dir, iy - 2); ctx.closePath(); ctx.fill();
-        }
-      } else {
-        // heater shield: straight top edge, squared shoulders, point at the base
-        ctx.beginPath(); ctx.moveTo(ix - 4.5, iy - 4.5); ctx.lineTo(ix + 4.5, iy - 4.5);
-        ctx.lineTo(ix + 4.5, iy - 0.5); ctx.lineTo(ix, iy + 5.5); ctx.lineTo(ix - 4.5, iy - 0.5);
-        ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = fg; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(ix - 4.5, iy - 4.5); ctx.lineTo(ix + 4.5, iy - 4.5); ctx.stroke();
+
+    // squad rows
+    const rowH = 21, rowsY = by + 35, rowW = bw - 20;
+    // With the whole warband addressed, a rail spans every row: one order reaches them all.
+    // Pointless when there is only one squad, so it is drawn only where it means something.
+    if (this.selectedSquad === null && canPickSquads) {
+      ctx.fillStyle = P.hero;
+      rrect(ctx, bx + 10, rowsY + 2, 3, rowH * squadRows.length - 6, 1.5); ctx.fill();
+    }
+    ctx.font = '700 12px system-ui, sans-serif';
+    squadRows.forEach((type, i) => {
+      const ry = rowsY + i * rowH;
+      const count = this.troops.reduce((n, t) => n + (t.type === type ? 1 : 0), 0);
+      const selected = this.selectedSquad === type;
+      if (selected) { ctx.fillStyle = 'rgba(255,211,77,0.20)'; rrect(ctx, bx + 8, ry, rowW + 4, rowH - 2, 5); ctx.fill(); }
+      // caret marks the squad the number keys will reach
+      if (selected) {
+        ctx.fillStyle = P.hero;
+        ctx.beginPath(); ctx.moveTo(bx + 12, ry + 5); ctx.lineTo(bx + 18, ry + 9.5); ctx.lineTo(bx + 12, ry + 14); ctx.closePath(); ctx.fill();
       }
-      ctx.restore();
-      ctx.fillStyle = fg;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${key} ${label}`, cx + 54, cy + 10);
+      ctx.fillStyle = P.cream;
+      ctx.textAlign = 'left';
+      ctx.fillText(SQUAD_LABELS[type], bx + 22, ry + 10);
+      ctx.fillText(String(count), bx + 84, ry + 10);
+      const stance = this.squads[type].stance;
+      this.stanceIcon(ctx, stance, bx + 116, ry + 9.5, 1.25);
+      ctx.fillText(stance.toUpperCase(), bx + 130, ry + 10);
+      // the braced/exposed consequence, spelled out where the order is shown, so the
+      // trade-off is readable in the fight instead of only in the balance numbers
+      const note = STANCE_NOTES[stance]?.[type === 'archer' ? 'ranged' : 'melee'] ?? '';
+      if (note) {
+        ctx.fillStyle = stance === 'hold' ? 'rgba(124,224,107,0.85)' : 'rgba(194,58,46,0.95)';
+        ctx.textAlign = 'right';
+        ctx.fillText(note, bx + rowW + 2, ry + 10);
+      }
     });
+    // key hints — Tab is only offered once there is more than one squad to pick between
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(239,230,206,0.62)';
+    ctx.textAlign = 'center';
+    if (canPickSquads) ctx.fillText('TAB pick squad  ·  1 follow  2 charge  3 hold', bx + bw / 2, by + bh - 9);
 
     // retreat hint: near your escape edge, or whenever a fight drags on
     const nearEscape = this.approach === 'E' ? h.x < 190 : this.approach === 'W' ? h.x > this.W - 190
@@ -1597,16 +1792,26 @@ export class Battle {
     if (this.state === 'fight' && this.deployT > 0) {
       ctx.globalAlpha = 0.92;
       ctx.fillStyle = P.ink;
-      const dw = 460;
-      rrect(ctx, W / 2 - dw / 2, 64, dw, 46, 10); ctx.fill();
-      ctx.fillStyle = P.hero;
+      // Two measured lines. This was one 15px line of ~629px drawn into a hardcoded 460px
+      // panel, so it spilled ~85px off both ends onto the battlefield in every battle.
+      const headline = `They advance in ${Math.ceil(this.deployT)}`;
+      const detail = 'position your men — 1 follow · 3 hold · 2 or a swing attacks NOW';
       ctx.font = '800 15px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`They advance in ${Math.ceil(this.deployT)} — position your men (1 follow · 3 hold) · 2 or a swing attacks NOW`, W / 2, 84);
-      ctx.fillStyle = P.hpBack;
-      rrect(ctx, W / 2 - dw / 2 + 16, 96, dw - 32, 6, 3); ctx.fill();
+      const headlineW = ctx.measureText(headline).width;
+      ctx.font = '700 13px system-ui, sans-serif';
+      const detailW = ctx.measureText(detail).width;
+      const dw = Math.min(W - 40, Math.max(320, Math.max(headlineW, detailW) + 44));
+      rrect(ctx, W / 2 - dw / 2, 64, dw, 62, 10); ctx.fill();
       ctx.fillStyle = P.hero;
-      rrect(ctx, W / 2 - dw / 2 + 16, 96, (dw - 32) * (this.deployT / this.deployMax), 6, 3); ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.font = '800 15px system-ui, sans-serif';
+      ctx.fillText(headline, W / 2, 82);
+      ctx.font = '700 13px system-ui, sans-serif';
+      ctx.fillText(detail, W / 2, 100);
+      ctx.fillStyle = P.hpBack;
+      rrect(ctx, W / 2 - dw / 2 + 16, 112, dw - 32, 6, 3); ctx.fill();
+      ctx.fillStyle = P.hero;
+      rrect(ctx, W / 2 - dw / 2 + 16, 112, (dw - 32) * (this.deployT / this.deployMax), 6, 3); ctx.fill();
       ctx.globalAlpha = 1;
     }
 
@@ -1665,9 +1870,12 @@ export class Battle {
         // diagnose the loss so the player knows what to change next time
         ctx.fillStyle = P.hero;
         ctx.font = '700 14px system-ui, sans-serif';
+        // The hero's own survival is what decides an even fight, so say that rather than
+        // pointing at HOLD: measured across camp raids, HOLD is not the stronger order, and
+        // advice that sends the player to the weaker option teaches the wrong lesson.
         const advice = this.enemyStrength > this.playerStrength + 2
           ? `They were stronger (${this.enemyStrength} vs your ${this.playerStrength}) — recruit at a village, then return`
-          : 'Use 3 HOLD to make your men stand their ground instead of overextending';
+          : 'Even odds — you fell, not your warband. Dash out of the scrum before you are surrounded';
         ctx.fillText(advice, W / 2, Hh * 0.36 + 90);
       }
       ctx.globalAlpha = 1;

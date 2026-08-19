@@ -1,5 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rfa73e792131b';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rada68ae0c75b';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -143,8 +143,13 @@ export class Camera {
       this.w / 2 - (this.x + this.sx) * this.zoom,
       this.h / 2 - (this.y + this.sy) * this.zoom);
   }
+  // Pointer-to-world is a SIMULATION input: it feeds hero aim, which feeds hero facing,
+  // which feeds FOLLOW formation slots. It therefore deliberately excludes the shake
+  // offset that `apply()` adds at render time. Including `sx`/`sy` here let decorative
+  // shake — driven by its own persistent RNG stream — change fight outcomes, so two
+  // identical seeded battles could diverge. Keep presentation out of this transform.
   toWorld(px, py) {
-    return { x: (px - this.w / 2) / this.zoom + this.x + this.sx, y: (py - this.h / 2) / this.zoom + this.y + this.sy };
+    return { x: (px - this.w / 2) / this.zoom + this.x, y: (py - this.h / 2) / this.zoom + this.y };
   }
 }
 

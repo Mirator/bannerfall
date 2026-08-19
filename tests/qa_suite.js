@@ -229,6 +229,52 @@ function runQaSuiteImpl() {
   });
 
   // ======================================================================
+  // 5b. Squads: Tab selects, orders narrow to the selection, hold points are per-squad
+  // ======================================================================
+  record('squad_selection_and_independent_squad_orders', () => {
+    g.scenario('battle_big'); // the only fixture with all three squads manned
+    let introGuard = 0;
+    while (g.state().battle.state === 'intro' && introGuard < 50) { g.step(0.1); introGuard++; }
+    assert(g.state().battle.state !== 'intro', 'battle stuck in intro');
+    const b = G.scene;
+    assert(b.selectedSquad === null, 'selection must start on the whole warband, got ' + b.selectedSquad);
+
+    // With ALL selected, a number key still moves every squad at once — this is the
+    // behavior the legacy command record and the input-action contract depend on.
+    g.tap('Digit2');
+    assert(b.command === 'charge', 'ALL + Digit2 expected command=charge, got ' + b.command);
+    for (const type of ['spear', 'archer', 'knight']) {
+      assert(b.squads[type].stance === 'charge', type + ' squad ignored an ALL order');
+    }
+
+    // Tab narrows to one squad; the order must reach it and nobody else.
+    g.tap('Tab');
+    assert(b.selectedSquad === 'spear', 'first Tab expected the spear squad, got ' + b.selectedSquad);
+    g.tap('Digit3');
+    assert(b.squads.spear.stance === 'hold', 'selected squad did not take the HOLD order');
+    assert(b.squads.archer.stance === 'charge', 'HOLD leaked into the bow squad');
+    assert(b.squads.knight.stance === 'charge', 'HOLD leaked into the horse squad');
+    assert(b.command === 'mixed', 'diverging squads should report command=mixed, got ' + b.command);
+
+    // Only the ordered squad anchors a hold position.
+    const spears = b.troops.filter(t => t.type === 'spear');
+    const others = b.troops.filter(t => t.type !== 'spear');
+    assert(spears.length > 0 && others.length > 0, 'fixture must man more than one squad');
+    for (const t of spears) {
+      assert(t.holdX != null && t.holdY != null, 'ordered spear has no hold position');
+    }
+    for (const t of others) {
+      assert(t.holdX == null && t.holdY == null, 'a squad that was never ordered to hold has a hold point');
+    }
+
+    // Tab wraps back to the whole warband after the last manned squad.
+    g.tap('Tab'); g.tap('Tab'); g.tap('Tab');
+    assert(b.selectedSquad === null, 'Tab did not wrap back to the whole warband, got ' + b.selectedSquad);
+    return 'ALL orders reach 3 squads; Tab-selected spear held alone (mixed aggregate); ' +
+      spears.length + ' hold points set, ' + others.length + ' troops untouched';
+  });
+
+  // ======================================================================
   // 6. Economy: recruit cost / cap / gold refusals + interactive-path parity
   // ======================================================================
   record('economy_recruit_cost_cap_and_gold_refusals', () => {
