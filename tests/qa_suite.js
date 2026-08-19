@@ -479,6 +479,164 @@ function runQaSuiteImpl() {
   });
 
   // ======================================================================
+  // Plan 020: weighted spawn tiers replace the deleted 0.7-1.2x fair-band guarantee.
+  // Swept over several pinned seeds (lesson from Plan 019: never trust one seed for a
+  // balance/distribution claim) rather than asserted from a single run.
+  // ======================================================================
+  record('world_party_spawn_tiers_weighted_toward_strong', () => {
+    const seeds = [1, 42, 999, 20260817, 555];
+    const N = 200;
+    // gaps between the declared tiers (weak .45-.7, even .8-1.2, strong 1.5-2.2) — the
+    // midpoints of the empty bands, so rounding noise from spawnParty's integer target
+    // can never push a draw across a classification boundary.
+    const tierOf = ratio => (ratio <= 0.75 ? 'weak' : ratio >= 1.35 ? 'strong' : 'even');
+    let weak = 0, even = 0, strong = 0, other = 0;
+    let weakAtZero = 0, strongAtZero = 0, weakAtThree = 0, strongAtThree = 0;
+    for (const seed of seeds) {
+      g.scenario('world', { seed });
+      const scene = G.scene;
+      const mine = scene.myStrength();
+      for (let i = 0; i < N; i++) {
+        scene.spawnParty(CAMP_C1); // no band -> the weighted tier draw under test
+        const ratio = scene.strength(scene.parties[scene.parties.length - 1].comp) / mine;
+        const tier = tierOf(ratio);
+        if (tier === 'weak') { weak++; weakAtZero++; }
+        else if (tier === 'strong') { strong++; strongAtZero++; }
+        else if (tier === 'even') even++;
+        else other++;
+      }
+      // now with every raidable camp razed, to confirm design decision 1: weights shift
+      // toward `strong` (and away from `weak`) as camps fall across a run.
+      for (const c of scene.save.camps) if (c.id !== 'strong') c.razed = true;
+      for (let i = 0; i < N; i++) {
+        scene.spawnParty(CAMP_C1);
+        const ratio = scene.strength(scene.parties[scene.parties.length - 1].comp) / mine;
+        const tier = tierOf(ratio);
+        if (tier === 'weak') weakAtThree++;
+        else if (tier === 'strong') strongAtThree++;
+      }
+    }
+    assert(other === 0, 'a spawned party landed outside all three declared tiers: other=' + other);
+    assert(weak > 0 && even > 0 && strong > 0,
+      'expected all three tiers over ' + (seeds.length * N) + ' draws, got weak=' + weak + ' even=' + even + ' strong=' + strong);
+    assert(strongAtThree > strongAtZero,
+      'expected the strong tier to grow more common once every camp is razed: razed=0 strong=' + strongAtZero + ', razed=3 strong=' + strongAtThree);
+    assert(weakAtThree < weakAtZero,
+      'expected the weak tier to grow less common once every camp is razed: razed=0 weak=' + weakAtZero + ', razed=3 weak=' + weakAtThree);
+    return 'over ' + seeds.length + ' seeds x ' + N + ' draws: weak=' + weak + ' even=' + even + ' strong=' + strong +
+      '; razed 0->3 shifted weak ' + weakAtZero + '->' + weakAtThree + ', strong ' + strongAtZero + '->' + strongAtThree;
+  });
+
+  // ======================================================================
+  // Plan 020: an ignored chasing party breaks off, occupies the nearest settlement
+  // (suspending its service), and a recapture restores it. Driven as one controlled
+  // tick (matching tests/e2e/world-battle-seams.spec.js) rather than simulating 20+
+  // real seconds of chase, which would let the party actually catch the stationary
+  // hero first and produce a flaky fixture.
+  // ======================================================================
+  record('world_party_break_off_occupies_settlement_and_recapture_restores_service', () => {
+    g.scenario('world', { seed: 424242 });
+    const scene = G.scene;
+    const mine = scene.myStrength();
+    const target = WORLD.settlements.find(s => s.id === 'brindle');
+    scene.parties.length = 0;
+    scene.hero.x = 200; scene.hero.y = 200; // far from every settlement, and from the fixture party
+    scene.grace = 0;
+    const party = {
+      camp: 'c1', x: target.x, y: target.y, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: Array.from({ length: Math.ceil(mine * 1.6) }, () => 'bandit'),
+      home: { x: CAMP_C1.x, y: CAMP_C1.y }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+      occupying: null, raid: null, mood: 'chase', chaseT: 25, chaseHoldT: BALANCE.raidBreakOffT,
+    };
+    scene.parties.push(party);
+    assert(scene.strength(party.comp) > mine * 1.3, 'fixture party must exceed the AI\'s own outmatch threshold');
+
+    scene.updateParties(1 / 60); // one controlled tick: the break-off timer is already at threshold
+    assert(party.raid === 'brindle', 'expected the party to break off toward brindle, got raid=' + party.raid);
+
+    scene.updateParties(1 / 60); // placed exactly at the settlement, so arrival is immediate
+    assert(party.occupying === 'brindle', 'expected the party to occupy brindle, got ' + party.occupying);
+    assert(scene.save.settlements.find(s => s.id === 'brindle').occupied === true,
+      'save.settlements[brindle].occupied was not set true on arrival');
+
+    // service suspension: recruiting at an occupied settlement must refuse and say so
+    scene.hero.x = target.x; scene.hero.y = target.y;
+    const goldBefore = scene.save.gold, troopsBefore = scene.save.troops.length;
+    G.input.injectKey('KeyQ', true);
+    scene.updateSettlementInteractions(G.input);
+    G.input.injectKey('KeyQ', false);
+    assert(scene.save.gold === goldBefore && scene.save.troops.length === troopsBefore,
+      'recruiting succeeded at an occupied settlement');
+
+    // recapture: walking onto the occupier and winning restores the service
+    scene.hero.x = party.x; scene.hero.y = party.y;
+    g.step(0.1);
+    assert(g.scene() === 'battle', 'walking onto the occupier did not start a battle, scene=' + g.scene());
+    G.scene.endBattle(true);
+    g.step(3);
+    assert(g.scene() === 'world', 'did not return to world after defeating the occupier, scene=' + g.scene());
+    assert(G.scene.save.settlements.find(s => s.id === 'brindle').occupied === false,
+      'expected brindle occupation to clear after defeating the occupier there');
+    return 'break-off -> occupies brindle -> service suspended -> recapture clears occupation and restores it';
+  });
+
+  // ======================================================================
+  // Plan 020 STOP condition: the campaign must never reach a state with every
+  // settlement occupied and nothing on the map the player can beat. This DRIVES the
+  // worst case (three settlements already occupied by overwhelming parties, plus one
+  // more overwhelming roaming party) rather than asserting the happy path.
+  // ======================================================================
+  record('world_floor_guarantee_prevents_unwinnable_deadlock', () => {
+    g.scenario('world', { seed: 424242 });
+    const scene = G.scene;
+    const mine = scene.myStrength();
+    const overwhelming = () => Array.from({ length: Math.ceil(mine * 2) }, () => 'brute');
+    const occupiedIds = ['ashford', 'coldwell', 'keep'];
+    scene.save.settlements = WORLD.settlements.map(s => ({ id: s.id, occupied: occupiedIds.includes(s.id) }));
+    scene.parties.length = 0;
+    for (const id of occupiedIds) {
+      const s = WORLD.settlements.find(x => x.id === id);
+      scene.parties.push({
+        camp: 'c1', x: s.x, y: s.y, vx: 0, vy: 0, facing: 0, bob: 0,
+        comp: overwhelming(), home: { x: CAMP_C1.x, y: CAMP_C1.y }, wander: null, wanderT: 999,
+        waryT: 0, clashT: 0, occupying: id, raid: null,
+      });
+    }
+    // one more overwhelming roaming party, so nothing on the map is winnable yet
+    scene.parties.push({
+      camp: 'c1', x: 1600, y: 1000, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: overwhelming(), home: { x: CAMP_C1.x, y: CAMP_C1.y }, wander: { x: 1600, y: 1000 }, wanderT: 999,
+      waryT: 0, clashT: 0, occupying: null, raid: null,
+    });
+    assert(scene.parties.every(p => scene.strength(p.comp) > mine * BALANCE.beatablePartyRatio),
+      'fixture setup: every party must start out unbeatable');
+
+    // 1. the beatable-party floor must produce a winnable target on the very next check
+    scene.enforceBeatableFloor();
+    assert(scene.parties.some(p => scene.strength(p.comp) <= mine * BALANCE.beatablePartyRatio),
+      'enforceBeatableFloor left every live party unbeatable');
+
+    // 2. the last fully unclaimed settlement (brindle) must never become claimable: a
+    // party trying to break off toward it — with only one settlement free — must be refused
+    const raider = {
+      camp: 'c1', x: 1000, y: 1000, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: overwhelming(), home: { x: CAMP_C1.x, y: CAMP_C1.y }, wander: null, wanderT: 999,
+      waryT: 0, clashT: 0, occupying: null, raid: null, mood: 'chase', chaseT: 25,
+      chaseHoldT: BALANCE.raidBreakOffT,
+    };
+    scene.parties.push(raider);
+    scene.hero.x = 50; scene.hero.y = 50; scene.grace = 0; // far from everything, not in a safe zone
+    scene.updateParties(1 / 60);
+    assert(raider.raid === null && raider.occupying === null,
+      'a break-off claimed the last fully unclaimed settlement — deadlock is now reachable (raid=' + raider.raid + ')');
+    const stillFree = scene.save.settlements.filter(s => !s.occupied &&
+      !scene.parties.some(p => p.raid === s.id || p.occupying === s.id));
+    assert(stillFree.length >= 1, 'expected at least one settlement to remain fully unclaimed, got ' + stillFree.length);
+    return 'worst case driven: the beatable floor produced a winnable party, and ' +
+      stillFree.map(s => s.id).join(',') + ' stayed unclaimed and reachable';
+  });
+
+  // ======================================================================
   // 12. Determinism: battle_small (seed 42), identical scripted inputs
   // ======================================================================
   record('determinism_battle_small_seed_reproducible', () => {

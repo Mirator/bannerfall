@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL } from './data.js?v=rada68ae0c75b';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rada68ae0c75b';
-import { Battle } from './battle.js?v=rada68ae0c75b';
-import { World } from './world.js?v=rada68ae0c75b';
-import { ACTIONS } from './input-actions.js?v=rada68ae0c75b';
-import { createWebPlatform } from './platform/web-platform.js?v=rada68ae0c75b';
-import { SaveRepository } from './persistence/save-repository.js?v=rada68ae0c75b';
+import { PAL } from './data.js?v=r2fb26069b18e';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r2fb26069b18e';
+import { Battle } from './battle.js?v=r2fb26069b18e';
+import { World } from './world.js?v=r2fb26069b18e';
+import { ACTIONS } from './input-actions.js?v=r2fb26069b18e';
+import { createWebPlatform } from './platform/web-platform.js?v=r2fb26069b18e';
+import { SaveRepository } from './persistence/save-repository.js?v=r2fb26069b18e';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -607,6 +607,7 @@ window.game = {
         gold: sc.save.gold, troops: sc.save.troops.length,
         parties: sc.parties.length,
         camps: sc.save.camps,
+        settlements: sc.save.settlements,
       };
     }
     return s;

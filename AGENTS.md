@@ -112,7 +112,7 @@ npx playwright test tests/e2e/campaign-persistence.spec.js
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,
 pinned world seeds, and fixed timesteps rather than wall-clock sleeps. Preserve
-the existing 18 named legacy records and their result shape. Do not weaken an
+the existing 22 named legacy records and their result shape. Do not weaken an
 assertion, raise a performance budget, or ignore page/console errors to obtain
 green CI.
 
@@ -159,11 +159,47 @@ identity; camp garrisons remain on their separate attrition path. Keep the
 AUDIT-03 campaign regression and its fully-wiped control passing when changing
 battle-result or party-restoration code.
 
+Settlement-occupation lifecycle (Plan 020): a party that holds `chase` mood
+against the hero for `BALANCE.raidBreakOffT` seconds without ever clashing
+gives up the hunt and beelines for the nearest settlement that is not already
+**claimed** — see `World.isSettlementClaimed()`, which counts a settlement as
+claimed once some party occupies it (`p.occupying`) or is already travelling
+to raid it (`p.raid`). A break-off is refused unless at least two settlements
+are unclaimed, so claiming one always leaves at least one behind; this is the
+structural half of the deadlock floor guarantee. On arrival (`dist2` under
+`BALANCE.raidArrivalR`) the party sets `save.settlements[id].occupied = true`,
+parks in place, and is exempt from the `BALANCE.settlementSafeR` sanctuary
+block in the party-clash check — an occupier must always be attackable where
+it sits, or the player has no recapture path. `updateSettlementInteractions()`
+refuses recruiting/healing/army-cap expansion at an occupied settlement and
+says so. Winning the battle against the occupier clears `occupied` via the
+same `onWinExtra` hook camp raids use; retreat/defeat restore the occupying
+party in place (still occupying) through `partyMeta.occupying`, except the
+edge case where the party is fully wiped without a formal victory, which also
+clears the settlement rather than leaving a phantom occupation with nobody to
+fight. The other, probabilistic half of the deadlock floor guarantee is
+`World.enforceBeatableFloor()`, run once per world tick: if no live party
+(including one occupying a settlement) sits at or under
+`BALANCE.beatablePartyRatio`, it downgrades the single weakest live party to
+an even-tier composition. It is an emergency correction, not a routine
+crutch — the weighted spawn tiers below keep something beatable on the map
+in ordinary play. Cover both mechanisms with the same "drive the worst case,
+not the happy path" test discipline; see the deadlock test in `tests/qa_suite.js`.
+
+Roaming-party spawn strength (Plan 020): `World.spawnParty()` no longer
+guarantees a party in a flat fair band. It draws a weighted tier
+(`BALANCE.partyTiers.weak/even/strong`) whose weights shift toward `strong` as
+non-stronghold camps are razed, so the curve rises across a run instead of
+tracking the player forever. An explicit `band` argument still overrides the
+draw (used by QA to probe the `[2,24]` strength clamp directly); never assert
+a tier-distribution property from a single seed — sweep several.
+
 Any save-field change must deliberately increment or migrate the schema in
 `src/save.js`, update both fresh-save defaults and validation, and add legacy,
-current, and malformed fixtures. The current save schema is version 2;
-unversioned (v0) and version-1 saves migrate deterministically, including
-deriving a missing legacy roaming-party `home` from its canonical camp. Current
+current, and malformed fixtures. The current save schema is version 3;
+unversioned (v0), version-1, and version-2 saves migrate deterministically,
+including deriving a missing legacy roaming-party `home` from its canonical
+camp and defaulting `save.settlements` to every settlement unoccupied. Current
 version parties must have a finite valid `home`, and accepted saves must be
 safe for immediate world/battle construction. Preserve `bf_save`/`bf_save_test`
 isolation.

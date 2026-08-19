@@ -1,5 +1,5 @@
-import { parseSave } from '../save.js?v=rada68ae0c75b';
-import { PLATFORM_SLOTS } from '../platform/platform-contract.js?v=rada68ae0c75b';
+import { parseSave } from '../save.js?v=r2fb26069b18e';
+import { PLATFORM_SLOTS } from '../platform/platform-contract.js?v=r2fb26069b18e';
 
 const SETTINGS_DEFAULTS = Object.freeze({ muted: false });
 

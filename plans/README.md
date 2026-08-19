@@ -35,7 +35,7 @@ conditions, and update its status row when done.
 | 017 | Replace title-screen shortcuts with safe menu navigation | P0 | M | 016 | DONE |
 | 018 | Recompose the title screen around an animated campaign vignette | P1 | M | 017 | DONE |
 | 019 | Give the player squads to command and stances worth choosing | P0 | L | 018 | DONE as optional depth — premise unmet, see plan |
-| 020 | Make encounters uneven, and make avoiding them cost something | P0 | L | 019 | BLOCKED — needs battles that require a player first |
+| 020 | Make encounters uneven, and make avoiding them cost something | P0 | L | 019 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -87,14 +87,20 @@ explicitly selected because its impact becomes high when battle populations grow
 - Plan 019 shipped its plumbing, stance trade-offs and HUD, and every defect found by
   review is fixed, but its premise was measured false: on organic camp raids pressing no
   order at all beats every deliberate order policy. Squads are therefore optional depth,
-  not a core mechanic, and no test or document claims otherwise. Plan 020 is blocked on
-  battles that actually require a player; the surviving candidate is Option 1 in
-  `critiques/phase4/self-playing-fix-options.md` (change the win condition).
-- Plan 020 depends on Plan 019 and must not land first. Uneven encounters without
-  squad-level control are unfair rather than difficult. Plan 019 deliberately avoids
-  any save-schema change so that 020 owns the single version-3 bump; 019 owns only
-  battle-scene changes and 020 owns only world-scene changes, so the two never edit
-  the same simulation phase.
+  not a core mechanic, and no test or document claims otherwise. Plan 020 was briefly
+  marked BLOCKED on the argument that uneven encounters are unfair before the player has
+  real in-battle grip; the repository owner reviewed that argument and directed the plan
+  to proceed anyway (see the note at the top of `plans/020-uneven-encounters-with-a-price.md`).
+  The surviving candidate for making battles actually require a player remains Option 1 in
+  `critiques/phase4/self-playing-fix-options.md` (change the win condition) and is not this plan.
+- Plan 020 depends on Plan 019 and landed after it. Plan 019 deliberately avoided
+  any save-schema change so that 020 owns the single version-3 bump (settlement
+  occupation state); 019 owns only battle-scene changes and 020 owns only world-scene
+  changes, so the two never edit the same simulation phase. Plan 020 is DONE: weighted
+  spawn tiers replace the deleted fair-band guarantee, break-off-and-raid occupation
+  suspends a settlement's service until recaptured, and a floor guarantee (an
+  `isSettlementClaimed` reservation plus `enforceBeatableFloor`) keeps the campaign from
+  reaching a state with every settlement occupied and nothing beatable on the map.
 - Plan 016 comes after the completed correctness, QA, deterministic-rendering,
   and simulation-seam work. It introduces only the host-facing persistence,
   lifecycle, and action boundaries; the Electron shell and Steamworks SDK remain

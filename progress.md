@@ -5,7 +5,8 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
 - [x] Measured the phase-4 gameplay audit against the running build (`critiques/phase4/gameplay-audit.md`).
 - [x] Tested and rejected the enemy-tuning fixes for "the game plays itself" (`critiques/phase4/self-playing-fix-options.md`).
 - [x] Wrote plans 019 (squad orders) and 020 (uneven encounters) and indexed them.
-- [x] Implementing plan 019 on branch `codex/squad-orders-slice`.
+- [x] Implemented plan 019 on branch `codex/squad-orders-slice` (shipped as optional depth).
+- [x] Implemented plan 020 on branch `codex/uneven-encounters-slice`.
 
 ## Findings
 
@@ -45,3 +46,50 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
 - `Camera.toWorld()` included the shake offset, so decorative shake reached hero facing and FOLLOW formation slots: identical seeded battles measured 45.7s, 30.0s, 45.4s, and 90s. Both legacy determinism records drive CHARGE, which ignores `slotPos()`, so the coverage blind spot matched the defect exactly.
 - `bloodlust` only watched for damage, so kiting raiders kept a dead-end fight alive past 90s. A no-death stall clock closes it.
 - Two battle baselines had carried an orphaned text region since `2050497` (~0.13%, under the 1.5% diff tolerance), so CI stayed green on a stale baseline.
+
+## Plan 020 implementation
+
+- Branch: `codex/uneven-encounters-slice` (based on `main` at `86c9e08`, after Plan 019 merged).
+- Plan: `plans/020-uneven-encounters-with-a-price.md`. The repository owner retired the
+  design-opinion STOP (Plan 019 shipping as optional depth) and directed the plan to
+  proceed; the deadlock STOP stayed fully active throughout.
+- [x] Step 1: landed `SAVE_VERSION` 3 (`save.settlements`, party `occupying`) behind green
+  `save-schema.spec.js`/`campaign-persistence.spec.js` before touching any gameplay code.
+- [x] Step 2: replaced the flat `0.6 + R()*0.9` fair-band guarantee in `spawnParty()` with
+  weighted weak/even/strong tiers (`BALANCE.partyTiers`) whose weights shift toward
+  `strong` as camps are razed; added `world_party_spawn_tiers_weighted_toward_strong`,
+  swept over 5 seeds.
+- [x] Step 3: added break-off-and-raid inside the existing `World.updateParties()` phase —
+  a sustained, uncaught `chase` (`BALANCE.raidBreakOffT` = 20s) makes a party give up on
+  the hero and beeline for the nearest unclaimed settlement.
+- [x] Step 4: occupying a settlement suspends recruiting/healing/army-cap expansion there
+  and says so; winning the battle against the occupier restores it.
+- [x] Step 5: added the legibility layer — an explicit `⚠` marker on the party badge at any
+  visible distance (not just the close-range odds pill), a break-off toast naming the
+  settlement, and occupied/threatened map markers on the settlement itself.
+- [x] Step 6: implemented the floor guarantee as two independent mechanisms:
+  `isSettlementClaimed()` refuses a break-off unless it leaves at least one settlement
+  fully unclaimed, and `enforceBeatableFloor()` downgrades the weakest live party whenever
+  nothing on the map is beatable. Covered by `world_floor_guarantee_prevents_unwinnable_deadlock`,
+  which drives the worst case (three settlements occupied, everything overwhelming) rather
+  than asserting the happy path.
+- [x] Step 7: reviewed the world visual baselines — both passed against the existing
+  screenshots with no diff artifacts generated, so nothing needed updating.
+- [x] Step 8: documented the occupation lifecycle in `AGENTS.md` next to the roaming-party
+  lifecycle rules, and the new records/fixtures in `tests/README.md` (record inventory
+  18 -> 22, including the previously-undercounted `rng_domains` check).
+- [x] Step 9: `npm run release:cache` reviewed as a token-only diff (`src/battle.js` untouched
+  in content); full verification block green; `npm test` 54/54.
+
+### Implementation findings (see the plan's own section for the full list)
+
+- Tier weights: `weak = 0.40 - 0.30*razed/3`, `even = 0.35` constant, `strong` = the
+  remainder — a straight-line interpolation, not a tuned curve.
+- The composition-building loop never overshoots its target (a brute is only added when
+  the remaining strength already covers it), so a spawned party's strength is always
+  exactly its rolled target — useful for reasoning about the tier-classification test.
+- A pre-existing edge case (a fully-wiped roaming party on retreat/defeat, not a formal
+  victory) needed an explicit fix so an occupied settlement can't get stuck occupied with
+  no occupier left to fight.
+- No STOP condition was hit; the sanctuary exemption for occupiers is a single added
+  boolean in the existing `canClash` check, with no weakening of the safe zone otherwise.

@@ -143,4 +143,19 @@ export const BALANCE = {
   healCost: 10,
   battleGrace: 6,        // seconds of ambush immunity after returning to the map
   settlementSafeR: 260,  // parties will not chase/engage inside this radius of a settlement
+  // Plan 020: weighted spawn tiers replace the deleted 0.6-1.5x flat fair-band guarantee.
+  // World.spawnParty() shifts these weights toward `strong` as camps fall, so the curve
+  // rises across a run instead of tracking the player forever (see rollComp()).
+  partyTiers: {
+    weak:   { min: 0.45, max: 0.7 },
+    even:   { min: 0.8,  max: 1.2 },
+    strong: { min: 1.5,  max: 2.2 },
+  },
+  // Floor guarantee: if no live party (including one occupying a settlement) sits at or
+  // under this ratio, World.enforceBeatableFloor() downgrades the weakest one so the
+  // campaign can never reach a state with nothing on the map the player can beat.
+  beatablePartyRatio: 1.2,
+  raidBreakOffT: 20,  // seconds of sustained, uncaught chase before a party gives up and raids
+  raidSpeed: 150,     // travel speed while a broken-off party beelines for a settlement
+  raidArrivalR: 140,  // distance at which a raiding party is considered to have occupied its target
 };
