@@ -36,6 +36,7 @@ conditions, and update its status row when done.
 | 018 | Recompose the title screen around an animated campaign vignette | P1 | M | 017 | DONE |
 | 019 | Give the player squads to command and stances worth choosing | P0 | L | 018 | DONE as optional depth — premise unmet, see plan |
 | 020 | Make encounters uneven, and make avoiding them cost something | P0 | L | 019 | DONE |
+| 021 | Make the encounter legible — unit counts, hover details, and battle brief/aftermath screens | P1 | L | 020 | IN PROGRESS |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -101,6 +102,11 @@ explicitly selected because its impact becomes high when battle populations grow
   suspends a settlement's service until recaptured, and a floor guarantee (an
   `isSettlementClaimed` reservation plus `enforceBeatableFloor`) keeps the campaign from
   reaching a state with every settlement occupied and nothing beatable on the map.
+- Plan 021 depends on Plan 020 because it corrects the exact badge/toast/proximity-line text
+  Plan 020 shipped (strength printed as a headcount) and layers a pre-battle brief and a
+  post-battle aftermath onto the same world-to-battle transition Plan 020's break-off-and-raid
+  mechanic uses. It adds no save-schema change and does not touch `enemyStrength`,
+  `playerStrength`, spawn tiers, or the floor guarantee — only how the map presents them.
 - Plan 016 comes after the completed correctness, QA, deterministic-rendering,
   and simulation-seam work. It introduces only the host-facing persistence,
   lifecycle, and action boundaries; the Electron shell and Steamworks SDK remain
