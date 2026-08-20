@@ -462,6 +462,12 @@ function runQaSuiteImpl() {
     assert(!G.scene.screen, 'aftermath did not dismiss on confirm');
     // isolate the rest of the observation from any other roaming party
     G.scene.hero.x = SETTLEMENT_ASHFORD.x; G.scene.hero.y = SETTLEMENT_ASHFORD.y;
+    // Plan 023: `grace` only decays while world time flows, and this record parks the hero
+    // in Ashford ON PURPOSE to isolate the decay curve from other contact. keepAwake()
+    // keeps the world simulating without moving the hero, so the curve sampled below is the
+    // timer's own decay exactly as before — the stopped-hero freeze has its own coverage in
+    // world-freeze.spec.js.
+    g.keepAwake(true);
     const graceAtStart = G.scene.grace;
     assert(typeof graceAtStart === 'number' && !Number.isNaN(graceAtStart),
       'World.grace was not a number right after returning to world (got ' + graceAtStart + ')');
@@ -782,6 +788,10 @@ function runQaSuiteImpl() {
       w.parties.push({ camp: 'c1', x: c.px, y: c.py, vx: 0, vy: 0, facing: 0, bob: 0,
         comp: ['bandit', 'bandit', 'bandit', 'bandit', 'brute'], home: { x: 1050, y: 1500 }, wander: null, wanderT: 0 });
       const p = w.parties[0];
+      // Plan 023: party AI only runs while the hero rides, and every case here parks the
+      // hero at a fixed spot to pin the pursuit geometry. Re-applied per case because
+      // scenario() above builds a brand-new World each time.
+      g.keepAwake(true);
       let resolved = false;
       for (let i = 0; i < 40; i++) {
         g.step(1);

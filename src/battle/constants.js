@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES } from '../data.js?v=rd5531dcfef09';
+import { PAL, UNIT_TYPES } from '../data.js?v=ra209d001f5a8';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 

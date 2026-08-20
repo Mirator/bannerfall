@@ -50,7 +50,10 @@ test('world road river and bridge landmark remains visible', async ({ page }) =>
   const canvas = await settle(page, 'world', {
     seed: 20260817,
     center: [985, 640],
-    steps: 0.25,
+    // Plan 023: 0.5s (was 0.25s) so the frozen-world cue has fully settled at staleT === 1.
+    // The world freezes on the third tick either way, so nothing else differs between the
+    // two counts — this only makes the baseline insensitive to the fade constant.
+    steps: 0.5,
   });
   await expect(canvas).toHaveScreenshot('world-bridge.png', VISUAL_OPTIONS);
 });

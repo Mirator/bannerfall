@@ -159,6 +159,14 @@ export const BALANCE = {
   // under this ratio, World.enforceBeatableFloor() downgrades the weakest one so the
   // campaign can never reach a state with nothing on the map the player can beat.
   beatablePartyRatio: 1.2,
+  // Plan 023: the world lives only while the hero rides. `worldWakeSpeed` is the same
+  // 40 px/s that already gates hero bob, dust and the gallop SFX, so ONE number decides
+  // "is the horse moving" for both presentation and the campaign clock and they can
+  // never drift apart. The fade is asymmetric on purpose: the stale cue creeps in, but
+  // resuming a ride must feel instant rather than sluggish.
+  worldWakeSpeed: 40,
+  worldFreezeFadeInT: 0.30,
+  worldFreezeFadeOutT: 0.12,
   raidBreakOffT: 20,  // seconds of sustained, uncaught chase before a party gives up and raids
   raidSpeed: 150,     // travel speed while a broken-off party beelines for a settlement
   raidArrivalR: 140,  // distance at which a raiding party is considered to have occupied its target

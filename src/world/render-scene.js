@@ -1,12 +1,12 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=rd5531dcfef09';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=rd5531dcfef09';
+import { PAL, WORLD } from '../data.js?v=ra209d001f5a8';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=ra209d001f5a8';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
-} from '../world-screens.js?v=rd5531dcfef09';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=rd5531dcfef09';
+} from '../world-screens.js?v=ra209d001f5a8';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=ra209d001f5a8';
 
 const P = PAL.world;
 
@@ -123,6 +123,9 @@ export function drawScene(world, ctx) {
 
   // screen-space HUD
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Plan 023: the frozen-world wash sits OVER the map and its particles but UNDER the
+  // cloud vignette, HUD, hover panel and any modal, so HUD text stays fully legible.
+  drawFreezeCue(world, ctx, cam);
   // corner cloud vignette — atmosphere continuity with the menu and battle scenes
   ctx.fillStyle = 'rgba(255,246,227,0.92)';
   for (const [ox, oy, r] of [[0, 0, 44], [38, 12, 34], [-32, 14, 30], [18, -24, 26]]) {
@@ -144,6 +147,44 @@ export function drawScene(world, ctx) {
 
 // a built wooden crossing, not a bare cream slab: planks, rail posts, and piers
 // sunk into the water, plus a cast shadow so the deck reads as sitting above the current
+// Plan 023: the stale-world cue — the map reads as a held still frame while the hero is
+// stopped. `world.staleT` (0..1) is advanced in World.updateWorldClock(); this function
+// only READS it, because draw() runs zero or many times per tick. Two full-viewport
+// fillRects and one cached gradient: no beginPath and no arc, so it costs nothing against
+// the structural Canvas budget in performance.spec.js. It draws even when effects are off
+// — this is information, not decoration: without it a stopped world has no explanation.
+// Suppressed under a modal, which is already a stronger "the campaign is paused" statement.
+export function drawFreezeCue(world, ctx, cam) {
+  const k = world.staleT;
+  if (k <= 0 || world.screen) return;
+  // desaturation rather than darkening: the hues wash out, so the map reads as stale
+  // rather than as night falling.
+  ctx.save();
+  ctx.globalCompositeOperation = 'saturation';
+  // Kept LIGHT on purpose: the world layer under this wash carries gameplay-critical colour
+  // coding (the red "they outmatch you" pill, the party marker), and a heavy desaturation
+  // strips that signal. The cue only has to say "held", not "greyscale".
+  ctx.globalAlpha = 0.28 * k;
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, cam.w, cam.h);
+  ctx.restore();
+  // Vignette: one viewport-sized gradient, rebuilt only when the viewport actually
+  // changes — the same bounded presentation cache as world._staticPaths.
+  if (world._freezeVigW !== cam.w || world._freezeVigH !== cam.h) {
+    const g = ctx.createRadialGradient(
+      cam.w / 2, cam.h / 2, Math.min(cam.w, cam.h) * 0.48,
+      cam.w / 2, cam.h / 2, Math.max(cam.w, cam.h) * 0.78);
+    g.addColorStop(0, 'rgba(21,22,46,0)');
+    g.addColorStop(1, 'rgba(21,22,46,0.34)');
+    world._freezeVig = g; world._freezeVigW = cam.w; world._freezeVigH = cam.h;
+  }
+  ctx.save();
+  ctx.globalAlpha = k;
+  ctx.fillStyle = world._freezeVig;
+  ctx.fillRect(0, 0, cam.w, cam.h);
+  ctx.restore();
+}
+
 export function drawBridge(world, ctx, bx, by) {
   ctx.save();
   ctx.translate(bx, by);

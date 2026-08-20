@@ -84,7 +84,12 @@ test('withdraw keeps the party on the map, charged, and blocks an instant rematc
     };
     world.parties.push(weak);
     world.grace = 0;
+    // Plan 023: world time only flows while the hero rides, and this fixture parks the hero
+    // on purpose. keepAwake() keeps the world simulating WITHOUT moving the hero, so the
+    // clash classifies initiative exactly as it does mid-ride.
+    window.game.keepAwake(true);
     g.update(1 / 60); // a weak party right on the hero flees -> caughtThem -> withdraw offered
+    window.game.keepAwake(false);
     const canWithdraw = !!(world.screen && world.screen.canWithdraw);
     g.input.injectAction('withdraw', true);
     g.update(1 / 60);
@@ -164,7 +169,12 @@ test('aftermath blocks world input and freezes grace, then decays only after dis
     const graceFrozen = world.grace === graceAtOpen;
     g.input.injectAction('confirm', true); g.update(1 / 60); g.input.injectAction('confirm', false);
     const screenGoneAfterDismiss = !world.screen;
+    // Plan 023: `grace` now has TWO freezes stacked on it — the modal above (asserted by
+    // graceFrozen) and a stopped hero. Keep the world awake for the post-dismissal ticks so
+    // this test still measures the modal freeze lifting rather than the stopped-hero one.
+    window.game.keepAwake(true);
     for (let i = 0; i < 10; i++) g.update(1 / 60);
+    window.game.keepAwake(false);
     return {
       screenKindAtOpen, graceAtOpen, heroMovedWhileBlocked, graceFrozen,
       screenGoneAfterDismiss, graceAfterDismiss: world.grace,

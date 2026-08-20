@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=rd5531dcfef09';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rd5531dcfef09';
-import { Battle } from './battle.js?v=rd5531dcfef09';
-import { World } from './world.js?v=rd5531dcfef09';
-import { ACTIONS } from './input-actions.js?v=rd5531dcfef09';
-import { createWebPlatform } from './platform/web-platform.js?v=rd5531dcfef09';
-import { SaveRepository } from './persistence/save-repository.js?v=rd5531dcfef09';
+import { PAL, WORLD } from './data.js?v=ra209d001f5a8';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=ra209d001f5a8';
+import { Battle } from './battle.js?v=ra209d001f5a8';
+import { World } from './world.js?v=ra209d001f5a8';
+import { ACTIONS } from './input-actions.js?v=ra209d001f5a8';
+import { createWebPlatform } from './platform/web-platform.js?v=ra209d001f5a8';
+import { SaveRepository } from './persistence/save-repository.js?v=ra209d001f5a8';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -13,7 +13,15 @@ const ctx = canvas.getContext('2d');
 function resize() {
   canvas.width = window.innerWidth || 1280;
   canvas.height = window.innerHeight || 720;
-  if (game) { game.camera.w = canvas.width; game.camera.h = canvas.height; game.invalidate(); }
+  if (game) {
+    game.camera.w = canvas.width; game.camera.h = canvas.height; game.invalidate();
+    // Plan 023: camera follow (which owns the map-edge clamp) is frozen while world time
+    // is stale, so a resize during a freeze would leave cam.x/y unclamped against the new
+    // viewport and show a void strip at the map edge until the player moved again.
+    if (game.sceneName === 'world' && game.scene && typeof game.scene.clampCamera === 'function') {
+      game.scene.clampCamera();
+    }
+  }
 }
 window.addEventListener('resize', resize);
 
@@ -253,9 +261,15 @@ class Game {
       this.saveTimer += dt;
       if (this.saveTimer > 4) { this.saveTimer = 0; this.persistRun(); }
       // Plan 021: a world-scene modal (brief/aftermath) genuinely pauses the campaign —
-      // leaving one open must not inflate reported campaign time. isBlocking() is a
-      // documented World predicate; other scenes (menu/battle/victory) never define it.
-      const blocking = !!(this.scene && typeof this.scene.isBlocking === 'function' && this.scene.isBlocking());
+      // leaving one open must not inflate reported campaign time. Plan 023 adds the second
+      // pause of the same kind: a stopped hero freezes world time, so no campaign time
+      // passes while the map is stale either. Both are documented World predicates, so
+      // main.js still never reads World internals; other scenes never define them.
+      // The 4-second autosave above is deliberately NOT gated — a save write is durability,
+      // not simulation, and while frozen it rewrites identical bytes.
+      const sc = this.scene;
+      const blocking = !!(sc && typeof sc.isBlocking === 'function' && sc.isBlocking())
+        || !!(sc && typeof sc.isTimeFrozen === 'function' && sc.isTimeFrozen());
       if (this._lastSave && this._lastSave.stats && !blocking) this._lastSave.stats.playT += dt;
     }
     this.camera.update(dt, this.shakeRng);
@@ -568,6 +582,25 @@ window.__g = game; // raw handle for critics/debugging
 // any call through window.game flips persistence to a separate save slot — a critic
 // driving the game headlessly can never read, overwrite, or wipe a real campaign.
 const markTest = () => { game.testMode = true; };
+// Plan 023: world time only flows while the hero rides, but many fixtures need to observe
+// party AI, spawns or timers with the hero DELIBERATELY parked (to isolate a pursuit
+// geometry, a timer, or a clash from incidental contact). `keepAwake` is a treadmill: the
+// movement phase reports a riding speed without travelling, so hero.vx/vy stay 0 and
+// hero.x/y never change and the fixture behaves exactly as it did before the freeze
+// mechanic existed. Use a real held movement input instead whenever the movement phase
+// itself is the subject of the test.
+const keepAwake = (world, on = true) => {
+  if (!world) return;
+  if (on) {
+    if (!world._rideOriginal) {
+      world._rideOriginal = world.updateHeroMovement;
+      world.updateHeroMovement = function () { this.heroSpeed = 300; };
+    }
+  } else if (world._rideOriginal) {
+    world.updateHeroMovement = world._rideOriginal;
+    world._rideOriginal = null;
+  }
+};
 window.game = {
   scene: () => game.sceneName,
   step: (seconds = DT) => {
@@ -584,6 +617,10 @@ window.game = {
   click: (x, y) => { markTest(); game.input.injectMouse(x, y, true); game.update(DT); game.input.injectMouse(x, y, false); game.draw(); },
   shot: () => canvas.toDataURL('image/png'),
   effects: (enabled = true) => { markTest(); game.effectsEnabled = !!enabled; },
+  // See keepAwake above: keeps the world simulating with the hero parked. Idempotent, and
+  // scoped to the CURRENT scene instance — re-apply after any scenario(), which builds a
+  // new World.
+  keepAwake: (on = true) => { markTest(); keepAwake(game.scene, on); },
   state: () => {
     const s = { scene: game.sceneName };
     const sc = game.scene;
@@ -608,6 +645,18 @@ window.game = {
     if (game.sceneName === 'world' && sc) {
       s.world = {
         hero: { x: sc.hero.x | 0, y: sc.hero.y | 0 },
+        // Plan 023: the freeze mechanic's observable surface. `speed` is whole px/s and
+        // `time` is 3dp so no float can make two otherwise-identical reads differ. All
+        // three are inside the block world-hover.spec.js compares byte-for-byte between a
+        // hovered and an un-hovered read, and all three are safe there because they are
+        // pointer-independent AND tick-count-independent while the world is frozen.
+        // `staleT` is deliberately NOT exposed: it accumulates on every frozen tick, so it
+        // is effectively a frame counter and would make state() sensitive to how many
+        // frames elapsed between two reads. It stays a presentation value read off
+        // __g.scene, alongside grace, spawnT, msgT and particles.
+        time: Math.round(sc.time * 1000) / 1000,
+        speed: Math.round(sc.heroSpeed),
+        flowing: sc.timeFlowing(),
         gold: sc.save.gold, troops: sc.save.troops.length,
         parties: sc.parties.length,
         camps: sc.save.camps,
@@ -713,7 +762,14 @@ window.game = {
           _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
         });
         world.grace = 0;
+        // Plan 023: the party-clash kinds place a party on a deliberately STATIONARY hero,
+        // and a frozen tick runs the encounter seam only — it does not classify initiative.
+        // Keep the world awake for this one setup tick (without moving the hero) so `mood`
+        // resolves to ambush / run-them-down / mutual exactly as it does mid-ride, which is
+        // when a real clash always happens.
+        keepAwake(world, true);
         game.update(DT);
+        keepAwake(world, false);
       }
     } else if (name === 'world_aftermath') {
       // Drives a real party clash through requestBattle -> confirm -> a real
@@ -735,7 +791,11 @@ window.game = {
         _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
       });
       world.grace = 0;
+      // Plan 023: as in world_brief — one awake tick so the parked hero's clash still
+      // classifies initiative. Released immediately; the aftermath itself needs no ride.
+      keepAwake(world, true);
       game.update(DT); // opens the brief via the real party-clash path
+      keepAwake(world, false);
       game.input.injectAction(ACTIONS.CONFIRM, true);
       game.update(DT); // confirms it -> real Battle.startBattle()
       game.input.injectAction(ACTIONS.CONFIRM, false);
