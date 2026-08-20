@@ -96,10 +96,10 @@ export function updateSettlementInteractions(world, inp) {
 
 // Plan 021: the razing/absorption logic that used to be an inline onWinExtra closure
 // built at press time. It now must be rebuildable at CONFIRM time (decision 6: the
-// garrison roll for an unscouted camp is deferred to confirm, so `comp` may not exist
-// yet when the brief opens), so it lives here as a plain method parameterized on the
-// camp/save-camp-state/comp it needs instead of closing over press-time locals.
-export function campVictoryExtra(world, camp, st, comp) {
+// brief can open before the garrison is rolled), so it lives here as a plain method
+// parameterized on the camp/save-camp-state it needs instead of closing over
+// press-time locals.
+export function campVictoryExtra(world, camp, st) {
   return () => {
     st.razed = true;
     world.save.gold += camp.stronghold ? 200 : 60;
@@ -110,12 +110,6 @@ export function campVictoryExtra(world, camp, st, comp) {
     }
     const razedNow = world.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     if (!camp.stronghold) {
-      const humans = comp.filter(t => t === 'bandit' || t === 'raider').length;
-      let freed = 0;
-      while (freed < Math.min(2, Math.ceil(humans / 3)) && world.save.troops.length < world.save.armyCap) {
-        world.save.troops.push({ type: world.simRng() < 0.5 ? 'spear' : 'archer' });
-        freed++;
-      }
       let remnantNote = '';
       if (razedNow >= 3) {
         const strongSt = world.save.camps.find(c => c.id === 'strong');
@@ -128,8 +122,7 @@ export function campVictoryExtra(world, camp, st, comp) {
           ? ` ${absorbed} bandit remnants withdraw into Wolfsjaw and man its walls — storm it!`
           : ' Wolfsjaw stands alone — storm it!';
       }
-      world.save.toast = `Camp razed (${razedNow}/3)!` +
-        (freed > 0 ? ` ${freed} freed captives join your warband.` : '') + remnantNote;
+      world.save.toast = `Camp razed (${razedNow}/3)!` + remnantNote;
     }
   };
 }

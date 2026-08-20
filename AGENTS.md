@@ -229,7 +229,7 @@ npx playwright test tests/e2e/campaign-persistence.spec.js
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,
 pinned world seeds, and fixed timesteps rather than wall-clock sleeps. Preserve
-the existing 22 named legacy records and their result shape. Do not weaken an
+the existing 21 named legacy records and their result shape. Do not weaken an
 assertion, raise a performance budget, or ignore page/console errors to obtain
 green CI.
 

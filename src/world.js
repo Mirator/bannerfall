@@ -876,8 +876,8 @@ export class World {
     return settlementInteractions(this, inp);
   }
 
-  campVictoryExtra(camp, st, comp) {
-    return campVictoryBookkeeping(this, camp, st, comp);
+  campVictoryExtra(camp, st) {
+    return campVictoryBookkeeping(this, camp, st);
   }
 
   updateCampInteraction(inp, settlement) {
