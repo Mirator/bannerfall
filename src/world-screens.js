@@ -3,9 +3,12 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength } from './data.js?v=r4873a112c73f';
-import { rrect } from './engine.js?v=r4873a112c73f';
-import { SQUAD_LABELS } from './battle.js?v=r4873a112c73f';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=r3129cfc38fd8';
+import { clamp, rrect } from './engine.js?v=r3129cfc38fd8';
+import { SQUAD_LABELS } from './battle.js?v=r3129cfc38fd8';
+
+// Same palette the world scene draws with — these panels sit on top of it.
+const P = PAL.world;
 
 const ENEMY_LABELS = Object.freeze({ bandit: 'bandit', raider: 'raider', wolf: 'wolf', brute: 'brute' });
 const ENEMY_LABELS_PLURAL = Object.freeze({ bandit: 'bandits', raider: 'raiders', wolf: 'wolves', brute: 'brutes' });
@@ -103,7 +106,7 @@ export function hoverTargetAt(world, wx, wy) {
     const strength = enemyStrength(p.comp), mine = playerStrength(world.save.troops);
     // Same odds-word convention as the close-range pill drawn under the party token
     // (world.js drawParty) — hover repeats it alongside the numbers it omits.
-    const odds = strength > mine * 1.15 ? '⚠ they outmatch you' : strength < mine * 0.85 ? 'favored' : 'an even fight';
+    const odds = oddsWord(strength, mine);
     return {
       kind: 'party', x: p.x, y: p.y,
       title: heavy ? 'Raiding party (heavy)' : 'Raiding party',
@@ -155,14 +158,14 @@ export function drawHoverPanel(ctx, cam, model) {
   for (let i = 1; i < lines.length; i++) w = Math.max(w, ctx.measureText(lines[i]).width);
   const pw = w + 28, ph = lines.length * 18 + 14;
   let px = anchor.x - pw / 2, py = anchor.y - ph - 34;
-  px = Math.max(6, Math.min(cam.w - pw - 6, px));
-  py = Math.max(6, Math.min(cam.h - ph - 6, py));
+  px = clamp(px, 6, Math.max(6, cam.w - pw - 6));
+  py = clamp(py, 6, Math.max(6, cam.h - ph - 6));
   ctx.fillStyle = 'rgba(30,42,74,0.94)';
   rrect(ctx, px, py, pw, ph, 8); ctx.fill();
-  ctx.strokeStyle = '#F2E3C1'; ctx.lineWidth = 1.5;
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 1.5;
   rrect(ctx, px, py, pw, ph, 8); ctx.stroke();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#F2E3C1';
+  ctx.fillStyle = P.cream;
   ctx.font = '800 13px system-ui, sans-serif';
   ctx.fillText(lines[0], px + 14, py + 20);
   ctx.font = '600 12px system-ui, sans-serif';
@@ -180,8 +183,7 @@ export function buildBriefModel(descriptor, save) {
   const enemyRoster = scouted ? enemyBreakdown(descriptor.comp) : 'unknown — unscouted';
   const enemyBodies = scouted ? descriptor.comp.length : null;
   const enemyStr = scouted ? enemyStrength(descriptor.comp) : null;
-  const odds = !scouted ? 'unknown' : enemyStr > playerStr * 1.15 ? '⚠ they outmatch you'
-    : enemyStr < playerStr * 0.85 ? 'favored' : 'an even fight';
+  const odds = !scouted ? 'unknown' : oddsWord(enemyStr, playerStr);
   return {
     kind: 'brief',
     title: descriptor.title,
@@ -203,17 +205,17 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.fillRect(0, 0, W, H);
   const pw = Math.min(720, W - 60), ph = Math.min(420, H - 60);
   const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
-  ctx.fillStyle = '#1E2A4A';
+  ctx.fillStyle = P.ink;
   rrect(ctx, px, py, pw, ph, 14); ctx.fill();
-  ctx.strokeStyle = '#F2E3C1'; ctx.lineWidth = 2;
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
   rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#F2E3C1';
+  ctx.fillStyle = P.cream;
   ctx.font = '900 26px system-ui, sans-serif';
   ctx.fillText(model.title || 'BATTLE', W / 2, py + 40);
   if (model.subtitle) {
     ctx.font = '700 14px system-ui, sans-serif';
-    ctx.fillStyle = '#FFD34D';
+    ctx.fillStyle = P.hero;
     ctx.fillText(model.subtitle, W / 2, py + 64);
   }
   const colY = py + (model.subtitle ? 96 : 84);
@@ -221,7 +223,7 @@ export function drawBriefPanel(ctx, cam, model) {
   const leftX = px + pw / 4, rightX = px + pw * 3 / 4;
   ctx.textAlign = 'left';
   ctx.font = '800 15px system-ui, sans-serif';
-  ctx.fillStyle = '#F2E3C1';
+  ctx.fillStyle = P.cream;
   ctx.fillText('YOUR WARBAND', leftX - colW / 2, colY);
   ctx.fillText('THE ENEMY', rightX - colW / 2, colY);
   ctx.font = '600 13px system-ui, sans-serif';
@@ -234,10 +236,10 @@ export function drawBriefPanel(ctx, cam, model) {
   );
   ctx.textAlign = 'center';
   ctx.font = '800 16px system-ui, sans-serif';
-  ctx.fillStyle = model.odds === '⚠ they outmatch you' ? '#C23A2E' : '#F2E3C1';
+  ctx.fillStyle = model.odds === ODDS_WORDS.outmatched ? P.enemy : P.cream;
   ctx.fillText(model.odds, W / 2, colY + 86);
   ctx.font = '600 13px system-ui, sans-serif';
-  ctx.fillStyle = '#F2E3C1';
+  ctx.fillStyle = P.cream;
   ctx.fillText(`Arena: ${model.arena || 'field'}`, W / 2, colY + 110);
 
   // Real clickable buttons, not just a text footer — updateWorldScreens() hit-tests
@@ -263,11 +265,11 @@ export function drawBriefPanel(ctx, cam, model) {
 }
 
 function drawButton(ctx, rect, label, accent) {
-  ctx.fillStyle = accent ? '#FFD34D' : '#F2E3C1';
+  ctx.fillStyle = accent ? P.hero : P.cream;
   rrect(ctx, rect.x, rect.y, rect.w, rect.h, 8); ctx.fill();
-  ctx.strokeStyle = '#1E2A4A'; ctx.lineWidth = 2;
+  ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
   rrect(ctx, rect.x, rect.y, rect.w, rect.h, 8); ctx.stroke();
-  ctx.fillStyle = '#1E2A4A';
+  ctx.fillStyle = P.ink;
   ctx.font = '800 13px system-ui, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 1);
@@ -301,19 +303,19 @@ export function drawAftermathPanel(ctx, cam, model) {
   ctx.fillRect(0, 0, W, H);
   const pw = Math.min(680, W - 60), ph = Math.min(440, H - 60);
   const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
-  ctx.fillStyle = '#1E2A4A';
+  ctx.fillStyle = P.ink;
   rrect(ctx, px, py, pw, ph, 14); ctx.fill();
-  ctx.strokeStyle = '#F2E3C1'; ctx.lineWidth = 2;
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
   rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
   ctx.textAlign = 'center';
   const headline = model.victory ? 'VICTORY' : model.retreated ? 'WITHDRAWN' : 'DEFEAT';
-  ctx.fillStyle = model.victory ? '#7CE06B' : model.retreated ? '#F2E3C1' : '#C23A2E';
+  ctx.fillStyle = model.victory ? P.good : model.retreated ? P.cream : P.enemy;
   ctx.font = '900 30px system-ui, sans-serif';
   ctx.fillText(headline, W / 2, py + 44);
 
   ctx.textAlign = 'left';
   ctx.font = '800 14px system-ui, sans-serif';
-  ctx.fillStyle = '#F2E3C1';
+  ctx.fillStyle = P.cream;
   const colW = pw / 2 - 40;
   const leftX = px + 40, rightX = px + pw / 2 + 20;
   let y = py + 84;
@@ -330,13 +332,13 @@ export function drawAftermathPanel(ctx, cam, model) {
   }
   y += 22 + rows * 18 + 20;
   ctx.font = '700 14px system-ui, sans-serif';
-  ctx.fillStyle = '#FFD34D';
+  ctx.fillStyle = P.hero;
   ctx.fillText(`Loot: +${model.loot || 0} gold`, leftX, y);
   ctx.fillText(`Hero HP: ${model.heroHp}/${model.heroMaxHp}`, rightX, y);
   y += 30;
   if (model.consequence) {
     ctx.font = '600 13px system-ui, sans-serif';
-    ctx.fillStyle = '#F2E3C1';
+    ctx.fillStyle = P.cream;
     ctx.textAlign = 'center';
     // The consequence toast can run long (razed-camp remnant notes); wrap it instead of
     // spilling off the panel edges.

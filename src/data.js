@@ -13,6 +13,7 @@ export const PAL = {
     waterLight: '#7FD9E6',
     hero: '#FFD34D',
     enemy: '#C23A2E',
+    good: '#7CE06B',       // victory / in-your-favour green (same green as the battle HP bar)
   },
   // Battle — dusty rose biome (rose / grey / yellow / teal / ink). Mutated per-biome at battle start.
   battle: {
@@ -159,4 +160,51 @@ export const BALANCE = {
   raidBreakOffT: 20,  // seconds of sustained, uncaught chase before a party gives up and raids
   raidSpeed: 150,     // travel speed while a broken-off party beelines for a settlement
   raidArrivalR: 140,  // distance at which a raiding party is considered to have occupied its target
+  // Army-cap upgrade price, charged in World.updateSettlementInteractions and shown in
+  // the town prompt — one formula (armyCapCost) so the price tag can never lie.
+  armyCapCostBase: 40,
+  armyCapCostStep: 20,
+  // Odds-word bands: above `oddsStronger` they outmatch you, below `oddsFavored` you are
+  // favoured, between is an even fight. Retuning these retunes every odds label at once
+  // (party pill, camp prompt, hover panel, pre-battle brief) — see oddsWord().
+  oddsStronger: 1.15,
+  oddsFavored: 0.85,
+  // Enemy-composition roll weights, per source. Two tables, deliberately different: a
+  // roaming party leans bandit-heavy with no brute ceiling, a camp garrison rolls brutes
+  // slightly more often but caps them by camp size. They sit side by side so retuning one
+  // is a choice rather than an oversight (both feed rollComposition()).
+  compRolls: {
+    party:    { brute: 0.20, bandit: 0.55, raider: 0.80 },
+    garrison: { brute: 0.22, bandit: 0.60, raider: 0.85 },
+  },
 };
+
+// The odds vocabulary. Every surface that judges a fight uses these exact strings, so a
+// caller can compare against ODDS_WORDS.outmatched to colour the label without re-deriving
+// the threshold (world.js's party pill and camp prompt, world-screens.js's hover + brief).
+export const ODDS_WORDS = Object.freeze({
+  outmatched: '⚠ they outmatch you',
+  favored: 'favored',
+  even: 'an even fight',
+});
+export function oddsWord(enemyStr, mine) {
+  if (enemyStr > mine * BALANCE.oddsStronger) return ODDS_WORDS.outmatched;
+  if (enemyStr < mine * BALANCE.oddsFavored) return ODDS_WORDS.favored;
+  return ODDS_WORDS.even;
+}
+
+// Shared weighted composition roller: fills to `target` strength, drawing exactly one
+// R() per body so a given seed produces a given comp. `weights` is a BALANCE.compRolls
+// table; `bruteCap` bounds heavy bodies (garrisons cap by camp size, parties do not).
+export function rollComposition(target, R, weights, bruteCap = Infinity) {
+  const comp = [];
+  let str = 0, brutes = 0;
+  while (str < target) {
+    const r = R();
+    if (brutes < bruteCap && target - str >= 5 && r < weights.brute) { comp.push('brute'); brutes++; str += 5; }
+    else if (r < weights.bandit) { comp.push('bandit'); str += 1; }
+    else if (r < weights.raider) { comp.push('raider'); str += 1; }
+    else { comp.push('wolf'); str += 1; }
+  }
+  return comp;
+}

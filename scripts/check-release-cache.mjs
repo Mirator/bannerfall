@@ -11,8 +11,13 @@ const VERSION_QUERY_RE = /^\?v=([^&]+)$/;
 // These expressions intentionally cover only static ES-module declarations.
 // Dynamic imports would need a runtime graph and therefore cannot be safely
 // rewritten by this dependency-free release tool.
+// The clause list may span newlines (`import {\n a, b,\n } from './x.js'`), so the
+// gap before `from` must not exclude `\n` — it excludes `;` instead, which is what
+// actually bounds a statement. A newline-intolerant pattern here silently dropped
+// src/world-screens.js from the graph: unhashed, so edits to it never bumped the
+// token, and its own refs were never validated.
 const SIDE_EFFECT_IMPORT_RE = /\bimport\s+(["'])([^"']+)\1/g;
-const FROM_IMPORT_RE = /\b(?:import|export)\s+[^;\n]*?\s+from\s+(["'])([^"']+)\1/g;
+const FROM_IMPORT_RE = /\b(?:import|export)\s+[^;]*?\s+from\s+(["'])([^"']+)\1/g;
 const MODULE_SCRIPT_RE = /<script\b([^>]*\btype\s*=\s*["']module["'][^>]*)>/gi;
 const SRC_ATTRIBUTE_RE = /\bsrc\s*=\s*(["'])([^"']+)\1/i;
 

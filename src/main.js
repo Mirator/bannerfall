@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=rcba1d144dd28';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rcba1d144dd28';
-import { Battle } from './battle.js?v=rcba1d144dd28';
-import { World } from './world.js?v=rcba1d144dd28';
-import { ACTIONS } from './input-actions.js?v=rcba1d144dd28';
-import { createWebPlatform } from './platform/web-platform.js?v=rcba1d144dd28';
-import { SaveRepository } from './persistence/save-repository.js?v=rcba1d144dd28';
+import { PAL, WORLD } from './data.js?v=r3129cfc38fd8';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3129cfc38fd8';
+import { Battle } from './battle.js?v=r3129cfc38fd8';
+import { World } from './world.js?v=r3129cfc38fd8';
+import { ACTIONS } from './input-actions.js?v=r3129cfc38fd8';
+import { createWebPlatform } from './platform/web-platform.js?v=r3129cfc38fd8';
+import { SaveRepository } from './persistence/save-repository.js?v=r3129cfc38fd8';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -273,7 +273,7 @@ class Game {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = 'rgba(30,42,74,0.85)';
       rrect(ctx, canvas.width - 96, canvas.height - 40, 82, 26, 6); ctx.fill();
-      ctx.fillStyle = '#F2E3C1';
+      ctx.fillStyle = PAL.world.cream;
       ctx.font = '700 12px system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('🔇 muted', canvas.width - 55, canvas.height - 27);
@@ -287,7 +287,7 @@ class Game {
     ctx.fillStyle = 'rgba(21,22,46,0.72)';
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#F2E3C1';
+    ctx.fillStyle = PAL.world.cream;
     ctx.font = '900 54px system-ui, sans-serif';
     ctx.fillText('PAUSED', W / 2, H * 0.4);
     ctx.font = '600 16px system-ui, sans-serif';
