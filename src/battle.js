@@ -1,8 +1,8 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r3129cfc38fd8';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r3129cfc38fd8';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r3129cfc38fd8';
-import { ACTIONS } from './input-actions.js?v=r3129cfc38fd8';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r415e1b48d7e0';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r415e1b48d7e0';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r415e1b48d7e0';
+import { ACTIONS } from './input-actions.js?v=r415e1b48d7e0';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -939,19 +939,19 @@ export class Battle {
         this._unitGrid.stats.pairs++;
         this.applyUnitSeparation(a, b);
       }
-      this.applyHeroSeparation(a, h);
+      this.pushOutOf(a, h, a.d.radius + HERO.radius + 3, 0.9);
       const obstacleCandidates = this._obstacleGrid.queryOrdered(a.x, a.y, a.d.radius + maxObstacleRadius);
       for (let k = 0; k < obstacleCandidates; k++) {
         const o = this._obstacleGrid.queryItems[k];
         this._obstacleGrid.noteCandidate();
-        this.applyObstacleSeparation(a, o);
+        this.pushOutOf(a, o, a.d.radius + o.r, 1);
       }
     }
     const heroObstacleCandidates = this._obstacleGrid.queryOrdered(h.x, h.y, HERO.radius + maxObstacleRadius);
     for (let k = 0; k < heroObstacleCandidates; k++) {
       const o = this._obstacleGrid.queryItems[k];
       this._obstacleGrid.noteCandidate();
-      this.applyHeroObstacleSeparation(h, o);
+      this.pushOutOf(h, o, HERO.radius + o.r, 1);
     }
   }
 
@@ -959,10 +959,10 @@ export class Battle {
     for (let i = 0; i < all.length; i++) {
       const a = all[i];
       for (let j = i + 1; j < all.length; j++) this.applyUnitSeparation(a, all[j]);
-      this.applyHeroSeparation(a, h);
-      for (const obstacle of this.obstacles) this.applyObstacleSeparation(a, obstacle);
+      this.pushOutOf(a, h, a.d.radius + HERO.radius + 3, 0.9);
+      for (const o of this.obstacles) this.pushOutOf(a, o, a.d.radius + o.r, 1);
     }
-    for (const obstacle of this.obstacles) this.applyHeroObstacleSeparation(h, obstacle);
+    for (const o of this.obstacles) this.pushOutOf(h, o, HERO.radius + o.r, 1);
   }
 
   applyUnitSeparation(a, b) {
@@ -976,30 +976,15 @@ export class Battle {
     }
   }
 
-  applyHeroSeparation(a, h) {
-    const rr = a.d.radius + HERO.radius + 3;
-    const d2 = dist2(a.x, a.y, h.x, h.y);
+  // Push `a` clear of a body it must not overlap, moving only `a`: the hero shoves
+  // troops aside but is not shoved by them, and obstacles never move at all. The
+  // symmetric unit-vs-unit case stays separate above because both sides give ground.
+  // `rr` is the sum of radii plus whatever spacing the caller wants kept.
+  pushOutOf(a, b, rr, factor) {
+    const d2 = dist2(a.x, a.y, b.x, b.y);
     if (d2 < rr * rr && d2 > 0.01) {
-      const d = Math.sqrt(d2), push = (rr - d) / d * 0.9;
-      a.x += (a.x - h.x) * push; a.y += (a.y - h.y) * push;
-    }
-  }
-
-  applyObstacleSeparation(a, o) {
-    const obstacleR = a.d.radius + o.r;
-    const obstacleD2 = dist2(a.x, a.y, o.x, o.y);
-    if (obstacleD2 < obstacleR * obstacleR && obstacleD2 > 0.01) {
-      const d = Math.sqrt(obstacleD2), push = (obstacleR - d) / d;
-      a.x += (a.x - o.x) * push; a.y += (a.y - o.y) * push;
-    }
-  }
-
-  applyHeroObstacleSeparation(h, o) {
-    const rr = HERO.radius + o.r;
-    const d2 = dist2(h.x, h.y, o.x, o.y);
-    if (d2 < rr * rr && d2 > 0.01) {
-      const d = Math.sqrt(d2), push = (rr - d) / d;
-      h.x += (h.x - o.x) * push; h.y += (h.y - o.y) * push;
+      const d = Math.sqrt(d2), push = (rr - d) / d * factor;
+      a.x += (a.x - b.x) * push; a.y += (a.y - b.y) * push;
     }
   }
 

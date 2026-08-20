@@ -3,17 +3,24 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=r3129cfc38fd8';
-import { clamp, rrect } from './engine.js?v=r3129cfc38fd8';
-import { SQUAD_LABELS } from './battle.js?v=r3129cfc38fd8';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=r415e1b48d7e0';
+import { clamp, rrect } from './engine.js?v=r415e1b48d7e0';
+import { SQUAD_LABELS } from './battle.js?v=r415e1b48d7e0';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
 
-const ENEMY_LABELS = Object.freeze({ bandit: 'bandit', raider: 'raider', wolf: 'wolf', brute: 'brute' });
-const ENEMY_LABELS_PLURAL = Object.freeze({ bandit: 'bandits', raider: 'raiders', wolf: 'wolves', brute: 'brutes' });
-const UNIT_LABELS = Object.freeze({ spear: 'spearman', archer: 'archer', knight: 'knight' });
-const UNIT_LABELS_PLURAL = Object.freeze({ spear: 'spearmen', archer: 'archers', knight: 'knights' });
+// Prose labels, derived from the type tables rather than hand-copied: adding a unit or
+// enemy type can no longer silently drop it from a breakdown or casualty list. Singular
+// is the table's own `name`, lowercased for mid-sentence use ('2 spearmen', 'a bandit');
+// plurals are declared because 'spearmen'/'wolves' are not derivable. Object key order
+// follows the tables, which is what gives the rows their stable display order.
+const labelsOf = (types, field) =>
+  Object.freeze(Object.fromEntries(Object.keys(types).map(t => [t, field(types[t])])));
+const ENEMY_LABELS = labelsOf(ENEMY_TYPES, d => d.name.toLowerCase());
+const ENEMY_LABELS_PLURAL = labelsOf(ENEMY_TYPES, d => d.plural);
+const UNIT_LABELS = labelsOf(UNIT_TYPES, d => d.name.toLowerCase());
+const UNIT_LABELS_PLURAL = labelsOf(UNIT_TYPES, d => d.plural);
 
 // Frequency-count rows for a flat list of dead enemy types (result.deadTypes already
 // names exactly who died — no before/after subtraction needed).

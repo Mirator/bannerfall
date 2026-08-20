@@ -1,13 +1,13 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength, oddsWord, ODDS_WORDS, rollComposition } from './data.js?v=r3129cfc38fd8';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r3129cfc38fd8';
-import { SAVE_VERSION } from './save.js?v=r3129cfc38fd8';
-import { ACTIONS } from './input-actions.js?v=r3129cfc38fd8';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength, oddsWord, ODDS_WORDS, rollComposition } from './data.js?v=r415e1b48d7e0';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r415e1b48d7e0';
+import { SAVE_VERSION } from './save.js?v=r415e1b48d7e0';
+import { ACTIONS } from './input-actions.js?v=r415e1b48d7e0';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud,
   buildBriefModel, drawBriefPanel,
   buildAftermathModel, drawAftermathPanel,
-} from './world-screens.js?v=r3129cfc38fd8';
+} from './world-screens.js?v=r415e1b48d7e0';
 
 const P = PAL.world;
 
