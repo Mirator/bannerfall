@@ -1,8 +1,8 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rcba1d144dd28';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=rcba1d144dd28';
-import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=rcba1d144dd28';
-import { ACTIONS } from './input-actions.js?v=rcba1d144dd28';
+import { PAL, BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=r3129cfc38fd8';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles, shadow, shade, tree, rock, rrect, hpBar, balloon } from './engine.js?v=r3129cfc38fd8';
+import { SpatialGrid, stableSortPrefix } from './battle/spatial-index.js?v=r3129cfc38fd8';
+import { ACTIONS } from './input-actions.js?v=r3129cfc38fd8';
 
 const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -1389,7 +1389,7 @@ export class Battle {
         ctx.lineTo(p.x + p.w / 2 + ext, p.y - ext * 0.4); ctx.lineTo(p.x + p.w / 2, p.y); ctx.closePath(); ctx.fill();
         ctx.fillStyle = P.cream;
         ctx.beginPath(); ctx.moveTo(p.x - p.w / 2 - 4, p.y - p.h); ctx.lineTo(p.x, p.y - p.h - p.w * 0.5); ctx.lineTo(p.x + p.w / 2 + 4, p.y - p.h); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = shade(P.cream.startsWith('#') ? P.cream : '#F2E3C1', 0.8);
+        ctx.fillStyle = shade(P.cream, 0.8);
         ctx.beginPath(); ctx.moveTo(p.x, p.y - p.h - p.w * 0.5); ctx.lineTo(p.x + p.w / 2 + 4, p.y - p.h);
         ctx.lineTo(p.x + p.w / 2 + ext, p.y - p.h - ext * 0.4); ctx.closePath(); ctx.fill();
         // door — a building people live in

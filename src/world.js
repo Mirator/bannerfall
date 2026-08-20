@@ -1,13 +1,13 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength } from './data.js?v=rcba1d144dd28';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=rcba1d144dd28';
-import { SAVE_VERSION } from './save.js?v=rcba1d144dd28';
-import { ACTIONS } from './input-actions.js?v=rcba1d144dd28';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, enemyStrength, playerStrength, oddsWord, ODDS_WORDS, rollComposition } from './data.js?v=r3129cfc38fd8';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles, shadow, shade, tree, mountain, rrect, rock } from './engine.js?v=r3129cfc38fd8';
+import { SAVE_VERSION } from './save.js?v=r3129cfc38fd8';
+import { ACTIONS } from './input-actions.js?v=r3129cfc38fd8';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud,
   buildBriefModel, drawBriefPanel,
   buildAftermathModel, drawAftermathPanel,
-} from './world-screens.js?v=r4873a112c73f';
+} from './world-screens.js?v=r3129cfc38fd8';
 
 const P = PAL.world;
 
@@ -494,20 +494,11 @@ export class World {
     return strong.min + R() * (strong.max - strong.min);
   }
 
-  // Shared enemy-composition roller, target strength on `simRng` — used by spawnParty
-  // and by the floor guarantee (enforceBeatableFloor) so both draw from one formula.
+  // Roaming-party composition, target strength on `simRng` — used by spawnParty and by
+  // the floor guarantee (enforceBeatableFloor) so both draw from one formula. Weights
+  // live in BALANCE.compRolls.party, next to the garrison table rollGarrison uses.
   rollComp(target) {
-    const R = this.simRng;
-    const comp = [];
-    let str = 0;
-    while (str < target) {
-      const r = R();
-      if (target - str >= 5 && r < 0.2) { comp.push('brute'); str += 5; }
-      else if (r < 0.55) { comp.push('bandit'); str += 1; }
-      else if (r < 0.8) { comp.push('raider'); str += 1; }
-      else { comp.push('wolf'); str += 1; }
-    }
-    return comp;
+    return rollComposition(target, this.simRng, BALANCE.compRolls.party);
   }
 
   // Spawn a party aimed at a strength band around the player. `band`, when given
@@ -518,7 +509,7 @@ export class World {
     const mine = this.myStrength();
     const razed = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     const effectiveBand = band ?? this.rollPartyBand(razed);
-    const target = Math.max(2, Math.min(24, Math.round(mine * effectiveBand)));
+    const target = clamp(Math.round(mine * effectiveBand), 2, 24);
     const comp = this.rollComp(target);
     // never spawn a party inside a river or mountain — retry a few scatter offsets
     let px = camp.x, py = camp.y;
@@ -586,7 +577,7 @@ export class World {
     // Only at the party cap, with no room to add one, is an existing band rewritten.
     let weakest = this.parties[0];
     for (const p of this.parties) if (this.strength(p.comp) < this.strength(weakest.comp)) weakest = p;
-    const target = Math.max(2, Math.min(24, Math.round(mine * evenBand())));
+    const target = clamp(Math.round(mine * evenBand()), 2, 24);
     weakest.comp = this.rollComp(target);
   }
 
@@ -613,16 +604,7 @@ export class World {
     const hardMul = this.save.hard ? 1.25 : 1;
     const target = Math.max(camp.size + 2, Math.round(mine * (camp.tier || 1) * hardMul));
     const bruteCap = camp.stronghold ? 3 : mine >= 12 ? 2 : mine >= 8 ? 1 : 0;
-    const comp = [];
-    let str = 0, brutes = 0;
-    while (str < target) {
-      const r = R();
-      if (brutes < bruteCap && target - str >= 5 && r < 0.22) { comp.push('brute'); brutes++; str += 5; }
-      else if (r < 0.6) { comp.push('bandit'); str += 1; }
-      else if (r < 0.85) { comp.push('raider'); str += 1; }
-      else { comp.push('wolf'); str += 1; }
-    }
-    return comp;
+    return rollComposition(target, R, BALANCE.compRolls.garrison, bruteCap);
   }
   // what the map/prompt SHOWS: the scouted count, or nothing if not yet scouted
   garrisonStrength(camp) {
@@ -631,6 +613,12 @@ export class World {
   }
   myStrength() {
     return playerStrength(this.save.troops);
+  }
+
+  // Army-cap upgrade price: rises by a step per +2 already bought. The charge site and the
+  // town prompt's price tag both read this, so the displayed price is the price paid.
+  armyCapCost() {
+    return BALANCE.armyCapCostBase + (this.save.armyCap - BALANCE.armyCapBase) * BALANCE.armyCapCostStep;
   }
 
   nearSettlement(r = 110) {
@@ -978,7 +966,7 @@ export class World {
           }
         }
         if (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY)) {
-          const cost = 40 + (this.save.armyCap - BALANCE.armyCapBase) * 20;
+          const cost = this.armyCapCost();
           if (this.save.gold >= cost) {
             this.save.gold -= cost; this.save.armyCap += 2;
             this.game.sfx.coin(); this.say(`Army capacity is now ${this.save.armyCap}`);
@@ -1512,7 +1500,7 @@ export class World {
       ctx.lineTo(hx + w / 2 + ext, hy - ext * 0.4); ctx.lineTo(hx + w / 2, hy); ctx.closePath(); ctx.fill();
       ctx.fillStyle = P.cream;
       ctx.beginPath(); ctx.moveTo(hx - w / 2 - 3, hy - hh); ctx.lineTo(hx, hy - hh - w * 0.55); ctx.lineTo(hx + w / 2 + 3, hy - hh); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = shade('#F2E3C1', 0.8);
+      ctx.fillStyle = shade(P.cream, 0.8);
       ctx.beginPath(); ctx.moveTo(hx, hy - hh - w * 0.55); ctx.lineTo(hx + w / 2 + 3, hy - hh);
       ctx.lineTo(hx + w / 2 + ext, hy - hh - ext * 0.4); ctx.closePath(); ctx.fill();
     };
@@ -1674,7 +1662,9 @@ export class World {
     const pStr = this.strength(p.comp), mineStr = this.myStrength();
     const bodies = p.comp.length;
     const heavy = p.comp.includes('brute');
-    const stronger = pStr > mineStr * 1.15;
+    // One odds judgment, reused for the badge colour and the pill text below.
+    const oddsTxt = oddsWord(pStr, mineStr);
+    const stronger = oddsTxt === ODDS_WORDS.outmatched;
     // Plan 020 design decision 4: an explicit outmatched marker, readable at scouting
     // range (i.e. as soon as the party is on screen at all) rather than only once the
     // hero is close enough to trigger the odds pill below. The threshold matches the
@@ -1710,7 +1700,6 @@ export class World {
       ctx.fillStyle = stronger ? P.enemy : P.ink;
       ctx.font = '800 11px system-ui, sans-serif';
       // odds word sits in the same pill language as every other label
-      const oddsTxt = stronger ? '⚠ they outmatch you' : pStr < mineStr * 0.85 ? 'favored' : 'an even fight';
       const ow = ctx.measureText(oddsTxt).width + 14;
       ctx.fillStyle = P.cream;
       rrect(ctx, p.x - ow / 2, p.y - 58, ow, 17, 5); ctx.fill();
@@ -1808,7 +1797,7 @@ export class World {
       const sc = this.costAt(s, 'spear'), ac = this.costAt(s, 'archer');
       const healTxt = s.freeHeal ? 'F Rest & heal FREE' : `F Rest & heal ${BALANCE.healCost}g`;
       lines = s.kind === 'town'
-        ? [`${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · R Knight ${UNIT_TYPES.knight.cost}g`, `${healTxt} · T +2 army cap ${40 + (this.save.armyCap - BALANCE.armyCapBase) * 20}g`]
+        ? [`${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · R Knight ${UNIT_TYPES.knight.cost}g`, `${healTxt} · T +2 army cap ${this.armyCapCost()}g`]
         : [`Village of ${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · ${healTxt}`];
     } else if (camp) {
       const razedC = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
@@ -1816,7 +1805,7 @@ export class World {
       // Plan 021 design decision 3: proximity prompts carry only the odds WORD, never a
       // strength number — badges are bodies, prompts are words, hover shows both. Hover
       // the camp for the full breakdown.
-      const odds = est == null ? 'ride closer to scout it' : est > mine * 1.15 ? '⚠ they outmatch you' : est < mine * 0.85 ? 'favored' : 'an even fight';
+      const odds = est == null ? 'ride closer to scout it' : oddsWord(est, mine);
       lines = camp.stronghold
         ? (razedC < 3 ? [`${camp.name} — enemy stronghold`, `Its camps still feed it: cut the supply lines (${razedC}/3)`] : [`${camp.name} — enemy stronghold`, odds, 'E Storm the hold!'])
         : [`Bandit camp — ${odds}`, 'E Raid the camp (counts toward the 3)'];
