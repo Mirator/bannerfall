@@ -78,7 +78,11 @@ That is not decoration: `world-battle-seams.spec.js` patches the ordered phases 
 NAME to assert their sequence, `performance.spec.js` drives
 `updateSeparationPhase`/`getSpatialStats` straight off the instance, and the
 campaign suites call `endBattle`/`damageEnemy`. Replacing a delegator with a direct
-module call silently disables those tests. Hot per-tick one-liners (`blockedAt`,
+module call silently disables those tests. `updateWorldClock` and `tryClash` join
+that list under Plan 023: `world-battle-seams.spec.js` patches `updateWorldClock`
+by name in all three of its world tests, and `updateParties(dt, frozen = false)`
+carries that default specifically because `tests/qa_suite.js` calls the method
+directly off the instance. Hot per-tick one-liners (`blockedAt`,
 `onRoad`, `strength`, `myStrength`, `isBlocking`) deliberately stay in the scene
 class rather than being moved out behind a delegator that would cost more than the
 body it forwards to.
@@ -96,13 +100,71 @@ handoff, then party spawning and camera/effects maintenance finish the tick.
 Keep campaign arrays (`parties`, `save.troops`, `save.camps`) and their timers in
 those world phases; do not add a second map snapshot boundary.
 
+Plan 023: the campaign world is alive ONLY while the hero rides.
+`World.timeFlowing()` — realized hero speed at or above `BALANCE.worldWakeSpeed`
+(the same 40 px/s that already gates bob, dust and the gallop SFX) — is the whole
+rule, and `updateHeroMovement()` publishes that speed as `heroSpeed` at the END of
+the phase: post-clamp and post-coast-damp, deliberately NOT the pre-clamp `sp` the
+bob/dust/SFX gate uses (`sp` lags a tick on coast). The freeze gate therefore sits
+AFTER the movement phase, and the movement phase always runs, so the horse coasts
+to a stop instead of freezing mid-slide. While time is frozen the only phases that
+run are the ones taking no `dt` — settlement and camp interaction, which are the
+player pressing a key at a town or a camp and must NEVER be gated, since standing
+still is how you recruit, heal, scout and press an assault — plus the terminal
+victory transition (`save.won` is set during the battle, so the returning World's
+first tick is always a frozen one and gating it would hang a won campaign), plus
+`updateParties(dt, true)`, which runs the `tryClash()` encounter seam and nothing
+else so that letting go of the keys cannot shake off a party that has already
+closed to clash range. Everything else holds: `grace`, `spawnT`,
+`waryT`/`chaseT`/`clashT`, `msgT`, particles, the camera, and the ambient
+presentation clock `world.time` that drives the river current, windmill vanes,
+tree sway, campfire, threatened-settlement pulse and hero banner. A frozen tick
+consumes NO `simRng` or `fxRng` draws at all, so campaign randomness is
+independent of how long the player stood still — do not add a phase that breaks
+that. Initiative (`p.mood`, which decides ambush vs run-them-down vs mutual) is
+whatever the last live tick decided; that is correct in play, because a real clash
+always happens while riding or coasting.
+
+`updateWorldClock()` is the SINGLE documented exception to the
+no-`dt`-while-frozen rule: it advances `staleT`, the 0..1 strength of the
+desaturation/vignette cue that tells the player why nothing else is moving, so it
+must advance on exactly the ticks when nothing else does. It is advanced in
+`update()` and never in `draw()` — `draw()` runs zero or many times per tick.
+`render-scene.js`'s `drawFreezeCue()` READS `staleT` and never writes it, draws
+under the HUD, and suppresses itself under a modal. Keep the wash light: the world
+layer beneath it carries gameplay-critical colour coding (the red "they outmatch
+you" pill, the party marker), and a heavy desaturation strips that signal. The cue
+also draws with effects disabled, on purpose — it is information, not decoration.
+`staleT` is deliberately NOT in `state()`: it accumulates every frozen tick, so
+exposing it would make `state()` sensitive to elapsed frames and break
+`world-hover.spec.js`'s byte-identical comparison.
+
+A stopped hero being untouchable by a party that has not yet closed is the
+MECHANIC, not a bug — it is symmetric (the player cannot reach them either) and
+self-limiting (every objective needs riding). The clash exemption above is the only
+guard; a proximity-based "stay alive near a chaser" softener would void the
+mechanic's core promise. `world-freeze.spec.js` asserts it so it cannot be quietly
+undone.
+
+Fixtures that deliberately PARK the hero and still need the world to simulate use
+`window.game.keepAwake(true)` — a treadmill that makes the movement phase report a
+riding speed without travelling, so `hero.vx/vy` stay 0 and `hero.x/y` never move.
+It is scoped to the current scene instance, so re-apply it after any `scenario()`.
+The `world_brief` and `world_aftermath` scenarios apply it internally for their
+single setup tick, so every consumer of those keeps working unchanged.
+
 A world-scene modal genuinely pauses the campaign, not just visually covers
 it: gating the pipeline on `updateWorldScreens()` freezes `grace` for free
 (it only decays inside `updateParties()`, which never runs while a screen is
 open), and `World.isBlocking()` — `true` whenever `this.screen` is set — lets
 `main.js` gate `stats.playT` accrual the same way, so leaving a screen open
-cannot inflate reported campaign time. Both freezes are deliberate and
-covered by tests, not incidental side effects to "fix".
+cannot inflate reported campaign time. `World.isTimeFrozen()` is its Plan 023
+companion and gates `stats.playT` identically, so neither an open modal nor a
+stopped map can inflate reported campaign time; the 4-second autosave is
+deliberately NOT gated, because a save write is durability rather than simulation
+and while frozen it rewrites identical bytes. All three freezes (modal,
+stopped-hero, and the `playT` gate) are deliberate and covered by tests, not
+incidental side effects to "fix".
 
 `Battle.update()` owns the ordered fight pipeline. `updateSceneState()` handles
 intro/end gates, `updateActivePhases()` runs live commands, hero, troop/enemy,

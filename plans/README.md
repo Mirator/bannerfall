@@ -38,6 +38,7 @@ conditions, and update its status row when done.
 | 020 | Make encounters uneven, and make avoiding them cost something | P0 | L | 019 | DONE |
 | 021 | Make the encounter legible — unit counts, hover details, and battle brief/aftermath screens | P1 | L | 020 | DONE |
 | 022 | Split the two scene god-files into src/battle/ and src/world/ | Medium | L | 001-021 | DONE |
+| 023 | Make the world map alive only while the hero rides | P0 | M | 001-022 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
