@@ -1,12 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { collectRuntimeErrors } from './test-helpers.js';
+import { collectRuntimeErrors, bootWorld } from './test-helpers.js';
 import { WORLD } from '../../src/data.js';
 
-async function boot(page, seed = 20260817) {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.evaluate(sd => window.game.scenario('world', { seed: sd }), seed);
-}
+const boot = (page, seed = 20260817) => bootWorld(page, { seed });
 
 // Every fixture below reads a live position (a roaming party wanders/chases in real
 // time) and immediately acts on it inside ONE page.evaluate() call. Splitting that

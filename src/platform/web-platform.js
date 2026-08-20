@@ -1,4 +1,4 @@
-import { assertPlatform, PLATFORM_SLOTS } from './platform-contract.js?v=r3129cfc38fd8';
+import { assertPlatform, PLATFORM_SLOTS } from './platform-contract.js?v=r415e1b48d7e0';
 
 const KEYS = Object.freeze({
   [PLATFORM_SLOTS.CAMPAIGN]: 'bf_save',

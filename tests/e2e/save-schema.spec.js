@@ -1,25 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { collectRuntimeErrors } from './test-helpers.js';
+import {
+  collectRuntimeErrors, assertNoRuntimeErrors, openPlayerGame as openPlayerGameWith,
+} from './test-helpers.js';
 
-function assertNoRuntimeErrors(runtimeErrors) {
-  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);
-}
-
-async function openPlayerGame(page, runtimeErrors) {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.addInitScript(() => {
-    if (sessionStorage.getItem('qa-clear-save') !== '1') {
-      localStorage.removeItem('bf_save');
-      localStorage.removeItem('bf_save_test');
-      sessionStorage.setItem('qa-clear-save', '1');
-    }
-  });
-  await page.reload();
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.evaluate(() => { window.__g.testMode = false; });
-  assertNoRuntimeErrors(runtimeErrors);
-}
+// This suite owns its own clear key so it cannot wipe the other persistence suite's slot.
+const openPlayerGame = (page, runtimeErrors) => openPlayerGameWith(page, runtimeErrors, 'qa-clear-save');
 
 async function reloadWithRealSave(page, value) {
   const token = `qa-seed-${Date.now()}-${Math.random()}`;

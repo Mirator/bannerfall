@@ -1,7 +1,8 @@
 # Codebase audit — 2026-08-20
 
-> **Status:** findings #2, #4, #5 and #7 are fixed (see "Resolved" at the bottom), along with
-> a release-cache integrity bug found while fixing them. #1, #3, #6, #8, #9, #10 are open.
+> **Status:** findings #2, #4, #5, #6, #7, #8 and #9 are fixed (see the two "Resolved"
+> sections at the bottom), along with a release-cache integrity bug found while fixing
+> them. Still open: #3 (the file splits), and #1/#10 (deferred until a feature touches them).
 
 Scope: `src/` (5,940 LOC), `tests/` (~2,800), `scripts/`. Four parallel Sonnet auditors
 (dead code, SOLID, DRY, file length). Every finding below was spot-checked against the
@@ -216,3 +217,59 @@ verified at `r3129cfc38fd8`. The 10 visual-regression snapshots (world overview,
 victory/defeat aftermath, three battle compositions) passing is the load-bearing evidence
 that the palette-token substitution is pixel-identical; `stance-balance.spec.js` and
 `campaign-persistence.spec.js` cover the seeded-composition refactor.
+
+## Resolved — second pass
+
+### #6 — labels derived from the type tables
+
+`UNIT_TYPES`/`ENEMY_TYPES` entries gain a `plural` field; `world-screens.js` derives
+`UNIT_LABELS`/`ENEMY_LABELS` (the table's own `name`, lowercased) and the plural maps from
+the tables instead of hand-copying four dicts. Adding a type now shows up in every
+breakdown and casualty list on its own.
+
+**Not touched, deliberately:** `SQUAD_LABELS` ('SPEARS'/'BOWS'/'HORSE') is a *different*
+vocabulary — squad banners, not prose bodies — not a duplicate of `name`. The audit implied
+otherwise; that part was wrong. It is already exported and shared, so it stays, and the new
+contract test pins the two registers as intentionally distinct.
+
+**One behaviour change:** enemy casualty rows in the aftermath now order
+`bandit, raider, brute, wolf` instead of `bandit, raider, wolf, brute`. Row order comes from
+label-map key order, and the old hand-written dict happened to disagree with `ENEMY_TYPES`
+— the brief and hover panel already used the table order. All three are consistent now, and
+the disagreement was exactly the kind of silent divergence #6 is about.
+
+New `tests/tooling/label-contract.test.js` (5 tests, wired into `npm run test:tooling`) pins
+the invariant, because the browser suite does not: the aftermath e2e test only asserts
+`Array.isArray(enemyLosses)`. Mutation-checked both ways — removing a `plural` fails the
+suite; adding a whole new enemy type keeps it green *and* the type appears everywhere by
+itself, which is the point.
+
+### #8 — e2e boot boilerplate in test-helpers.js
+
+`test-helpers.js` grows from 10 to 60 LOC and exports `bootToMenu`, `bootFresh`, `bootWorld`,
+`assertNoRuntimeErrors` and `openPlayerGame`; **77 lines of duplicated boilerplate** come out
+of eight specs. The copies had already drifted — `performance.spec.js` polled for the scene
+swap after `scenario('world')` and `world-hover.spec.js` did not; the shared `bootWorld` polls.
+
+`openPlayerGame` takes the sessionStorage clear key as a parameter and each persistence suite
+binds its own in one line (`qa-clear-campaign` / `qa-clear-save`), so all 27 call sites stayed
+untouched and the two suites still cannot wipe each other's slot. `world-hover` and
+`performance` likewise keep their own default seeds in a one-line local wrapper.
+
+### #9 — one push-apart routine
+
+`applyHeroSeparation`, `applyObstacleSeparation` and `applyHeroObstacleSeparation` were the
+same "move only `a`" push differing in radius sum and factor; they collapse into
+`pushOutOf(a, b, rr, factor)`. `applyUnitSeparation` stays separate — it is symmetric, both
+sides give ground.
+
+No perf cost: the radius sum moved to the call site, so this removes three methods without
+adding a call layer — the number of calls per pair is unchanged. `performance.spec.js`
+confirms it.
+
+### Verification (second pass)
+
+`npm run test:tooling` **12/12** (7 existing + 5 new), `npx playwright test` **76/76**,
+release cache verified at `r415e1b48d7e0`. The visual-regression snapshots cover the
+aftermath and brief panels; note they do not pin enemy row order, which is why the new
+tooling test does.

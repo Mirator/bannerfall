@@ -1,11 +1,11 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=r3129cfc38fd8';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3129cfc38fd8';
-import { Battle } from './battle.js?v=r3129cfc38fd8';
-import { World } from './world.js?v=r3129cfc38fd8';
-import { ACTIONS } from './input-actions.js?v=r3129cfc38fd8';
-import { createWebPlatform } from './platform/web-platform.js?v=r3129cfc38fd8';
-import { SaveRepository } from './persistence/save-repository.js?v=r3129cfc38fd8';
+import { PAL, WORLD } from './data.js?v=r415e1b48d7e0';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r415e1b48d7e0';
+import { Battle } from './battle.js?v=r415e1b48d7e0';
+import { World } from './world.js?v=r415e1b48d7e0';
+import { ACTIONS } from './input-actions.js?v=r415e1b48d7e0';
+import { createWebPlatform } from './platform/web-platform.js?v=r415e1b48d7e0';
+import { SaveRepository } from './persistence/save-repository.js?v=r415e1b48d7e0';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

@@ -58,19 +58,21 @@ export const BIOMES = {
 export const SHADOW = { dx: 0.55, dy: 0.38 }; // hard shadow direction (unit len * height)
 
 // Tuned for 20–40 s battles: units survive ~7–10 hits, orders have time to matter.
+// `name`/`plural` are the prose names for a body of this type; every label a screen shows
+// is derived from them (see world-screens.js), so a new type cannot exist without one.
 export const UNIT_TYPES = {
   spear: {
-    name: 'Spearman', icon: 'spear',
+    name: 'Spearman', plural: 'spearmen', icon: 'spear',
     hp: 100, dmg: 10, range: 30, speed: 105, radius: 10,
     cooldown: 1.05, cost: 15,
   },
   archer: {
-    name: 'Archer', icon: 'bow',
+    name: 'Archer', plural: 'archers', icon: 'bow',
     hp: 60, dmg: 10, range: 230, speed: 95, radius: 10,
     cooldown: 1.7, cost: 25, ranged: true, projSpeed: 340, keepAway: 130,
   },
   knight: {
-    name: 'Knight', icon: 'helm',
+    name: 'Knight', plural: 'knights', icon: 'helm',
     hp: 170, dmg: 15, range: 34, speed: 175, radius: 12,
     cooldown: 0.95, cost: 60, mounted: true,
   },
@@ -78,19 +80,19 @@ export const UNIT_TYPES = {
 
 export const ENEMY_TYPES = {
   bandit: {
-    name: 'Bandit', icon: 'axe', hp: 110, dmg: 10, range: 28, speed: 92, radius: 10,
+    name: 'Bandit', plural: 'bandits', icon: 'axe', hp: 110, dmg: 10, range: 28, speed: 92, radius: 10,
     cooldown: 1.3, windup: 0.5, gold: 6,
   },
   raider: {
-    name: 'Raider', icon: 'bow', hp: 85, dmg: 9, range: 210, speed: 82, radius: 10,
+    name: 'Raider', plural: 'raiders', icon: 'bow', hp: 85, dmg: 9, range: 210, speed: 82, radius: 10,
     cooldown: 2.2, windup: 0.55, gold: 7, ranged: true, projSpeed: 300, keepAway: 150,
   },
   brute: {
-    name: 'Brute', icon: 'club', hp: 420, dmg: 24, range: 52, speed: 55, radius: 18,
+    name: 'Brute', plural: 'brutes', icon: 'club', hp: 420, dmg: 24, range: 52, speed: 55, radius: 18,
     cooldown: 2.8, windup: 0.95, gold: 25, slamR: 100,
   },
   wolf: {
-    name: 'Wolf', icon: 'fang', hp: 55, dmg: 8, range: 24, speed: 158, radius: 8,
+    name: 'Wolf', plural: 'wolves', icon: 'fang', hp: 55, dmg: 8, range: 24, speed: 158, radius: 8,
     cooldown: 1.1, windup: 0.42, gold: 4,
   },
 };

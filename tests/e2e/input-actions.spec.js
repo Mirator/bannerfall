@@ -1,9 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-async function boot(page) {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-}
+import { bootToMenu as boot } from './test-helpers.js';
 
 async function movementState(page, named) {
   return page.evaluate(useNamed => {
