@@ -52,10 +52,8 @@ function runQaSuiteImpl() {
   const HERO_START = WORLD.heroStart;
   const SETTLEMENT_ASHFORD = WORLD.settlements.find(s => s.id === 'ashford');
   const CAMP_C1 = WORLD.camps.find(c => c.id === 'c1');
-  const CAMP_C2 = WORLD.camps.find(c => c.id === 'c2');
   assert(SETTLEMENT_ASHFORD, 'WORLD.settlements is missing required id ashford');
   assert(CAMP_C1, 'WORLD.camps is missing required id c1');
-  assert(CAMP_C2, 'WORLD.camps is missing required id c2');
 
   // ======================================================================
   // 1. State machine — menu -> world on Enter
@@ -365,9 +363,9 @@ function runQaSuiteImpl() {
   });
 
   // ======================================================================
-  // 9. World: camp raid razes camp + grants captives (and respects cap)
+  // 9. World: camp raid razes the camp (and never changes the warband)
   // ======================================================================
-  record('world_camp_raid_razes_camp_and_grants_captives', () => {
+  record('world_camp_raid_razes_camp', () => {
     g.scenario('world', { seed: 424242 }); // pinned: reproducible garrison rolls across runs
     const scene = G.scene;
     const campState = scene.save.camps.find(c => c.id === 'c1');
@@ -389,33 +387,10 @@ function runQaSuiteImpl() {
     assert(c1After.razed === true, 'camp c1 razed flag not set true after victorious raid');
     const expectedLoot = LOOT_BASE + LOOT_PER_ENEMY * nEnemies + 60; // battle loot + non-stronghold camp bonus
     assert(save2.gold === goldBefore + expectedLoot, 'expected gold ' + (goldBefore + expectedLoot) + ', got ' + save2.gold);
-    // spec v3 (coherence): captives = min(2, ceil(humanGarrison/3)) — derived from the actual scouted comp
-    const humans = (c1After.garrison || []).filter(function (t) { return t === 'bandit' || t === 'raider'; }).length;
-    const expectedCaptives = Math.min(2, Math.ceil(humans / 3));
-    const expectedTroops = Math.min(troopsBefore + expectedCaptives, save2.armyCap);
-    assert(save2.troops.length === expectedTroops, 'expected ' + expectedTroops + ' troops (captives=' + expectedCaptives + ' from ' + humans + ' human captors), got ' + save2.troops.length);
-    return 'camp c1 razed=true, gold +' + expectedLoot + ', captives ' + troopsBefore + '->' + save2.troops.length;
-  });
-
-  record('world_camp_raid_captives_capped_at_army_cap', () => {
-    g.scenario('world', { seed: 424242 }); // pinned: reproducible garrison rolls across runs
-    const scene = G.scene;
-    scene.save.armyCap = 4;
-    scene.save.troops = [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }]; // already at cap
-    scene.hero.x = CAMP_C2.x; scene.hero.y = CAMP_C2.y;
-    const campState = scene.save.camps.find(c => c.id === 'c2');
-    assert(campState && !campState.razed, 'camp c2 expected un-razed at fresh world start');
-    g.tap('KeyE');
-    assert(g.scene() === 'world' && G.scene.screen && G.scene.screen.kind === 'brief',
-      'KeyE near camp c2 did not open the assault brief, scene=' + g.scene());
-    g.tap('Enter');
-    assert(g.scene() === 'battle', 'confirming the assault brief did not start a battle, scene=' + g.scene());
-    G.scene.endBattle(true);
-    g.step(3);
-    assert(g.scene() === 'world', 'did not return to world after camp raid, scene=' + g.scene());
-    const save2 = G.scene.save;
-    assert(save2.troops.length === 4, 'expected troops to stay capped at armyCap=4, got ' + save2.troops.length);
-    return 'captives correctly withheld when army is already at capacity (stayed at 4)';
+    // Razing a camp pays gold only — the warband grows at settlements, never from a raid.
+    assert(save2.troops.length === troopsBefore,
+      'expected troops to stay at ' + troopsBefore + ' after a raid, got ' + save2.troops.length);
+    return 'camp c1 razed=true, gold +' + expectedLoot + ', troops unchanged at ' + troopsBefore;
   });
 
   // ======================================================================

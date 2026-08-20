@@ -105,7 +105,7 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
         save.troops = result.survivors;
         save.heroHp = Math.min(save.heroMaxHp, result.heroHp + 20);
         save.toast = null;
-        onWinExtra && onWinExtra(); // camp raids set their own toast (razed count, captives, remnants)
+        onWinExtra && onWinExtra(); // camp raids set their own toast (razed count, remnants)
         if (!save.toast) {
           save.toast = result.lost > 0
             ? `Victory — ${result.lost} men lost. The camps are the objective: raid the tents.`
@@ -214,7 +214,7 @@ export function confirmBrief(world) {
     // never at request time, or backing out would permanently reveal it for free.
     if (!st.garrison) st.garrison = world.rollGarrison(camp);
     comp = st.garrison; // the live alias startBattle()'s onEnd already expects
-    onWinExtra = world.campVictoryExtra(camp, st, comp);
+    onWinExtra = world.campVictoryExtra(camp, st);
   }
   // Splice/garrison-roll above must finish before startBattle() calls persistParties()
   // and persistRun() (AGENTS.md: finish all map-side mutations, then persist once,

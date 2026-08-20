@@ -141,12 +141,11 @@ baselines (`world-overview.png`, `world-bridge.png`) also needed no update
 for the body-count badges or the heavy-unit marker — reviewed with no diff
 artifacts generated, same as Plan 020's spawn-tier change before it.
 
-Five legacy records in `tests/qa_suite.js` gained a confirm (and, for the
+Four legacy records in `tests/qa_suite.js` gained a confirm (and, for the
 grace-timer record, also a dismiss) step, since a party clash or a
 `WORLD_PRIMARY` press now opens a brief instead of committing straight to
 battle: `world_party_battle_decreases_party_count_by_one`,
-`world_camp_raid_razes_camp_and_grants_captives`,
-`world_camp_raid_captives_capped_at_army_cap`,
+`world_camp_raid_razes_camp`,
 `world_grace_timer_active_after_battle_then_decays`, and
 `world_party_break_off_occupies_settlement_and_recapture_restores_service`.
 `world_no_party_freezes_at_rivers` — not one of those five — also needed its
@@ -325,7 +324,7 @@ isolated contexts using `bf_save` and raw `window.__g`; calls through
 
 ## Legacy check inventory
 
-The 22 deterministic records cover:
+The 21 deterministic records cover:
 
 1. menu-to-world transition;
 2. battle invariants and victory;
@@ -338,21 +337,20 @@ The 22 deterministic records cover:
 9. recruitment costs, capacity, and refusals;
 10. healing refusals and success;
 11. roaming-party victory removal;
-12. camp-raid razing and captives;
-13. captive capacity limits;
-14. post-battle grace decay;
-15. roaming-party strength bounds;
-16. weighted spawn-tier distribution, swept over several seeds, shifting toward
+12. camp-raid razing (loot only — a raid never changes the warband);
+13. post-battle grace decay;
+14. roaming-party strength bounds;
+15. weighted spawn-tier distribution, swept over several seeds, shifting toward
     `strong` as camps are razed (Plan 020);
-17. break-off-and-raid: occupying a settlement suspends its service, and
+16. break-off-and-raid: occupying a settlement suspends its service, and
     defeating the occupier there restores it (Plan 020);
-18. the deadlock floor guarantee, driven at its worst case: nothing beatable on
+17. the deadlock floor guarantee, driven at its worst case: nothing beatable on
     the map still yields a winnable target, and the last unclaimed settlement
     is never claimed (Plan 020, the plan's STOP-condition risk);
-19. seeded battle determinism;
-20. the RNG-domain effects-independence check;
-21. the 200-step performance smoke budget;
-22. river-pursuit movement without freezing.
+18. seeded battle determinism;
+19. the RNG-domain effects-independence check;
+20. the 200-step performance smoke budget;
+21. river-pursuit movement without freezing.
 
 ## Adding coverage
 
