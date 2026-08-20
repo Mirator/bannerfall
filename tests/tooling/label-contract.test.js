@@ -9,7 +9,7 @@ import { test } from 'node:test';
 
 import { UNIT_TYPES, ENEMY_TYPES } from '../../src/data.js';
 import { buildAftermathModel, buildBriefModel } from '../../src/world-screens.js';
-import { SQUAD_LABELS } from '../../src/battle.js';
+import { SQUAD_LABELS } from '../../src/battle/constants.js';
 
 const UNIT_KEYS = Object.keys(UNIT_TYPES);
 const ENEMY_KEYS = Object.keys(ENEMY_TYPES);
