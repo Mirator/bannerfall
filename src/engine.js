@@ -1,5 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rd5531dcfef09';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=ra209d001f5a8';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;

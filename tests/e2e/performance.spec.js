@@ -392,6 +392,10 @@ test('party replans are staggered and reuse goal visibility', async ({ page }) =
       p.navFor = null; p.navGoal = null;
     });
     const initial = parties.map(p => p.navT);
+    // Plan 023: party AI only runs while the hero rides, and this fixture parks the hero on
+    // purpose so nothing but the replan staggering is under test. keepAwake() keeps the
+    // world simulating WITHOUT moving the hero, so every count below is unchanged.
+    window.game.keepAwake(true);
     const original = world.lineClear.bind(world);
     const originalPathGoal = world.pathGoal.bind(world);
     let calls = 0;

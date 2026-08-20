@@ -12,10 +12,10 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE } from '../data.js?v=rd5531dcfef09';
-import { dist2 } from '../engine.js?v=rd5531dcfef09';
-import { ACTIONS } from '../input-actions.js?v=rd5531dcfef09';
-import { buildBriefModel } from '../world-screens.js?v=rd5531dcfef09';
+import { WORLD, BALANCE } from '../data.js?v=ra209d001f5a8';
+import { dist2 } from '../engine.js?v=ra209d001f5a8';
+import { ACTIONS } from '../input-actions.js?v=ra209d001f5a8';
+import { buildBriefModel } from '../world-screens.js?v=ra209d001f5a8';
 
 export function startBattle(world, comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief = false) {
   const save = world.save;

@@ -70,7 +70,12 @@ test('named WITHDRAW action and its keyboard binding (KeyX) cancel a pre-battle 
       });
       const party = world.parties[0];
       world.grace = 0;
+      // Plan 023: world time only flows while the hero rides, and this fixture parks the
+      // hero on purpose. keepAwake() keeps the world simulating WITHOUT moving the hero so
+      // the clash still classifies initiative (weak party -> flee -> withdraw offered).
+      window.game.keepAwake(true);
       window.__g.update(1 / 60); // opens the brief
+      window.game.keepAwake(false);
       if (named) window.__g.input.injectAction('withdraw', true);
       else window.__g.input.injectKey('KeyX', true);
       window.__g.update(1 / 60);

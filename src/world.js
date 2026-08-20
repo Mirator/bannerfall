@@ -1,16 +1,16 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=rd5531dcfef09';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rd5531dcfef09';
-import { SAVE_VERSION } from './save.js?v=rd5531dcfef09';
-import { buildAftermathModel } from './world-screens.js?v=rd5531dcfef09';
-import { drawScene } from './world/render-scene.js?v=rd5531dcfef09';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=ra209d001f5a8';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra209d001f5a8';
+import { SAVE_VERSION } from './save.js?v=ra209d001f5a8';
+import { buildAftermathModel } from './world-screens.js?v=ra209d001f5a8';
+import { drawScene } from './world/render-scene.js?v=ra209d001f5a8';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rd5531dcfef09';
+} from './world/battle-transition.js?v=ra209d001f5a8';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -20,12 +20,12 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=rd5531dcfef09';
+} from './world/settlement-interactions.js?v=ra209d001f5a8';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rd5531dcfef09';
+} from './world/terrain.js?v=ra209d001f5a8';
 
 const P = PAL.world;
 
@@ -37,6 +37,13 @@ export class World {
     this.particles = new Particles(() => this.game.effectsEnabled);
     this.W = WORLD.w; this.H = WORLD.h;
     this.time = 0;
+    // Plan 023: `heroSpeed` is the hero's REALIZED speed (post-clamp, post-coast-damp),
+    // published by updateHeroMovement and read by timeFlowing(); `staleT` is the 0..1
+    // strength of the frozen-world cue. Neither is persisted: a loaded campaign starts
+    // stopped, so the world correctly reads as stale until the first ride.
+    this.heroSpeed = 0;
+    this.staleT = 0;
+    this._freezeVig = null; this._freezeVigW = 0; this._freezeVigH = 0;
     this.msg = null; this.msgT = 0;
     // Plan 021: presentation-only hover state. Written and read only in draw() —
     // AGENTS.md: "simulation must not read presentation." pointerEverMoved is a latch,
@@ -456,6 +463,17 @@ export class World {
   // leaving it open must not inflate reported campaign time.
   isBlocking() { return !!this.screen; }
 
+  // Plan 023: the one rule the whole "world alive only while you ride" mechanic hangs on.
+  // Realized speed, not input: the world stays alive through the coast-down so it never
+  // freezes the hero mid-slide, and stays frozen through a tap that has not yet spun the
+  // horse up past BALANCE.worldWakeSpeed.
+  timeFlowing() { return this.heroSpeed >= BALANCE.worldWakeSpeed; }
+
+  // Documented predicate (Plan 023), the companion to isBlocking(): main.js gates
+  // stats.playT on it without reaching into World internals. A stopped map pauses the
+  // campaign exactly the way an open modal does, so neither may inflate reported time.
+  isTimeFrozen() { return !this.timeFlowing(); }
+
   updateHeroMovement(dt, inp, h) {
     // Movement is the first world phase: interactions and party AI observe its result.
     const ax = inp.axis();
@@ -463,31 +481,84 @@ export class World {
     h.vx += ax.x * ACCEL * dt; h.vy += ax.y * ACCEL * dt;
     const sp = len(h.vx, h.vy);
     if (sp > SPEED) { h.vx *= SPEED / sp; h.vy *= SPEED / sp; }
-    if (!ax.any) { h.vx *= Math.max(0, 1 - 5 * dt); h.vy *= Math.max(0, 1 - 5 * dt); }
+    if (!ax.any) {
+      h.vx *= Math.max(0, 1 - 5 * dt); h.vy *= Math.max(0, 1 - 5 * dt);
+      // Plan 023: snap to an exact stop. The damping is asymptotic, so without this the
+      // hero creeps sub-pixel forever, heroSpeed never reaches 0, and the 4s autosave
+      // rewrites a slightly different hero.x during what the player sees as a held still
+      // frame. 8 px/s (a fifth of worldWakeSpeed) rather than ~0 so the frame settles in
+      // ~0.3s instead of ~1s; it costs 0.13px of coast, and being far below worldWakeSpeed
+      // it can never affect the freeze decision, bob, dust or the gallop SFX.
+      if (len(h.vx, h.vy) < 8) { h.vx = 0; h.vy = 0; }
+    }
     this.moveBlocked(h,
       clamp(h.x + h.vx * dt, 60, this.W - 60),
       clamp(h.y + h.vy * dt, 60, this.H - 60));
-    if (sp > 40) {
+    if (sp > BALANCE.worldWakeSpeed) {
       h.facing = angLerp(h.facing, Math.atan2(h.vy, h.vx), 1 - Math.exp(-8 * dt));
       h.bob += dt * 10;
       this.game.sfx.gallop();
       if (this.fxRng() < dt * 10) this.particles.dust(h.x - h.vx * 0.05, h.y + 8, P.cream, 1, this.fxRng);
     }
+    // Plan 023: the REALIZED speed — post-clamp, post-coast-damp — is what timeFlowing()
+    // reads. Deliberately NOT the `sp` above, which is a pre-clamp candidate and lags a
+    // tick on coast; `sp` keeps owning bob/dust/SFX timing so their feel is unchanged.
+    this.heroSpeed = len(h.vx, h.vy);
+  }
+
+  // The ambient presentation clock, the toast timer, and the frozen-world cue. This is the
+  // ONE phase that runs on a frozen tick and still consumes `dt`: `staleT` is the cue that
+  // tells the player WHY nothing else is moving, so it has to advance on exactly the ticks
+  // when nothing else does. Advanced here in update() and never in draw() — draw() runs
+  // zero or many times per tick. Returns whether world time flows this tick.
+  updateWorldClock(dt) {
+    const flowing = this.timeFlowing();
+    if (flowing) {
+      this.time += dt;
+      if (this.msgT > 0) this.msgT -= dt;
+      this.staleT = Math.max(0, this.staleT - dt / BALANCE.worldFreezeFadeOutT);
+    } else {
+      this.staleT = Math.min(1, this.staleT + dt / BALANCE.worldFreezeFadeInT);
+    }
+    return flowing;
   }
 
   update(dt) {
-    this.time += dt;
     const inp = this.game.input, h = this.hero;
     // Plan 021: the brief/aftermath modal phase runs FIRST, mirroring the
     // updateCampInteraction pre-empt idiom below. Returning true here blocks every other
     // world phase for the tick — hero movement, interactions, party AI (so `grace` freezes
     // for free, since it only decays inside updateParties), and spawns/victory — so a
     // modal genuinely pauses the campaign rather than just visually covering it.
+    // Plan 023 moved `this.time += dt` BELOW this gate, into updateWorldClock, so a modal
+    // now freezes the ambient clock too — which is what that claim always implied.
     if (this.updateWorldScreens(inp)) return;
-    if (this.msgT > 0) this.msgT -= dt;
+    // Hero movement ALWAYS runs, frozen or not: it owns the coast-down that DECIDES the
+    // freeze, and a hero held mid-slide reads as a dropped frame rather than as a stop.
     this.updateHeroMovement(dt, inp, h);
+    const flowing = this.updateWorldClock(dt);
+    // These two ALWAYS run, and the reason is structural: they are the only world phases
+    // that take no `dt`. They hold no timers — they are the player pressing a key at a
+    // town or a camp, and standing still IS how you recruit, heal, scout and press an
+    // assault. Gating them would freeze the game rather than the world.
     const settlement = this.updateSettlementInteractions(inp);
     if (this.updateCampInteraction(inp, settlement)) return;
+
+    // The terminal transition ALWAYS runs. `save.won` is set during the BATTLE, so the
+    // returning World's very first tick is what must redirect — and the player is always
+    // stopped on that tick. Gating this hangs a won campaign on a frozen map.
+    if (this.save.won) {
+      this.game.startVictory(this.save);
+      return;
+    }
+
+    if (!flowing) {
+      // Plan 023: time is stale. Party AI still does exactly one thing — resolve a clash
+      // that has already closed. Everything else (grace, spawnT, the chase timers,
+      // navigation, movement, particles, the camera) holds as a freeze-frame.
+      this.updateParties(dt, true);
+      return;
+    }
 
     this.enforceBeatableFloor();
     if (this.updateParties(dt)) return;
@@ -495,27 +566,30 @@ export class World {
     // camps slowly send out new parties (visible spawn at the camp)
     this.updatePartySpawns(dt);
 
-    // victory
-    if (this.save.won) {
-      this.game.startVictory(this.save);
-      return;
-    }
-
     this.updateCameraAndEffects(dt);
   }
 
-  updateParties(dt) {
+  updateParties(dt, frozen = false) {
     // Party AI owns pursuit, navigation, river-safe movement, and encounter handoff.
-    if (this.grace > 0) this.grace -= dt;
+    // Plan 023: `frozen` runs the encounter seam and NOTHING else — no timers decay, no
+    // navigation, no movement, no grace. The default keeps every direct caller (qa_suite.js
+    // drives this method straight off the instance) behaving exactly as it did before.
+    if (!frozen && this.grace > 0) this.grace -= dt;
     const h = this.hero;
     const heroSafe = this.inSafeZone(h.x, h.y);
     for (const p of this.parties) {
-      const pStr = this.strength(p.comp), mine = this.myStrength();
       const dh = Math.sqrt(dist2(p.x, p.y, h.x, h.y));
-      let goal = null, speed = 105;
       // sanctuary stops FIGHTING near a settlement, never a party's intent while passing
       // through — otherwise a pursuit route clipping a safe zone flickers the hunt on/off
+      // `engaged` derives from state (grace, safe zone), never from a timer, so it is sound
+      // to recompute on a frozen tick.
       const engaged = this.grace <= 0 && !heroSafe;
+      if (frozen) {
+        if (this.tryClash(p, dh, engaged)) return true;
+        continue;
+      }
+      const pStr = this.strength(p.comp), mine = this.myStrength();
+      let goal = null, speed = 105;
       if (p.waryT > 0) p.waryT -= dt;
       if (p.chaseT > 0) p.chaseT -= dt;
       if (p.clashT > 0) p.clashT -= dt;
@@ -656,49 +730,58 @@ export class World {
       }
       if (len(p.vx, p.vy) > 20) { p.bob += dt * 9; p.facing = angLerp(p.facing, Math.atan2(p.vy, p.vx), 1 - Math.exp(-6 * dt)); }
 
-      // collision → battle. Bandits dare to strike near village outskirts (110-260 band),
-      // but never in the village itself — so village-arena ambushes genuinely happen.
-      // Initiative matters: they caught you = ambush; you caught them running = no formup for them;
-      // a mutual field meeting = both sides deploy.
-      // world.grace (ambush immunity) only gates `engaged` above — it must not block
-      // canClash too, or the player can't charge into a party they WANT to fight for the
-      // whole post-battle window. The one party that does need a post-disengage cooldown
-      // (reinserted right under the hero's feet) carries its own p.clashT instead.
-      // Design decision 5: an occupier is exempt from the settlement-safe-zone block —
-      // it must always be attackable where it sits, or the player has no recapture path.
-      const isOccupier = !!p.occupying;
-      const canClash = (p.clashT || 0) <= 0 && (isOccupier || !this.nearSettlement(130)) && dh < 46;
-      if ((engaged || (canClash && dh < 46)) && canClash) {
-        // Plan 021 decision 8/step 7: request instead of committing. The party splice,
-        // persistParties(), battleCount++ and persistRun() all move to confirmBrief() —
-        // this party stays exactly where it is, still fightable, until the player decides.
-        const ambushed = p.mood === 'chase';
-        const caughtThem = p.mood === 'flee';
-        const occupiedSettlement = isOccupier ? WORLD.settlements.find(s => s.id === p.occupying) : null;
-        this.requestBattle({
-          party: p,
-          title: occupiedSettlement ? `RETAKE ${occupiedSettlement.name.toUpperCase()}`
-            : ambushed ? 'AMBUSHED!' : caughtThem ? 'RUN THEM DOWN!' : 'BANDIT SKIRMISH',
-          subtitle: occupiedSettlement ? 'Drive them out and restore the settlement’s service'
-            : caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress',
-          arena: null,
-          ambush: ambushed,
-          approach: this.approachTo(p.x, p.y),
-          deploy: caughtThem ? 0 : undefined, // undefined = mutual 8s formup
-          comp: p.comp.slice(),
-          // Plan 021 decision 5: withdraw is offered only when the player initiated the
-          // fight — an explicit camp/stronghold press (handled in updateCampInteraction)
-          // or running down a fleeing party. An ambush or a mutual skirmish is committed.
-          canWithdraw: caughtThem,
-          onWinExtra: occupiedSettlement ? () => {
-            const st = this.save.settlements.find(s => s.id === occupiedSettlement.id);
-            if (st) st.occupied = false;
-            this.save.toast = `${occupiedSettlement.name} is free again — its service resumes.`;
-          } : null,
-          partyMeta: { camp: p.camp, x: p.x, y: p.y, comp: p.comp.slice(), home: p.home, waryT: p.waryT, occupying: p.occupying },
-        });
-        return true;
-      }
+      if (this.tryClash(p, dh, engaged)) return true;
+    }
+    return false;
+  }
+
+  // Plan 023: the encounter seam, extracted verbatim from updateParties so the live path
+  // and the frozen path share exactly ONE copy of the rule that starts a fight. A stopped
+  // hero freezes the world, but a party already inside clash range must still resolve —
+  // letting go of the keys may not shake off a party that already has you.
+  tryClash(p, dh, engaged) {
+    // collision → battle. Bandits dare to strike near village outskirts (110-260 band),
+    // but never in the village itself — so village-arena ambushes genuinely happen.
+    // Initiative matters: they caught you = ambush; you caught them running = no formup for them;
+    // a mutual field meeting = both sides deploy.
+    // world.grace (ambush immunity) only gates the caller's `engaged` — it must not block
+    // canClash too, or the player can't charge into a party they WANT to fight for the
+    // whole post-battle window. The one party that does need a post-disengage cooldown
+    // (reinserted right under the hero's feet) carries its own p.clashT instead.
+    // Design decision 5: an occupier is exempt from the settlement-safe-zone block —
+    // it must always be attackable where it sits, or the player has no recapture path.
+    const isOccupier = !!p.occupying;
+    const canClash = (p.clashT || 0) <= 0 && (isOccupier || !this.nearSettlement(130)) && dh < 46;
+    if ((engaged || (canClash && dh < 46)) && canClash) {
+      // Plan 021 decision 8/step 7: request instead of committing. The party splice,
+      // persistParties(), battleCount++ and persistRun() all move to confirmBrief() —
+      // this party stays exactly where it is, still fightable, until the player decides.
+      const ambushed = p.mood === 'chase';
+      const caughtThem = p.mood === 'flee';
+      const occupiedSettlement = isOccupier ? WORLD.settlements.find(s => s.id === p.occupying) : null;
+      this.requestBattle({
+        party: p,
+        title: occupiedSettlement ? `RETAKE ${occupiedSettlement.name.toUpperCase()}`
+          : ambushed ? 'AMBUSHED!' : caughtThem ? 'RUN THEM DOWN!' : 'BANDIT SKIRMISH',
+        subtitle: occupiedSettlement ? 'Drive them out and restore the settlement’s service'
+          : caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress',
+        arena: null,
+        ambush: ambushed,
+        approach: this.approachTo(p.x, p.y),
+        deploy: caughtThem ? 0 : undefined, // undefined = mutual 8s formup
+        comp: p.comp.slice(),
+        // Plan 021 decision 5: withdraw is offered only when the player initiated the
+        // fight — an explicit camp/stronghold press (handled in updateCampInteraction)
+        // or running down a fleeing party. An ambush or a mutual skirmish is committed.
+        canWithdraw: caughtThem,
+        onWinExtra: occupiedSettlement ? () => {
+          const st = this.save.settlements.find(s => s.id === occupiedSettlement.id);
+          if (st) st.occupied = false;
+          this.save.toast = `${occupiedSettlement.name} is free again — its service resumes.`;
+        } : null,
+        partyMeta: { camp: p.camp, x: p.x, y: p.y, comp: p.comp.slice(), home: p.home, waryT: p.waryT, occupying: p.occupying },
+      });
+      return true;
     }
     return false;
   }
@@ -732,11 +815,20 @@ export class World {
       if (this.dustT > 0.09) { this.dustT = 0; this.particles.dust(h.x - h.vx * 0.05, h.y + 8, P.cream, 2, this.fxRng); }
     }
     cam.follow(h.x + h.vx * 0.35, h.y + h.vy * 0.35, dt, 4);
-    // clamp the view inside the map so no void shows at the edges
+    this.clampCamera();
+    this.particles.update(dt);
+  }
+
+  // clamp the view inside the map so no void shows at the edges. Split out for Plan 023:
+  // camera follow is frozen while time is stale, so a window resize during a freeze would
+  // otherwise leave cam.x unclamped against the new viewport and show a void strip until
+  // the player moved again. main.js calls this from resize() — presentation repair, not
+  // simulation, so it is safe to run on a frozen tick.
+  clampCamera() {
+    const cam = this.game.camera;
     const vw = cam.w / cam.zoom / 2, vh = cam.h / cam.zoom / 2;
     cam.x = clamp(cam.x, vw - 25, this.W - vw + 25);
     cam.y = clamp(cam.y, vh - 25, this.H - vh + 25);
-    this.particles.update(dt);
   }
 
   // ---------------------------------------------------------------- delegating seams
