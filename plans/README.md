@@ -36,7 +36,8 @@ conditions, and update its status row when done.
 | 018 | Recompose the title screen around an animated campaign vignette | P1 | M | 017 | DONE |
 | 019 | Give the player squads to command and stances worth choosing | P0 | L | 018 | DONE as optional depth — premise unmet, see plan |
 | 020 | Make encounters uneven, and make avoiding them cost something | P0 | L | 019 | DONE |
-| 021 | Make the encounter legible — unit counts, hover details, and battle brief/aftermath screens | P1 | L | 020 | IN PROGRESS |
+| 021 | Make the encounter legible — unit counts, hover details, and battle brief/aftermath screens | P1 | L | 020 | DONE |
+| 022 | Split the two scene god-files into src/battle/ and src/world/ | Medium | L | 001-021 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -116,6 +117,11 @@ explicitly selected because its impact becomes high when battle populations grow
 
 - None. Plan 016 resolved the remaining low-priority menu save-parsing finding
   by hydrating validated saves once and serving menu reads from memory.
+
+Plan 022 was executed from the 2026-08-20 codebase audit
+(`critiques/codebase-audit-2026-08-20.md`) rather than from a forward plan; it splits
+the two scene classes into `src/battle/` and `src/world/` and records where it
+deliberately extracted less than the audit proposed.
 
 ## Findings considered and rejected
 

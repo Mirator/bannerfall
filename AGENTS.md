@@ -51,10 +51,37 @@ lengths, and null stale references when shrinking. Battle units carry immutable
 `team` tags for constant-time separation classification. Party replans use
 seeded staggering and exact river collision/visibility; do not approximate or
 quantize collision answers. World roads and rivers are single-source cached
-sampled polylines: add a curve only through `World.buildTerrainGeometry()` so
-rendering, collision, navigation, and movement bonuses cannot diverge.
+sampled polylines: add a curve only through `World.buildTerrainGeometry()`
+(implemented in `src/world/terrain.js`) so rendering, collision, navigation, and
+movement bonuses cannot diverge.
 Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
+
+Scene module layout: the two scene classes are split across `src/battle/` and
+`src/world/`. `battle.js` keeps construction, the ordered tick pipeline and the
+small targeting/stance helpers; `battle/{constants,combat,ai-phases,separation,
+render-units,render-scene,hud}.js` hold the rest. `world.js` keeps construction,
+the tick pipeline, party AI and the cheap per-tick terrain predicates;
+`world/{terrain,settlement-interactions,battle-transition,render-scene,
+render-actors}.js` hold the rest. Extracted functions take the scene instance as
+their first argument (`drawScene(world, ctx)`), the pattern `battle/spatial-index.js`
+and `persistence/save-repository.js` already use — composition with explicit
+dependencies, not prototype mixins.
+
+`constants.js` depends on nothing but `data.js` ON PURPOSE: with no bundler an
+import cycle is a real hazard, and every phase/render module reads its tuning
+values, so it must never import back from a scene.
+
+Anything a test or another module reaches stays an instance METHOD that delegates
+to its module (see the "delegating seams" block at the end of each scene class).
+That is not decoration: `world-battle-seams.spec.js` patches the ordered phases BY
+NAME to assert their sequence, `performance.spec.js` drives
+`updateSeparationPhase`/`getSpatialStats` straight off the instance, and the
+campaign suites call `endBattle`/`damageEnemy`. Replacing a delegator with a direct
+module call silently disables those tests. Hot per-tick one-liners (`blockedAt`,
+`onRoad`, `strength`, `myStrength`, `isBlocking`) deliberately stay in the scene
+class rather than being moved out behind a delegator that would cost more than the
+body it forwards to.
 
 Simulation ownership: `World.update()` is the ordered campaign pipeline.
 `updateWorldScreens()` (Plan 021) runs FIRST and returns `true` whenever a
@@ -95,9 +122,10 @@ Hold anchors are still per-troop (`holdX`/`holdY`) plus one global `holdPoint`; 
 `squads[type].holdX/holdY` fields are written but not yet read, so do not rely on them. `Battle.command` remains the all-squads aggregate (`'mixed'` when squads
 diverge) because the legacy QA record and the input-action contract assert on it; keep
 that mirror intact. Selection (`selectedSquad`) is input/presentation state and stays out
-of the save. Stance trade-offs live in named constants at the top of `src/battle.js`
+of the save. Stance trade-offs live in named constants in `src/battle/constants.js`
 (brace bonus, bow spread, charge exposure, no-death stall) — tune those, not scattered
-literals, and re-run `tests/e2e/stance-balance.spec.js`.
+literals, and re-run `tests/e2e/stance-balance.spec.js`. The phases that read them are
+in `src/battle/ai-phases.js`.
 
 `Camera.toWorld()` is a simulation input: it feeds hero aim, hero facing, and therefore
 FOLLOW formation slots. It must never include the shake offset that `apply()` adds at
@@ -106,7 +134,8 @@ presentation. A shake term there let a decorative RNG stream change fight outcom
 
 The world map's hover panel (Plan 021) is presentation-only state
 (`World.pointerBootX/Y`, `pointerEverMoved`, `hoverTarget`), written and read
-only in `World.draw()`. Its boot-safe latch compares the pointer's current,
+only on the draw path — `World.draw()` delegates to `drawScene()` in
+`src/world/render-scene.js`, which is the single place that touches it. Its boot-safe latch compares the pointer's current,
 persistent `input.mouse.x/y` against their value at `World` construction
 rather than the transient `input.mouse.moved` flag: `Input.endFrame()` clears
 `moved` at the end of every `Game.update()` call, and a render only ever
