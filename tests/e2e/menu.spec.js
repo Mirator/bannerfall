@@ -1,11 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { collectRuntimeErrors } from './test-helpers.js';
-
-async function bootFresh(page) {
-  await page.addInitScript(() => localStorage.clear());
-  await page.goto('/');
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-}
+import { collectRuntimeErrors, bootFresh } from './test-helpers.js';
 
 async function tapAction(page, action) {
   await page.evaluate(name => {

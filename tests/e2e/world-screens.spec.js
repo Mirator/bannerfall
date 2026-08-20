@@ -1,11 +1,6 @@
 import { test, expect } from '@playwright/test';
-import { collectRuntimeErrors } from './test-helpers.js';
+import { collectRuntimeErrors, bootToMenu as boot } from './test-helpers.js';
 import { BALANCE } from '../../src/data.js';
-
-async function boot(page) {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-}
 
 test('requesting a battle opens a brief without committing any map-side mutation', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);

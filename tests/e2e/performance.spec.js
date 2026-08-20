@@ -1,12 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { collectRuntimeErrors } from './test-helpers.js';
+import { collectRuntimeErrors, bootWorld } from './test-helpers.js';
 
-async function startWorld(page, seed = 42) {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.evaluate(seedValue => window.game.scenario('world', { seed: seedValue }), seed);
-  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
-}
+const startWorld = (page, seed = 42) => bootWorld(page, { seed });
 
 test('scheduler coalesces high-refresh callbacks and suppresses hidden watchdog draws', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);

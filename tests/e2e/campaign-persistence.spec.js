@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { collectRuntimeErrors } from './test-helpers.js';
+import {
+  collectRuntimeErrors, assertNoRuntimeErrors, openPlayerGame as openPlayerGameWith,
+} from './test-helpers.js';
 import { WORLD } from '../../src/data.js';
 
 const DT = 1 / 60;
@@ -8,26 +10,8 @@ const PARTY_HOME = { x: 1600, y: 900 };
 const PARTY_COMP = ['bandit', 'bandit', 'raider'];
 const OCCUPY_SETTLEMENT = WORLD.settlements.find(s => s.id === 'ashford');
 
-function assertNoRuntimeErrors(runtimeErrors) {
-  expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);
-}
-
-async function openPlayerGame(page, runtimeErrors) {
-  await page.goto('/');
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.addInitScript(() => {
-    if (sessionStorage.getItem('qa-clear-campaign') !== '1') {
-      localStorage.removeItem('bf_save');
-      localStorage.removeItem('bf_save_test');
-      sessionStorage.setItem('qa-clear-campaign', '1');
-    }
-  });
-  await page.reload();
-  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
-  await page.evaluate(() => { window.__g.testMode = false; });
-  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('menu');
-  assertNoRuntimeErrors(runtimeErrors);
-}
+// This suite owns its own clear key so it cannot wipe the other persistence suite's slot.
+const openPlayerGame = (page, runtimeErrors) => openPlayerGameWith(page, runtimeErrors, 'qa-clear-campaign');
 
 async function startRawWorld(page, { seed = 12345, hard = false } = {}) {
   await page.evaluate(({ seed: worldSeed, hard: hardMode }) => {
