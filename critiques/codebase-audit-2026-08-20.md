@@ -1,8 +1,9 @@
 # Codebase audit — 2026-08-20
 
-> **Status:** findings #2, #4, #5, #6, #7, #8 and #9 are fixed (see the two "Resolved"
-> sections at the bottom), along with a release-cache integrity bug found while fixing
-> them. Still open: #3 (the file splits), and #1/#10 (deferred until a feature touches them).
+> **Status:** findings #2 and #4-#9 are fixed, and #3 (the file splits) is done — see the
+> three "Resolved" sections at the bottom, plus a release-cache integrity bug found on the
+> way. Still open: #1 (`updateParties`) and #10 (`startBattle`'s outcome closure), both
+> deliberately deferred until a feature touches that behaviour.
 
 Scope: `src/` (5,940 LOC), `tests/` (~2,800), `scripts/`. Four parallel Sonnet auditors
 (dead code, SOLID, DRY, file length). Every finding below was spot-checked against the
@@ -273,3 +274,51 @@ confirms it.
 release cache verified at `r415e1b48d7e0`. The visual-regression snapshots cover the
 aftermath and brief panels; note they do not pin enemy row order, which is why the new
 tooling test does.
+
+## Resolved — #3, the scene module split
+
+Recorded in full as `plans/022-scene-module-split.md`; summary here.
+
+| File | Before | After |
+|------|--------|-------|
+| `src/battle.js` | 1898 | 584 |
+| `src/world.js` | 1847 | 828 |
+
+Twelve new modules under `src/battle/` and `src/world/`, following the composition style
+`battle/spatial-index.js` already used: extracted functions take the scene instance as their
+first argument, no prototype mixins.
+
+**The two rules that made it safe.** `constants.js` was extracted first and depends on
+nothing but `data.js` — without it `ai-phases.js` needs `BRACE_SPEED` from `battle.js` while
+`battle.js` needs `updateTroopPhase` back, a real import cycle with no bundler to hide it.
+And anything reachable from outside stays an instance method that delegates: the ordered
+phases are patched *by name* by `world-battle-seams.spec.js`, `performance.spec.js` drives
+`updateSeparationPhase`/`getSpatialStats` off the instance, and the campaign suites call
+`endBattle`/`damageEnemy`. Direct module calls would have silently disabled those assertions
+instead of failing them.
+
+**Where this deliberately did less than this audit proposed.** The audit's groupings were
+written from line counts; the call graph told a different story in three places.
+`world/party-economy.js` was dropped entirely (15 methods, 18 inbound call sites, mostly
+one-liners — ~13 delegators to relocate ~113 lines). `world/terrain.js` kept the hot
+per-tick predicates (`blockedAt`, `onRoad`, `riverBlockedAt`, `inSafeZone`, `visible`,
+`moveBlocked`, `riverDistanceAt`) and moved only the construction and navigation work.
+`battle/combat.js` is narrower than proposed — the targeting, stance and command helpers
+stayed in the core. Rule applied: extract a cluster when the body moved clearly exceeds the
+forwarding it costs. That is a correction to this audit, not a shortcut.
+
+**One bug the mechanical rewrite introduced**, caught by the world-hover suite: converting
+methods to functions rewrites `this.` to the instance parameter, but `hoverTargetAt(this, wx, wy)`
+passes a *bare* `this` as an argument. It became `undefined` inside a module function. Worth
+knowing for any future extraction — grep for bare `this` in code (not comments) afterwards.
+
+`AGENTS.md` gained a "Scene module layout" section covering the layout, the constants-first
+cycle rule, and why the delegating seams must stay methods.
+
+### Verification (#3)
+
+`npm run test:tooling` 12/12 and `npx playwright test` 76/76 after every individual step, not
+just at the end — including all 10 canvas snapshots, which are what actually prove the
+rendering extractions are pixel-identical. Release cache clean; the token must be refreshed
+on each move because the module graph itself changes (11 modules at the start of the day, 24
+now).
