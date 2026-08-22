@@ -6,12 +6,12 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=ra209d001f5a8';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=ra209d001f5a8';
-import { ACTIONS } from '../input-actions.js?v=ra209d001f5a8';
+import { HERO } from '../data.js?v=rc29d87ba530c';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rc29d87ba530c';
+import { ACTIONS } from '../input-actions.js?v=rc29d87ba530c';
 import {
   BRACE_SPEED, BRACE_BONUS, BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
-} from './constants.js?v=ra209d001f5a8';
+} from './constants.js?v=rc29d87ba530c';
 
 export function updateHeroPhase(battle, dt, inp, h, ax) {
   const P = battle.palette;

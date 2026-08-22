@@ -1,10 +1,10 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deploy countdown, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, enemyStrength, playerStrength } from '../data.js?v=ra209d001f5a8';
-import { clamp, rrect } from '../engine.js?v=ra209d001f5a8';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=ra209d001f5a8';
-import { stanceIcon } from './render-units.js?v=ra209d001f5a8';
+import { HERO, enemyStrength, playerStrength } from '../data.js?v=rc29d87ba530c';
+import { clamp, rrect } from '../engine.js?v=rc29d87ba530c';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rc29d87ba530c';
+import { stanceIcon } from './render-units.js?v=rc29d87ba530c';
 
 export function drawHud(battle, ctx) {
   const P = battle.palette;

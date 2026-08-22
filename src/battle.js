@@ -1,21 +1,21 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=ra209d001f5a8';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=ra209d001f5a8';
-import { SpatialGrid } from './battle/spatial-index.js?v=ra209d001f5a8';
-import { ACTIONS } from './input-actions.js?v=ra209d001f5a8';
-import { BASE, SQUAD_TYPES, SQUAD_LABELS } from './battle/constants.js?v=ra209d001f5a8';
-import { drawScene, drawProps } from './battle/render-scene.js?v=ra209d001f5a8';
+import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=rc29d87ba530c';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=rc29d87ba530c';
+import { SpatialGrid } from './battle/spatial-index.js?v=rc29d87ba530c';
+import { ACTIONS } from './input-actions.js?v=rc29d87ba530c';
+import { BASE, SQUAD_TYPES, SQUAD_LABELS } from './battle/constants.js?v=rc29d87ba530c';
+import { drawScene, drawProps } from './battle/render-scene.js?v=rc29d87ba530c';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=ra209d001f5a8';
+} from './battle/separation.js?v=rc29d87ba530c';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=ra209d001f5a8';
+} from './battle/ai-phases.js?v=rc29d87ba530c';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
-} from './battle/combat.js?v=ra209d001f5a8';
+} from './battle/combat.js?v=rc29d87ba530c';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
