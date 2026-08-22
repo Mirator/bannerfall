@@ -147,8 +147,7 @@ persistence call at once.
 
 `src/battle/combat.js:126-127` (the retreat hold reaching 1.3s and calling
 `endBattle(false, true)`) and the HUD banner that counts it down
-(`src/battle/hud.js:103-107`) never execute, nor does the disengage summary line
-`src/world/battle-transition.js:111`.
+(`src/battle/hud.js:103-107`) never execute.
 
 Note this is *in-battle* retreat, distinct from the world-side withdraw that
 `world-screens.spec.js` covers well, and distinct from the retreat *outcome* that
@@ -156,6 +155,11 @@ Note this is *in-battle* retreat, distinct from the world-side withdraw that
 missing is the only path a player can actually take to reach that outcome: holding a
 direction for 1.3s. The threshold could be changed, or the hold could stop being
 interruptible, without any test failing.
+
+The disengage bookkeeping itself (`src/world/battle-transition.js:116-120`) *is*
+covered, by that direct `endBattle` call. Two of its neighbours are not:
+`:100-101`, stripping the dead from a camp garrison after a failed or abandoned
+raid, and `:111`, the victory-with-losses toast.
 
 ## Finding 6 — every failure path in the platform boundary is dark
 
@@ -224,8 +228,11 @@ throws — no browser needed.
 treats any console error as a failure, so all 12 `campaign-persistence.spec.js` tests
 and one `menu.spec.js` test failed inside `openPlayerGame()` before their bodies ran.
 
-CI's pinned Chromium does not surface it, so this is not currently breaking the gate —
-but the gate is one browser-version bump away from 13 red tests with a cause nobody
+This was reproduced on Chromium 1194, the build available in this sandbox; the pinned
+1234 could not be installed here, so whether it reports the 404 the same way is
+untested. The repository's own history is the only evidence either way — the suite has
+been recorded green on CI, so the pinned build evidently does not surface it. Either
+way the gate is one browser-version bump away from 13 red tests with a cause nobody
 would look for in a persistence suite. Two one-line fixes, either is enough: add
 `<link rel="icon" href="data:,">` to `index.html`, or have `collectRuntimeErrors()`
 ignore resource-load 404s. Adding the link is the better one — it also stops the 404
@@ -260,22 +267,30 @@ asserts properties of code other specs also execute — which is exactly the job
 assertions are invisible to line coverage by design, and deleting them would lose
 real protection while moving no number here.
 
-Two things the table does say. First, `qa.spec.js` is a genuine single point of
-dependence: two Playwright tests carry `tests/qa_suite.js`, 22 records and 158 lines
-no other spec touches. Second, `stance-balance.spec.js` is by a wide margin the most
-expensive spec in the suite — timed alone it takes 62s, against 21s for `qa.spec.js`,
-14s for `visual-regression.spec.js` and under 10s for the rest, so it is roughly 40%
-of the 2.6-minute gate — and it adds one unique line. That is defensible on its own
-terms, since it exists to measure balance rather than to reach code, but it means the
-coverage argument for keeping it is nil and the balance argument is the whole
-argument.
+The one thing the table does clearly say: `qa.spec.js` is a genuine single point of
+dependence. Two Playwright tests carry `tests/qa_suite.js`, its whole record inventory,
+and 158 lines no other spec touches.
+
+A note on cost, because the first draft of this document got it wrong. Instrumented
+runs of the full suite took 2.6 minutes and the specs timed individually under that same
+instrumentation put `stance-balance.spec.js` at 62s, which read as ~40% of the gate. V8
+coverage collection is what most of that was: uninstrumented, the whole suite is **60s**,
+and `stance-balance.spec.js` is 13.1s of it — against 12.1s for `qa.spec.js`, 9.5s for
+`campaign-persistence.spec.js`, 8.7s for `visual-regression.spec.js` and under 5s for
+the rest, each including ~2-3s of server and browser startup. So the slowest spec adds
+one unique line for roughly a sixth of the gate, not two fifths. Worth knowing, not
+worth acting on.
 
 ## Documentation drift found on the way
 
-- `progress.md` states `npm test` passes "54/54". It is 86 tests now (85 pass here;
-  the one failure is the environment's Chromium, see below).
-- `tests/README.md`'s "22 record names" is accurate — verified against
-  `tests/qa_suite.js` (21 `record(...)` calls plus `harness_present`).
+- `progress.md` states `npm test` passes "54/54". It was 86 tests when this was
+  measured, and 89 after the follow-up below (85 of 86 passed here; the one failure is
+  the environment's Chromium, see below).
+- `tests/README.md` contradicted itself on the record count: line 12 said "all 22
+  record names" while line 327 said "The 21 deterministic records". 21 was right —
+  `EXPECTED_QA_NAMES` in `qa.spec.js` held 21 entries. `36f9e6a`, the same commit that
+  broke the release token, dropped a record and updated only one of the two numbers.
+  (An earlier draft of this document repeated the stale 22 as if verified; it was not.)
 
 ## Method, and what to distrust in it
 
@@ -306,8 +321,61 @@ argument.
   numbers above come from the second pass, where the favicon 404 was stubbed at the
   fixture and 85 of 86 tests passed.
 
-## What this analysis did not do
+## Follow-up: findings 1, 2, 4, 5 and 6 now have tests
 
-No tests were added or changed. Findings 1, 2, 4, 5 and 6 are each a small, mechanical
-addition to a suite that already has the fixtures they need; finding 3 needs a new
-visual baseline and is the only one with a real cost.
+Written after this analysis, in the same branch: four QA records and five boundary
+tests. The QA record inventory goes 21 -> 25, `node --test` goes 12 -> 14, and the
+Playwright count goes 86 -> 89 (the four new records live inside `qa.spec.js`'s existing
+two tests, so they add coverage without adding Playwright tests).
+
+| finding | test | covers |
+| --- | --- | --- |
+| 1 | `hero_swing_and_dash_damage_enemies` | swing damage on the aim ray, the arc rejecting an enemy behind it, dash activation, i-frames, trample-once-per-dash |
+| 2 | `economy_army_cap_expansion_and_refusals` | `armyCapCost()`, the priced refusal, +2 cap, cost escalation, the raised recruit ceiling, the persisted snapshot, town-only |
+| 4 | `world_party_spawn_timer_fills_the_map_to_its_cap` | the 30s arm, the 40s cadence, filling to `partyCap()` and stopping, `persistParties()` |
+| 5 | `battle_retreat_hold_disengages` | the 3s gate, held-input-only, release resets the bar, 1.3s completes, return to world |
+| 6 | `assertPlatform rejects every host shape the boundary forbids` | both `throw` branches, every missing slot and lifecycle method, and the frozen return |
+| 6 | `settings survive both stored shapes and recover from a corrupt blob` | the JSON settings shape and the corrupt-blob recovery |
+| 6 | `the web adapter names the failed operation and its semantic slot` | `storageError()` and all three `localStorage` catch clauses |
+| 6 | `backgrounding suspends once and returning to the tab resumes once` | the `resume` notification and its de-duplication |
+| 6 | `a non-finite campaign coordinate is refused rather than persisted` | `main.js:69-70`, for both a hero and a party coordinate |
+
+Every one of them was mutation-tested — the production line each asserts on was broken
+on purpose and the test was confirmed to fail, then restored. That is not ceremony
+here: two of these would have passed vacuously without it. The "enemy behind the aim
+ray is not hit" case passed at first because the preceding landed hit had set
+`battle.freeze`, and `Battle.update()` returns early during hit-stop, so the next
+tick's input was dropped and *no swing happened at all*. The intro banner does the same
+thing for the first ~1.1s of every battle. Both are now documented in
+`tests/README.md` and asserted explicitly rather than assumed.
+
+Re-measured the same way afterwards: **97.9% (4550/4648)**, up from 96.6%, with the
+unexecuted count down from 158 lines to 98. Four files went to 100% — `battle/ai-phases.js`,
+`persistence/save-repository.js`, `platform/platform-contract.js` and
+`platform/web-platform.js`, the last three being the whole platform boundary that was
+previously the least covered code in the repository. `world.js` went 95.5 -> 97.7 and
+`battle/hud.js` 94.3 -> 97.5.
+
+What is left, for whoever picks this up next: the stronghold gating and remnant
+absorption (`world/settlement-interactions.js:115-123,138-139`), the pause overlay and
+the two crash-recovery handlers (`main.js:298-311,551-553,572-574`), the `mousemove`
+coordinate mapping and the floating-text particle (`engine.js:74-77,183,234-238`),
+finding 3's markers (`world/render-scene.js:309-314` and `world.js:364,397-400`), the
+spatial obstacle-push and collect-all paths (`battle/separation.js:46-48`,
+`battle/spatial-index.js:52-53`), and the projectile MISS branch
+(`battle/combat.js:40-41`).
+
+Finding 3 is deliberately left: the occupied/threatened markers need a new visual
+baseline, and a baseline generated in this sandbox would be wrong — the pinned Chromium
+is unavailable here, which is exactly what makes the existing menu-vignette snapshot
+fail. That one wants a run on CI's browser.
+
+Verification: `npm run test:tooling` 14/14, and 88 of 89 Playwright tests on the
+substitute Chromium — the single failure being the pre-existing menu-vignette pixel
+diff, which is the browser mismatch described in the method section and not one of
+these tests. One further caveat, which is also not about the new tests. The
+favicon 404 described above fails 13 unrelated tests on this browser build, so the full
+run was done with a `favicon.ico` present in the repo root. That file is **not**
+committed, and it is a candidate fix worth considering on its own: a root `favicon.ico`
+removes the 404 for players and for every future browser build, without touching
+`index.html` and therefore without moving the release token.

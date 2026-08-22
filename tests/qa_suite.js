@@ -1,5 +1,5 @@
 // Bannerfall QA regression suite — browser module against window.game / window.__g.
-import { BALANCE, UNIT_TYPES, WORLD } from '../src/data.js';
+import { BALANCE, HERO, UNIT_TYPES, WORLD } from '../src/data.js';
 //
 // It preserves the historical window.runQaSuite / window.__qaResult browser
 // globals while remaining importable by the automated Playwright runner.
@@ -51,8 +51,10 @@ function runQaSuiteImpl() {
   const BATTLE_GRACE = BALANCE.battleGrace;
   const HERO_START = WORLD.heroStart;
   const SETTLEMENT_ASHFORD = WORLD.settlements.find(s => s.id === 'ashford');
+  const SETTLEMENT_KEEP = WORLD.settlements.find(s => s.kind === 'town');
   const CAMP_C1 = WORLD.camps.find(c => c.id === 'c1');
   assert(SETTLEMENT_ASHFORD, 'WORLD.settlements is missing required id ashford');
+  assert(SETTLEMENT_KEEP, 'WORLD.settlements has no town, so army-cap expansion has nowhere to happen');
   assert(CAMP_C1, 'WORLD.camps is missing required id c1');
 
   // ======================================================================
@@ -113,6 +115,147 @@ function runQaSuiteImpl() {
     assert(g.scene() === 'world', 'did not return to world within ' + MAX + 's (elapsed=' + elapsed.toFixed(2) + 's)');
     assert(elapsed >= 2.0, 'end banner held only ' + elapsed.toFixed(2) + 's before onEnd, spec requires >= 2s');
     return 'end banner held ' + elapsed.toFixed(2) + 's before onEnd fired (battle.js gates onEnd on stateT > 2.6)';
+  });
+
+  // ======================================================================
+  // 2c. Hero offence: the swing lands, and the dash tramples exactly once
+  // ======================================================================
+  // Coverage note, and the reason this record exists: no test had ever landed a hero
+  // attack. The single KeyJ tap in battle_flow_invariants_and_victory has never had an
+  // enemy inside the arc, and DASH (Space) appeared in no test at all — so every line
+  // that applies hero damage was unexecuted, and HERO.swingDmg / dashDmg / iframeTime
+  // could be set to any value without the gate noticing.
+  record('hero_swing_and_dash_damage_enemies', () => {
+    g.scenario('battle_small');
+    const b = G.scene, h = b.hero;
+    // a battle opens on its intro banner, and battle.js runs no phases at all while it is
+    // up: swing and dash inputs are not read yet, so every assertion below would be
+    // vacuous there. Step through it in two parts so the intro HUD draws at least once.
+    assert(b.state === 'intro', 'a battle should open on the intro banner, state=' + b.state);
+    g.step(0.5);
+    assert(b.state === 'intro', 'the intro banner should still be up 0.5s in, state=' + b.state);
+    g.step(0.8);
+    assert(b.state === 'fight', 'the intro should be over 1.3s in, state=' + b.state);
+
+    // Aim is derived from the pointer through the camera, so ask the game where it is
+    // aiming and put the target on THAT ray. Re-deriving the camera transform in a test is
+    // how the viewport- and cursor-dependent battle outcomes stayed hidden the first time.
+    const aimRay = () => {
+      const mw = G.camera.toWorld(G.input.mouse.x, G.input.mouse.y);
+      return Math.atan2(mw.y - h.y, mw.x - h.x);
+    };
+    const place = (e, angle, distance) => { e.x = h.x + Math.cos(angle) * distance; e.y = h.y + Math.sin(angle) * distance; };
+    // A LANDED hit sets battle.freeze, and battle.update() returns early while that
+    // hit-stop runs — so the very next tick's input is dropped on the floor. Without
+    // clearing it here the "enemy behind the hero" case below would pass because nothing
+    // happened at all, which is not the same thing as the arc rejecting the target.
+    const swing = () => {
+      h.vx = 0; h.vy = 0; h.swingT = 0;
+      g.tap('KeyJ');
+      assert(h.swingT === HERO.swingCd,
+        'the swing did not fire — swingT is ' + h.swingT + ', expected HERO.swingCd (' + HERO.swingCd + ')');
+      g.step(0.1); // past the hit-stop, so the next input is actually read
+    };
+
+    // nothing may die while the damage numbers are being read: an enemy splice would move
+    // the target out from under the assertions, and could end the battle outright
+    for (const e of b.enemies) e.hp = 500;
+    const target = b.enemies[0], behind = b.enemies[1];
+    for (const e of b.enemies.slice(1)) { e.x = 60; e.y = 60; }
+
+    h.x = b.W / 2; h.y = b.H / 2;
+    place(target, aimRay(), 40);
+    const beforeSwing = target.hp;
+    swing();
+    assert(target.hp === beforeSwing - HERO.swingDmg,
+      'a swing at 40px on the aim ray should deal exactly HERO.swingDmg (' + HERO.swingDmg +
+      '), hp went ' + beforeSwing + ' -> ' + target.hp);
+    assert(b.kills === 0, 'this record must not kill anything, kills=' + b.kills);
+
+    // an enemy directly behind the aim ray is outside the arc: the hero is a knight, not
+    // a lawnmower. Park the first target out of reach so only `behind` is in question.
+    place(target, aimRay(), 400);
+    place(behind, aimRay() + Math.PI, 40);
+    const beforeBack = behind.hp;
+    swing();
+    assert(behind.hp === beforeBack,
+      'an enemy behind the aim ray must not be hit, hp went ' + beforeBack + ' -> ' + behind.hp);
+
+    // Dash: with no movement axis held the dash follows the same aim ray. The trample must
+    // land once per dash, not once per tick — that is what the _trampled flag is for.
+    place(behind, aimRay() + Math.PI, 400);
+    place(target, aimRay(), 60);
+    h.vx = 0; h.vy = 0; h.dashCdT = 0; h.iframesT = 0;
+    const beforeDash = target.hp;
+    g.tap('Space');
+    assert(h.dashT > 0, 'Space did not start a dash (dashT=' + h.dashT + ')');
+    assert(h.iframesT > 0, 'a dash must grant i-frames, iframesT=' + h.iframesT);
+    assert(target.hp === beforeDash,
+      'the activation tick reads dashT before it is set, so no trample belongs on it; hp moved to ' + target.hp);
+    g.step(0.15);
+    assert(target.hp === beforeDash - HERO.dashDmg,
+      'riding through an enemy should deal exactly HERO.dashDmg (' + HERO.dashDmg +
+      '), hp went ' + beforeDash + ' -> ' + target.hp);
+    assert(target._trampled === true,
+      'the trampled enemy was not marked, so the once-per-dash guard is not holding it');
+    g.step(0.1); // to the end of HERO.dashTime
+    assert(target.hp === beforeDash - HERO.dashDmg,
+      'the trample must hit at most once per dash, hp fell further to ' + target.hp);
+    return 'swing dealt ' + HERO.swingDmg + ' on the aim ray and nothing behind it; dash dealt ' +
+      HERO.dashDmg + ' once, with i-frames granted';
+  });
+
+  // ======================================================================
+  // 2d. Retreat: the held escape decision, not the outcome
+  // ======================================================================
+  // campaign-persistence covers what a retreat DOES to the campaign by calling
+  // endBattle(false, true) directly, and world-screens covers the map-side withdraw. The
+  // only path a player can actually take to that outcome — riding to your entry edge and
+  // holding the direction for 1.3s — reached the 1.3s completion in no test, so neither
+  // the threshold nor the "held input only" rule was pinned by anything.
+  record('battle_retreat_hold_disengages', () => {
+    g.scenario('battle_small');
+    const b = G.scene, h = b.hero;
+    g.step(1.3);
+    assert(b.state === 'fight', 'the intro should be over 1.3s in, state=' + b.state);
+    assert(b.approach === 'E', 'this record assumes battle_small keeps the default eastern approach, got ' + b.approach);
+    // approach E puts your escape edge in the west: inside x < 70, steering left
+    const toEdge = () => { h.x = 50; h.y = b.H / 2; };
+
+    // sitting in the escape strip is not a decision: without steering out, nothing fills.
+    // battle.time only advances during 'fight', so ride out the 3s gate by watching it
+    // rather than by assuming how much of the intro counted.
+    toEdge();
+    let guard = 0;
+    while (b.time <= 3.2 && guard++ < 60) { g.step(0.2); toEdge(); }
+    assert(b.state === 'fight', 'the fight ended while parked at the edge, state=' + b.state);
+    assert(!b.retreatT, 'parking in the escape strip must not fill the bar, retreatT=' + b.retreatT);
+    assert(b.time > 3, 'the bar is gated on battle.time > 3; this record needs to be past it, time=' + b.time);
+
+    // holding out fills it, and the HUD countdown draws while it is partial
+    toEdge();
+    g.key('KeyA', true);
+    g.step(0.5);
+    assert(b.state === 'fight', 'a half-second hold must not be enough to disengage, state=' + b.state);
+    assert(b.retreatT > 0 && b.retreatT < 1.3,
+      'expected a partially filled bar after 0.5s, retreatT=' + b.retreatT);
+
+    // letting go resets it: knockback, dashes and drift can never bank progress
+    g.key('KeyA', false);
+    g.step(0.2);
+    assert(b.retreatT === 0, 'releasing the direction must reset the bar, retreatT=' + b.retreatT);
+
+    // and a sustained hold disengages: a loss, but a retreat, not a defeat
+    toEdge();
+    g.key('KeyA', true);
+    g.step(1.4);
+    g.key('KeyA', false);
+    assert(b.state === 'end', 'a 1.4s hold at the escape edge should end the battle, state=' + b.state);
+    assert(b.retreated === true, 'the ending must be flagged as a retreat, retreated=' + b.retreated);
+    assert(b.victory === false, 'a retreat is not a victory, victory=' + b.victory);
+    g.step(3);
+    assert(g.scene() === 'world', 'did not return to the world after the retreat banner, scene=' + g.scene());
+    return 'parking did not fill the bar; 0.5s held then released reset it; 1.4s held disengaged and returned to world';
   });
 
   // ======================================================================
@@ -336,6 +479,69 @@ function runQaSuiteImpl() {
   });
 
   // ======================================================================
+  // 7b. Economy: army-cap expansion (town-only) — cost, refusal, escalation
+  // ======================================================================
+  // The third town service had neither a success nor a refusal record, so the whole
+  // EXPAND_ARMY branch and armyCapCost() were unexecuted — while recruit and heal each
+  // had both. It is also the only service that raises a persisted ceiling, which is why
+  // the snapshot and the recruit cap are asserted here and not just the gold.
+  record('economy_army_cap_expansion_and_refusals', () => {
+    g.scenario('world');
+    const w = G.scene, save = w.save;
+    w.hero.x = SETTLEMENT_KEEP.x; w.hero.y = SETTLEMENT_KEEP.y;
+
+    assert(save.armyCap === ARMY_CAP_BASE,
+      'a fresh run should start at BALANCE.armyCapBase (' + ARMY_CAP_BASE + '), got ' + save.armyCap);
+    const firstCost = w.armyCapCost();
+    assert(firstCost === BALANCE.armyCapCostBase,
+      'the first expansion should cost armyCapCostBase (' + BALANCE.armyCapCostBase + '), got ' + firstCost);
+
+    save.gold = firstCost - 1;
+    g.tap('KeyT');
+    assert(save.armyCap === ARMY_CAP_BASE, 'a refused expansion must not raise the cap, got ' + save.armyCap);
+    assert(save.gold === firstCost - 1, 'a refused expansion must not spend gold, got ' + save.gold);
+    assert(w.msg === 'Need ' + firstCost + ' gold', 'expected the priced refusal, got: ' + w.msg);
+
+    save.gold = firstCost + 5;
+    g.tap('KeyT');
+    assert(save.armyCap === ARMY_CAP_BASE + 2, 'expansion should add exactly 2 cap, got ' + save.armyCap);
+    assert(save.gold === 5, 'expansion should spend exactly ' + firstCost + ', gold left ' + save.gold);
+    assert(w.msg === 'Army capacity is now ' + save.armyCap, 'expected the success message, got: ' + w.msg);
+
+    // the price is a formula, not a flat fee: the next two men cost a step more
+    const secondCost = w.armyCapCost();
+    assert(secondCost === BALANCE.armyCapCostBase + 2 * BALANCE.armyCapCostStep,
+      'the second expansion should cost base + 2 steps, got ' + secondCost);
+
+    // the raised ceiling is what the player is actually buying — prove the recruit cap
+    // moved with it, and that the new cap is in the snapshot that gets persisted
+    save.gold = 500;
+    save.troops = [];
+    for (let i = 0; i < ARMY_CAP_BASE + 2; i++) save.troops.push({ type: 'spear' });
+    w.recruit('spear');
+    assert(save.troops.length === ARMY_CAP_BASE + 2, 'recruiting at the RAISED cap should still refuse');
+    assert(w.msg === 'Army is at capacity', 'expected the cap refusal at the raised cap, got: ' + w.msg);
+    save.troops.pop();
+    w.recruit('spear');
+    assert(save.troops.length === ARMY_CAP_BASE + 2,
+      'one under the raised cap should recruit, got ' + save.troops.length);
+    assert(w.syncLiveStateToSave().armyCap === ARMY_CAP_BASE + 2,
+      'the raised cap must be in the persisted snapshot, got ' + w.syncLiveStateToSave().armyCap);
+
+    // village gate: only a town sells capacity, and a village must not even answer
+    w.hero.x = SETTLEMENT_ASHFORD.x; w.hero.y = SETTLEMENT_ASHFORD.y;
+    save.gold = 500;
+    const capAtVillage = save.armyCap;
+    w.msg = '';
+    g.tap('KeyT');
+    assert(save.armyCap === capAtVillage, 'a village must not sell army capacity, cap went to ' + save.armyCap);
+    assert(save.gold === 500, 'a village must not charge for it either, gold ' + save.gold);
+    assert(w.msg === '', 'a village should say nothing about capacity, said: ' + w.msg);
+    return 'expansion cost ' + firstCost + ' for +2 cap, refused when short, escalated to ' +
+      secondCost + ', raised the recruit ceiling, persisted, and stayed town-only';
+  });
+
+  // ======================================================================
   // 8. World: winning a party battle decreases parties.length by exactly 1
   // ======================================================================
   record('world_party_battle_decreases_party_count_by_one', () => {
@@ -529,6 +735,60 @@ function runQaSuiteImpl() {
       'expected the weak tier to grow less common once every camp is razed: razed=0 weak=' + weakAtZero + ', razed=3 weak=' + weakAtThree);
     return 'over ' + seeds.length + ' seeds x ' + N + ' draws: weak=' + weak + ' even=' + even + ' strong=' + strong +
       '; razed 0->3 shifted weak ' + weakAtZero + '->' + weakAtThree + ', strong ' + strongAtZero + '->' + strongAtThree;
+  });
+
+  // ======================================================================
+  // 11c. World: the spawn timer is what actually puts parties on the map
+  // ======================================================================
+  // Every other party record places its parties by fixture or calls spawnParty() directly,
+  // so updatePartySpawns() itself — the 30s-then-40s cadence, the cap it respects, and the
+  // persistParties() that follows a spawn — was never executed by the gate. The tier
+  // weighting could be perfect and the campaign could still never spawn anything.
+  record('world_party_spawn_timer_fills_the_map_to_its_cap', () => {
+    g.scenario('world', { seed: 4242 });
+    const w = G.scene;
+    // Ashford is a safe zone, so parking here keeps a spawned party from clashing and
+    // ending the observation early. keepAwake() runs the world with the hero stopped
+    // (Plan 023 freezes it otherwise) and must be re-applied after every scenario().
+    w.hero.x = SETTLEMENT_ASHFORD.x; w.hero.y = SETTLEMENT_ASHFORD.y;
+    g.keepAwake(true);
+    // g.step() clamps to 30 sim-seconds per call; the fixed timestep makes chunking exact
+    const run = seconds => { let left = seconds; while (left > 0) { const chunk = Math.min(25, left); g.step(chunk); left -= chunk; } };
+
+    const cap = w.partyCap();
+    const start = w.parties.length;
+    assert(cap === 2 + w.liveCamps().length * 2, 'partyCap() is not the documented 2 + 2 per live camp, got ' + cap);
+    assert(start < cap, 'a fresh run should start below the cap so the timer has room, ' + start + ' of ' + cap);
+    assert(w.spawnT === 30, 'the first spawn should be armed at 30s, spawnT=' + w.spawnT);
+
+    run(35);
+    assert(g.scene() === 'world', 'left the world scene during the first spawn window, scene=' + g.scene());
+    assert(w.parties.length === start + 1,
+      'expected exactly one spawn by 35s, went ' + start + ' -> ' + w.parties.length);
+
+    // cadence: the second spawn is 40s after the first, not another 30
+    run(30); // t = 65
+    assert(w.parties.length === start + 1,
+      'a second party arrived before 40s had passed, count ' + w.parties.length + ' at 65s');
+    run(10); // t = 75
+    assert(w.parties.length === start + 2,
+      'expected the second spawn by 75s (30 + 40), got ' + w.parties.length);
+
+    // and it fills to the cap and then stops
+    let guard = 0;
+    while (w.parties.length < cap && g.scene() === 'world' && guard++ < 20) run(40);
+    assert(g.scene() === 'world', 'left the world scene while filling to the cap, scene=' + g.scene());
+    assert(w.parties.length === cap, 'the map never filled to its cap of ' + cap + ', stalled at ' + w.parties.length);
+    run(120); // three more spawn windows with no room left
+    assert(w.parties.length === cap,
+      'the spawn timer pushed past the cap of ' + cap + ' to ' + w.parties.length);
+
+    // a spawn persists the roster: the snapshot the campaign saves must agree with the map
+    const snapshot = w.syncLiveStateToSave();
+    assert((snapshot.parties || []).length === w.parties.length,
+      'the persisted snapshot holds ' + (snapshot.parties || []).length + ' parties but the map holds ' + w.parties.length);
+    return 'spawned on the 30s arm, held the 40s cadence, filled to the cap of ' + cap +
+      ' and stopped there, with the roster persisted';
   });
 
   // ======================================================================

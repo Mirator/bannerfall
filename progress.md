@@ -100,3 +100,57 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
 - Fixed: `enforceBeatableFloor()` silently rewrote a scouted party (a lone 14-strength band became a 4). It now adds an even-tier party and only rewrites an existing one at the party cap, sharing `partyCap()`/`liveCamps()` with the spawn timer.
 - Fixed: an occupying party covered its settlement's name chip. Arrival snaps to `occupierPost()`, 64px north of centre with compass fallbacks.
 - `npm test` 54/54, `test:tooling` 7/7, release token verified, `git diff --check` clean.
+
+## Test coverage analysis and the gaps it closed
+
+- Branch: `claude/test-coverage-analysis-cemi4p`. Report:
+  `critiques/test-coverage-analysis-2026-08-22.md`.
+- Measured, not estimated: V8 range coverage per test (a temporary `page`-fixture
+  wrapper, reverted) plus `NODE_V8_COVERAGE` for the tooling suite, folded to line
+  level with V8's nesting rule honored — a `count: 0` child overrides its covering
+  parent. Without that step the naive union reports a meaningless 100%.
+- `src/` was at 96.6% (4490/4648 statement-ish lines). The 158 unexecuted lines
+  clustered rather than scattered; the tooling suite added no lines the browser
+  did not already reach.
+- Closed five of the seven clusters with four QA records and four boundary tests
+  (record inventory 21 -> 25, `node --test` 12 -> 14, Playwright 86 -> 89):
+  - `hero_swing_and_dash_damage_enemies` — the hero's whole offensive kit was dark.
+    DASH appeared in no test at all, and the single `KeyJ` tap in
+    `battle_flow_invariants_and_victory` had never landed on a target, so no line
+    that applies hero damage had ever run.
+  - `battle_retreat_hold_disengages` — the 1.3s held escape decision. The outcome
+    was covered by a direct `endBattle` call; the only path a player can take to it
+    was not.
+  - `economy_army_cap_expansion_and_refusals` — the third town service had neither
+    a success nor a refusal record, while recruit and heal each had both.
+  - `world_party_spawn_timer_fills_the_map_to_its_cap` — every other party record
+    places parties by fixture, so `updatePartySpawns()` had never run.
+  - Platform boundary: both `assertPlatform` rejections (the tooling suite had no
+    `assert.throws` at all), the web adapter's three `localStorage` catch clauses,
+    the `resume` notification, corrupt-settings recovery, and `persistRun()`'s
+    non-finite-coordinate guard.
+- Re-measured after: 97.9% (4550/4648), unexecuted lines 158 -> 98.
+  `battle/ai-phases.js`, `persistence/save-repository.js`,
+  `platform/platform-contract.js` and `platform/web-platform.js` all reached 100%.
+- Every new test was mutation-tested: the production line it asserts on was broken
+  deliberately, the failure confirmed, then restored. Two would otherwise have been
+  vacuous — see the two battle-input rules now documented in `tests/README.md`
+  (the intro banner runs no phases; a landed hit's hit-stop drops the next tick's
+  input).
+- Left open, deliberately: the Plan 020 occupied/threatened settlement markers
+  (finding 3) need a new visual baseline, which must be generated on CI's pinned
+  Chromium rather than in a sandbox that cannot install it.
+
+### Two defects found while measuring, neither fixed here
+
+- `npm run test:release` fails at `main` (`c2b3e55`), broken at `36f9e6a` by a src
+  edit that skipped `npm run release:cache`. CI runs that check before the browser
+  suite, so every push and PR fails before any test runs. Fix is one command and a
+  token-only diff across 21 files.
+- `index.html` ships no favicon. Chromium requests `/favicon.ico`, `serve.py`
+  answers 404, and some browser builds report that through `console.error` — which
+  `collectRuntimeErrors()` treats as a failure, taking out all 12
+  `campaign-persistence` tests and one `menu` test. Reproduced on Chromium 1194;
+  the pinned 1234 could not be installed in that sandbox, and since the suite has
+  been recorded green on CI it evidently does not report the 404 the same way. A root `favicon.ico` fixes it without touching `index.html`,
+  and therefore without moving the release token.
