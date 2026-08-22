@@ -163,3 +163,22 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
   Note that `index.html` is filtered out of the release-token hash, so that edit
   does not move the token. A root `favicon.ico` fixes it without touching `index.html`,
   and therefore without moving the release token.
+
+### The third defect: CI was red before any of this
+
+- `Browser QA` had been failing on `main` since `794c4267` ("Merge Plan 018 menu
+  vignette") — eleven consecutive runs, 2026-08-17 to 2026-08-22 — on
+  `visual-regression.spec.js` "title menu campaign vignette remains visually stable".
+- Not flaky and not a browser-version artifact: **23418 differing pixels, ratio 0.03**,
+  byte-identical on CI's pinned Chromium, on both retries, on `main` at `e3a8014`
+  before this branch existed, and on a local Linux Chromium here.
+- Cause: the baseline was captured on a host where `system-ui` resolved to a narrower
+  face. The diff image is nothing but doubled text — "MuteMute", "SelectSelect", a
+  title whose letters overlap at two different widths. Art was pixel-identical, and
+  the title ribbon is sized from `measureText`, so it shifted with the metrics too.
+  3.0% against a 1.5% cap.
+- Fixed by recapturing that one baseline on Linux, the platform CI runs. The cap was
+  NOT touched: at 1.5% it is what makes a missing landmark fail, and this mismatch is
+  the evidence it is tight enough to matter. `tests/README.md` now says baselines are
+  Linux-captured and why, and names the durable fix (bundle a font instead of drawing
+  through `system-ui`) for whoever wants a genuinely portable text baseline.

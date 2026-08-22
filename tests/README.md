@@ -361,6 +361,33 @@ The 25 deterministic records cover:
 24. the 200-step performance smoke budget;
 25. river-pursuit movement without freezing.
 
+## Visual baselines are captured on Linux, on purpose
+
+`VISUAL_OPTIONS` in `visual-regression.spec.js` pairs a per-pixel threshold with a
+1.5% differing-area cap, and its comment explains that as absorbing the way Chromium
+rasterizes text and antialiased edges differently across platforms. That reasoning
+holds for *rasterization*. It does not hold for a different **font family**, and the
+canvas draws every string through `system-ui, sans-serif`, which resolves to whatever
+the host has installed.
+
+`menu-campaign-vignette.png` was captured on a host where `system-ui` resolved to a
+narrower face than Linux gives. Every Linux Chromium — CI's pinned build and any local
+one — produced exactly 23418 differing pixels, 3.0% of the canvas, which is double the
+cap. `Browser QA` was red on `main` from the commit that added that snapshot
+(`794c4267`, Plan 018) until it was recaptured, eleven consecutive runs, and every one
+of those failures looked like a flaky visual test rather than a font mismatch. Nothing
+else differed: the ribbon, mountains, castle, road and column were pixel-identical, and
+the title ribbon is sized from `measureText`, so even the art shifted with the metrics.
+
+So: **capture baselines on Linux**, the platform CI runs. A snapshot recaptured on macOS
+or Windows will fail CI at roughly 3% on any screen with a sentence of text on it, and
+`--update-snapshots` on the wrong host silently re-baselines to a rendering CI can never
+reproduce. If a text-heavy screen ever needs a baseline that is genuinely portable, the
+fix is to stop drawing through `system-ui` — bundle a font and name it in the canvas font
+strings — not to widen the cap. Never widen the cap to get green: at 1.5% it is what
+makes a missing landmark or unit group fail, and the 3% font mismatch was the proof that
+the cap is set tightly enough to matter.
+
 ## Two battle-input rules the hero records depend on
 
 Both were found by writing those records, and both silently make an input test
