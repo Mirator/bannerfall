@@ -109,3 +109,65 @@ test('flush rejects queued failures and preserves an observable lastError', asyn
   await assert.rejects(repository.flush(), /disk full/);
   assert.match(repository.lastError.message, /disk full/);
 });
+
+// The contract's whole job is refusing a host that cannot serve the renderer. Until
+// these existed the suite only ever built a VALID fake and walked the happy path, so
+// both `throw` sites in assertPlatform() were unexecuted and a future desktop adapter
+// could have shipped a missing slot without the boundary noticing.
+test('assertPlatform rejects every host shape the boundary forbids', () => {
+  const valid = () => fakePlatform().platform;
+
+  assert.throws(() => assertPlatform(null), TypeError, 'null host must be refused');
+  assert.throws(() => assertPlatform(undefined), TypeError, 'missing host must be refused');
+  assert.throws(() => assertPlatform({ ...valid(), kind: 'steam' }), /supported kind/,
+    'an unknown host kind must be refused, not assumed web');
+  assert.throws(() => assertPlatform({ ...valid(), kind: undefined }), /supported kind/);
+
+  for (const operation of ['read', 'write', 'remove']) {
+    const host = valid();
+    const storage = { ...host.storage };
+    delete storage[operation];
+    assert.throws(() => assertPlatform({ ...host, storage }), new RegExp(`missing ${operation}\\(`),
+      `storage missing ${operation}() must be refused`);
+  }
+
+  const noFlush = valid();
+  const flushless = { ...noFlush.storage };
+  delete flushless.flush;
+  assert.throws(() => assertPlatform({ ...noFlush, storage: flushless }), /missing flush\(\)/);
+
+  for (const method of ['isBackgrounded', 'onDeactivate', 'onSuspend', 'onResume']) {
+    const host = valid();
+    const lifecycle = { ...host.lifecycle };
+    delete lifecycle[method];
+    assert.throws(() => assertPlatform({ ...host, lifecycle }), new RegExp(`missing ${method}\\(\\)`),
+      `lifecycle missing ${method}() must be refused`);
+  }
+
+  // and the accepted host comes back frozen, so nothing can widen it after the check
+  const accepted = assertPlatform(valid());
+  assert.equal(Object.isFrozen(accepted), true);
+});
+
+test('settings survive both stored shapes and recover from a corrupt blob', async () => {
+  // the JSON object shape, which nothing exercised: only the legacy '1'/'0' strings were
+  const objectForm = fakePlatform({ [PLATFORM_SLOTS.SETTINGS]: '{"muted":true}' });
+  const fromObject = new SaveRepository(objectForm.platform);
+  await fromObject.initialize();
+  assert.deepEqual(fromObject.getSettings(), { muted: true });
+
+  const objectFalse = fakePlatform({ [PLATFORM_SLOTS.SETTINGS]: '{"muted":"yes"}' });
+  const fromLoose = new SaveRepository(objectFalse.platform);
+  await fromLoose.initialize();
+  assert.deepEqual(fromLoose.getSettings(), { muted: false }, 'only a real boolean true means muted');
+
+  // a corrupt blob falls back to defaults AND drops the bad value, the same contract
+  // #parseCampaign already had a test for
+  const corrupt = fakePlatform({ [PLATFORM_SLOTS.SETTINGS]: 'not json at all' });
+  const recovered = new SaveRepository(corrupt.platform);
+  await recovered.initialize();
+  assert.deepEqual(recovered.getSettings(), { muted: false });
+  await recovered.flush();
+  assert.equal(corrupt.values.has(PLATFORM_SLOTS.SETTINGS), false,
+    'a corrupt settings blob must be removed, not left to fail again on the next boot');
+});

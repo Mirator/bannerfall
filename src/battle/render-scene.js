@@ -1,12 +1,12 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=ra209d001f5a8';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=ra209d001f5a8';
-import { stableSortPrefix } from './spatial-index.js?v=ra209d001f5a8';
-import { SQUAD_TYPES } from './constants.js?v=ra209d001f5a8';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=ra209d001f5a8';
-import { drawHud } from './hud.js?v=ra209d001f5a8';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rc29d87ba530c';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=rc29d87ba530c';
+import { stableSortPrefix } from './spatial-index.js?v=rc29d87ba530c';
+import { SQUAD_TYPES } from './constants.js?v=rc29d87ba530c';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=rc29d87ba530c';
+import { drawHud } from './hud.js?v=rc29d87ba530c';
 
 // ------------------------------------------------------------- drawing
 export function drawScene(battle, ctx) {
