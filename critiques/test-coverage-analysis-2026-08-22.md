@@ -56,11 +56,11 @@ reaches the test suite. This is the checker doing exactly the job Plan 012 built
 for — the omission it is designed to catch is the omission that happened — but nobody
 has run it since.
 
-The fix is one command, `npm run release:cache`, producing a token-only diff (21
-files, 69 replacements, no content change). It is not applied here: this branch
-carries a documentation-only commit, and rewriting every module reference inside it
-would bury the analysis in noise. It does mean any pull request from this branch will
-show the same red release-check until the token bump lands, on `main` or ahead of it.
+**Fixed** (in a later commit on this branch, after the tests): `npm run release:cache`,
+a token-only diff across 21 files and 69 references with no content change.
+`npm run test:release` now verifies `rc29d87ba530c`. It was deliberately left out of the
+first two commits so the analysis and the tests would not be buried under 69 rewritten
+module references.
 
 ## Finding 1 — the hero's offence has never been exercised
 
@@ -233,10 +233,23 @@ This was reproduced on Chromium 1194, the build available in this sandbox; the p
 untested. The repository's own history is the only evidence either way — the suite has
 been recorded green on CI, so the pinned build evidently does not surface it. Either
 way the gate is one browser-version bump away from 13 red tests with a cause nobody
-would look for in a persistence suite. Two one-line fixes, either is enough: add
-`<link rel="icon" href="data:,">` to `index.html`, or have `collectRuntimeErrors()`
-ignore resource-load 404s. Adding the link is the better one — it also stops the 404
-for real players.
+would look for in a persistence suite.
+
+**Fixed**, by shipping an actual icon rather than by teaching `collectRuntimeErrors()`
+to ignore 404s — the request is legitimate, and silencing the only check that noticed
+would trade a real signal for quiet. `favicon.ico` (16/32/48, generated from the ASCII
+pixel map in `scripts/make-favicon.py`, so the art is reviewable and regenerable
+without adding an image dependency to a repo that has none) plus a **relative**
+`<link rel="icon" href="favicon.ico">` in `index.html`. The link matters: a project
+Pages site is served from a subpath, and the browser's implicit request goes to the
+domain root, so a root file on its own would still be missed in production.
+
+One correction to a claim made further down this document: it argued that a root
+favicon avoids touching `index.html` "and therefore" avoids moving the release token.
+The reasoning was wrong. `expectedToken()` in `scripts/check-release-cache.mjs`
+explicitly filters `index.html` out of the hash — the token derives from the module
+sources only, so an `index.html`-only edit never moves it either way. Verified: adding
+the link produced exactly the `rc29d87ba530c` the checker was already expecting.
 
 ## Structural note: which specs carry unique coverage
 
@@ -373,9 +386,6 @@ fail. That one wants a run on CI's browser.
 Verification: `npm run test:tooling` 14/14, and 88 of 89 Playwright tests on the
 substitute Chromium — the single failure being the pre-existing menu-vignette pixel
 diff, which is the browser mismatch described in the method section and not one of
-these tests. One further caveat, which is also not about the new tests. The
-favicon 404 described above fails 13 unrelated tests on this browser build, so the full
-run was done with a `favicon.ico` present in the repo root. That file is **not**
-committed, and it is a candidate fix worth considering on its own: a root `favicon.ico`
-removes the 404 for players and for every future browser build, without touching
-`index.html` and therefore without moving the release token.
+these tests. That run needed an untracked `favicon.ico` to get past the 404 described
+above; with the icon now committed it no longer does, and the same 88 of 89 pass on a
+clean tree.

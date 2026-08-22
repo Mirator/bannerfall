@@ -141,16 +141,25 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
   (finding 3) need a new visual baseline, which must be generated on CI's pinned
   Chromium rather than in a sandbox that cannot install it.
 
-### Two defects found while measuring, neither fixed here
+### Two defects found while measuring, both since fixed
 
-- `npm run test:release` fails at `main` (`c2b3e55`), broken at `36f9e6a` by a src
+- `npm run test:release` failed at `main` (`c2b3e55`), broken at `36f9e6a` by a src
   edit that skipped `npm run release:cache`. CI runs that check before the browser
-  suite, so every push and PR fails before any test runs. Fix is one command and a
-  token-only diff across 21 files.
+  suite, so every push and PR failed before any test ran. Fixed by running the
+  updater: a token-only diff across 21 files and 69 references, now verifying
+  `rc29d87ba530c`.
 - `index.html` ships no favicon. Chromium requests `/favicon.ico`, `serve.py`
   answers 404, and some browser builds report that through `console.error` — which
   `collectRuntimeErrors()` treats as a failure, taking out all 12
   `campaign-persistence` tests and one `menu` test. Reproduced on Chromium 1194;
   the pinned 1234 could not be installed in that sandbox, and since the suite has
-  been recorded green on CI it evidently does not report the 404 the same way. A root `favicon.ico` fixes it without touching `index.html`,
+  been recorded green on CI it evidently does not report the 404 the same way.
+  Fixed with an actual icon rather than by teaching `collectRuntimeErrors()` to
+  ignore 404s, which would have silenced the only check that noticed:
+  `favicon.ico` (16/32/48) generated from the ASCII pixel map in
+  `scripts/make-favicon.py`, plus a relative `<link rel="icon">` in `index.html`
+  — relative because a project Pages site is served from a subpath, where the
+  browser's implicit /favicon.ico request goes to the domain root and misses.
+  Note that `index.html` is filtered out of the release-token hash, so that edit
+  does not move the token. A root `favicon.ico` fixes it without touching `index.html`,
   and therefore without moving the release token.
