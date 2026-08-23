@@ -93,8 +93,7 @@ replacing a delegator with a direct module call silently disables coverage.
   records the measured finding that squad orders do not beat pressing nothing.
   Remove it only when commanding actually wins, never to tidy the suite. Use
   `test.fail` with a plan or finding reference for expected failures — never
-  `skip` or `fixme`. (`AGENTS.md` still names AUDIT-03 here; that regression
-  passes now.)
+  `skip` or `fixme`.
 
 ## Working conventions
 

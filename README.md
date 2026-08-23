@@ -32,7 +32,7 @@ npx playwright install chromium
 Run `npm test` before submitting gameplay or test changes. It starts and stops
 the existing Python server on port 8474 automatically, runs the browser suite,
 and returns a nonzero exit code for a failed QA record, page exception, or
-browser console error. `npm run test:qa` runs the focused legacy 17-check suite;
+browser console error. `npm run test:qa` runs the focused legacy record suite;
 `npm run test:headed` opens Chromium for local debugging. See `AGENTS.md` for
 the agent contract and `tests/README.md` for test architecture and extension
 rules.
@@ -51,7 +51,7 @@ command.
 - `index.html` — entry point
 - `src/` — game code (engine, world map, battles, data)
 - `tests/runner.html` — human-readable browser QA runner
-- `tests/qa_suite.js` — deterministic 17-check regression suite
+- `tests/qa_suite.js` — deterministic 25-record regression suite
 - `tests/e2e/` — Playwright launch, isolation, and reporting tests
 - `scripts/` — local dev helpers (static server, screenshot server)
 - `critiques/` — design critique notes from the build process
