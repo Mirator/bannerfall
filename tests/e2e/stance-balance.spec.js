@@ -205,16 +205,36 @@ test.describe('stance balance', () => {
   test('deliberate orders beat giving no order at all', async ({ page }) => {
     // EXPECTED FAILURE — Plan 019's premise is not met, measured on the fight the campaign
     // actually serves: organic camp raids with real garrison rolls, hero parked and idle.
-    // Pressing NOTHING wins ~80% losing ~4.3 men; charging everything ~67%/4.9; the split
-    // this spec once certified as best ~40%/6.2. The warband is a competent auto-battler,
-    // so orders are decoration on a fight that resolves itself. Squad plumbing, stance
-    // trade-offs and the HUD are sound in isolation, and the wolf/raider guards below
-    // still generalize — what is missing is any reason to touch the keyboard. Do not
-    // delete this annotation to tidy the suite; remove it only when commanding actually
-    // beats not commanding.
+    // The warband is a competent auto-battler, so orders are decoration on a fight that
+    // resolves itself. Squad plumbing, stance trade-offs and the HUD are sound in isolation,
+    // and the wolf/raider guards below still generalize — what is missing is any reason to
+    // touch the keyboard. Do not delete this annotation to tidy the suite; remove it only
+    // when commanding actually beats not commanding.
+    //
+    // Sample size, and why it changed (plans/024, "RETRACTED" section): the original 5
+    // seeds x 3 camps = 15 raids/policy was noise-dominated. Two independent wide sweeps of
+    // the SAME policies disagreed with each other by 17 points on idle alone (73% vs 56% at
+    // 60 and 120 raids respectively) — far larger than the 2-6 point gap between policies in
+    // any single sample of that size. Pooled across every sweep taken (15 + 60 + 120 = 195
+    // raids/policy), idle led chargeAll 61.7% to 56.7%: the defect is real, but a strict
+    // inequality on 15 raids flips on sampling noise regardless of what the game does.
+    //
+    // This fixture now runs 40 seeds x 3 camps = 120 raids/policy (360 raids total across
+    // idle/chargeAll/split). The 40 seeds are `1..40` — a plain arithmetic sequence with no
+    // hand-picked values, chosen only for count, not content, so the result cannot be
+    // accused of landing on favorable seeds.
+    //
+    // Measured on this exact fixture (this file, seeds 1..40) across two consecutive runs:
+    // idle 73%/73%, chargeAll 62%/60%, split 33%/33% — idle leads chargeAll by 10-11 points
+    // both times (the small chargeAll drift between runs is the harness's own residual
+    // non-determinism at this scale, not a seed effect; direction and margin are what
+    // matter here and both held). Same direction as the pooled 61.7/56.7 margin above (this
+    // 120-raid draw landed toward the high end of that pooled range, same as the plan's own
+    // 60-raid sweep did). The assertion below (best deliberate policy beats idle) still
+    // fails honestly both times, so `test.fail()` reports green — not decided on one run.
     test.fail();
-    test.setTimeout(180000);
-    const seeds = [42, 7, 101, 555, 2024];
+    test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
+    const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked
     const camps = ['c1', 'c2', 'c3'];
     const idle = await raidSweep(page, null, seeds, camps);
     const chargeAll = await raidSweep(page, { spear: 'charge', archer: 'charge', knight: 'charge' }, seeds, camps);

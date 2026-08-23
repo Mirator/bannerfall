@@ -6,12 +6,199 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=ra209d001f5a8';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=ra209d001f5a8';
-import { ACTIONS } from '../input-actions.js?v=ra209d001f5a8';
+import { HERO } from '../data.js?v=rbe1f74f09262';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rbe1f74f09262';
+import { ACTIONS } from '../input-actions.js?v=rbe1f74f09262';
 import {
   BRACE_SPEED, BRACE_BONUS, BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
-} from './constants.js?v=ra209d001f5a8';
+  LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
+  BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
+} from './constants.js?v=rbe1f74f09262';
+
+// Phase 4c: local obstacle avoidance ("tangent steering"). Casts a ray of length LOOKAHEAD
+// from (ux,uy) along the unit's desired heading (dirX,dirY, already a unit vector) toward its
+// goal, clipped to the remaining distance `goalDist`. If that ray would clip an obstacle
+// circle (inflated by the unit's own radius `ur`), the heading is rotated onto whichever
+// tangent of that circle is the shorter turn and the result is written into the battle's
+// reused `_steerScratch` (never a fresh object). Returns false — leaving the caller's original
+// heading untouched — when there is nothing to steer around, including the deliberate case
+// where the unit already overlaps the obstacle: that overlap is `pushOutOf`'s job
+// (separation.js), and steering here would fight it instead of letting it resolve.
+//
+// `unit` carries a one-frame-lazy `_steerObstacle`/`_steerSign` pair (same lazy-field pattern
+// as the existing `t.jit`/`e.jit` surround offset) so the chosen tangent side is sticky for as
+// long as the SAME obstacle keeps intersecting the ray. Without that, a target that is itself
+// moving (a kiting raider, a routed troop) sweeps the raw goal heading back and forth across
+// the obstacle's bisector, and recomputing the "shorter turn" fresh every frame flips sides
+// every tick — the unit fights itself and never actually clears the obstacle. This was found
+// by measurement, not anticipated: `stance-balance.spec.js`'s FOLLOW-vs-raiders fixture
+// stopped resolving within its 90s budget until this hysteresis was added.
+// Deterministic (no RNG) and allocation-free: uses the existing `_obstacleGrid` broad phase
+// and its own reusable `queryItems` buffer, consumed synchronously.
+function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist) {
+  // A unit deflected for too long without a break gives up on steering for a short cooldown,
+  // falling back to its raw heading (and `pushOutOf`) instead. This bounds the worst case:
+  // measurement found a goal that is ITSELF moving (a kiting raider, a routed troop) can keep
+  // regenerating a valid deflection tick after tick — sometimes against the same obstacle,
+  // sometimes handed off between two nearby ones — which read as an indefinite stall/orbit
+  // rather than a one-time detour. Bailing out converts that into a bounded nuisance instead
+  // of a fight that never resolves.
+  if (unit._steerCooldownT > 0) { unit._steerCooldownT -= dt; return false; }
+  const rayLen = goalDist < LOOKAHEAD ? goalDist : LOOKAHEAD;
+  if (rayLen <= 0) return false;
+  const grid = battle._obstacleGrid;
+  const count = grid.query(ux, uy, rayLen + battle._maxObstacleR + ur + TANGENT_MARGIN);
+  const items = grid.queryItems;
+  let bestT = Infinity, bestObstacle = null, bestEffR = 0;
+  for (let i = 0; i < count; i++) {
+    const o = items[i];
+    const ox = o.x - ux, oy = o.y - uy;
+    const t = ox * dirX + oy * dirY; // projection of the obstacle centre onto the ray
+    if (t <= 0 || t > rayLen) continue; // behind the unit, or beyond the goal/lookahead
+    const distToObstacle2 = ox * ox + oy * oy;
+    const effR = o.r + ur + TANGENT_MARGIN;
+    if (distToObstacle2 <= effR * effR) continue; // already overlapping — let pushOutOf resolve it
+    const perp2 = distToObstacle2 - t * t;
+    if (perp2 >= effR * effR) continue; // ray passes clear of the inflated circle
+    if (t < bestT) { bestT = t; bestObstacle = o; bestEffR = effR; }
+  }
+  if (bestObstacle === null) { unit._steerObstacle = null; unit._steerActiveT = 0; return false; }
+  const bestOx = bestObstacle.x - ux, bestOy = bestObstacle.y - uy;
+  const D = Math.sqrt(bestOx * bestOx + bestOy * bestOy);
+  if (D <= bestEffR) return false; // degenerate guard, should not happen given the check above
+  unit._steerActiveT = (unit._steerActiveT || 0) + dt;
+  if (unit._steerActiveT > STEER_MAX_ACTIVE) {
+    // Give up steering for a cooldown: fall back to the raw heading (and pushOutOf) so a
+    // sustained deflection cannot become a permanent stall.
+    unit._steerCooldownT = STEER_COOLDOWN;
+    unit._steerActiveT = 0;
+    unit._steerObstacle = null;
+    return false;
+  }
+  const alpha = Math.atan2(bestOy, bestOx);
+  const theta = Math.asin(clamp(bestEffR / D, -1, 1));
+  const tang = computeTangentHeading(alpha, theta, unit._steerObstacle, bestObstacle, unit._steerSign, dirX, dirY);
+  unit._steerObstacle = bestObstacle;
+  unit._steerSign = tang.sign;
+  battle._steerScratch.x = tang.x;
+  battle._steerScratch.y = tang.y;
+  return true;
+}
+
+function angDiff(a, b) {
+  const d = a - b;
+  return Math.atan2(Math.sin(d), Math.cos(d));
+}
+
+// Shared by steerAroundObstacle (physical obstacles) and blindSidestepHeading (LOS blockers,
+// below): picks which tangent of a circle at angle `alpha` (half-angle `theta`) to aim for,
+// sticking to whichever side was already committed to for the SAME obstacle so a moving
+// goal/target does not sweep the heading across the bisector and flip sides every tick (the
+// hysteresis bug found and fixed for steerAroundObstacle in Phase 4c — see its module doc
+// comment). `prevObstacle`/`prevSign` are the caller's own lazy per-unit fields; this function
+// never touches unit state itself, so the two callers can keep independent hysteresis (a
+// unit can be mid-detour around a physical obstacle AND mid-sidestep around an LOS blocker
+// without either one clobbering the other's committed side).
+function computeTangentHeading(alpha, theta, prevObstacle, obstacle, prevSign, dirX, dirY) {
+  let sign;
+  if (prevObstacle === obstacle && prevSign != null) {
+    sign = prevSign;
+  } else {
+    const heading = Math.atan2(dirY, dirX);
+    const d1 = angDiff(alpha - theta, heading), d2 = angDiff(alpha + theta, heading);
+    sign = Math.abs(d1) <= Math.abs(d2) ? -1 : 1;
+  }
+  const chosen = sign < 0 ? alpha - theta : alpha + theta;
+  return { x: Math.cos(chosen), y: Math.sin(chosen), sign };
+}
+
+// Task 1 corrective pass (plans/024): the mandatory blind-ranged fallback (see
+// BLIND_ADVANCE_T's use below) used to walk the unit STRAIGHT at its target, which walks it
+// INTO whatever is occluding the shot and keeps it blind for the entire traverse — a wood's
+// LOS-blocker radius can span up to ~311 units, so `blindT` was measured climbing to
+// 10-120 s against its 1.5 s gate at larger wood sizes, and fights stopped resolving.
+//
+// This finds the actual blocker sitting on the straight sightline to the target (nearest to
+// the unit first, matching steerAroundObstacle's own ray-scan convention) and reuses
+// `computeTangentHeading` to aim the unit around THAT circle specifically, by the shortest
+// tangent, instead of through it. It deliberately searches `battle.blockers`, not
+// `battle._obstacleGrid`: a wood's LOS-blocker circle has no matching physical obstacle (only
+// its two largest trees get colliders — see terrain.js), so the physical steering above would
+// never react to it at all.
+//
+// Bounded the same way as steerAroundObstacle, for the same reason: a target that is itself
+// moving can keep regenerating a valid deflection indefinitely, which would otherwise read as
+// an orbit rather than a one-time detour. On give-up this returns null and the caller falls
+// back to the pre-fix straight-at-target goal for BLIND_SIDESTEP_COOLDOWN seconds — worse
+// locally, but it guarantees the unit eventually walks PAST the blocker (bounding `blindT`)
+// instead of circling it forever.
+function blindSidestepHeading(unit, ux, uy, dirX, dirY, segLen, dt, blockers) {
+  if (unit._blindCooldownT > 0) { unit._blindCooldownT -= dt; return null; }
+  if (segLen <= 0) return null;
+  let bestT = Infinity, bestBlocker = null;
+  for (let i = 0; i < blockers.length; i++) {
+    const b = blockers[i];
+    const ox = b.x - ux, oy = b.y - uy;
+    const t = ox * dirX + oy * dirY; // projection of the blocker centre onto the sightline
+    if (t <= 0 || t > segLen) continue; // behind the unit, or beyond the target
+    const perp2 = (ox * ox + oy * oy) - t * t;
+    if (perp2 >= b.r * b.r) continue; // sightline passes clear of this blocker
+    if (t < bestT) { bestT = t; bestBlocker = b; }
+  }
+  if (bestBlocker === null) { unit._blindObstacle = null; unit._blindActiveT = 0; return null; }
+  const bx = bestBlocker.x - ux, by = bestBlocker.y - uy;
+  const D = Math.sqrt(bx * bx + by * by);
+  const effR = bestBlocker.r + TANGENT_MARGIN;
+  if (D <= effR) return null; // standing inside the blocker's own footprint — degenerate
+  unit._blindActiveT = (unit._blindActiveT || 0) + dt;
+  if (unit._blindActiveT > BLIND_SIDESTEP_MAX_ACTIVE) {
+    unit._blindCooldownT = BLIND_SIDESTEP_COOLDOWN;
+    unit._blindActiveT = 0;
+    unit._blindObstacle = null;
+    return null;
+  }
+  const alpha = Math.atan2(by, bx);
+  const theta = Math.asin(clamp(effR / D, -1, 1));
+  const tang = computeTangentHeading(alpha, theta, unit._blindObstacle, bestBlocker, unit._blindSign, dirX, dirY);
+  unit._blindObstacle = bestBlocker;
+  unit._blindSign = tang.sign;
+  return tang;
+}
+
+// Phase 5: target selection for ranged units. A ranged unit prefers a target it can actually
+// see; only when NOTHING in range is visible does it fall back to the plain nearest-overall
+// search every unit used before this phase (identical result to `battle.nearestEnemy` /
+// `battle.nearestFriendly` in that case). `dt` is accumulated onto `unit.blindT` exactly when
+// that fallback is the one that finds something — i.e. there IS a target, the unit just can't
+// see it right now — never when there is genuinely nothing in range to be blind about.
+// Reaches `battle._enemyGrid` directly rather than through a delegating method: ai-phases.js
+// already does this for `_obstacleGrid` in steerAroundObstacle above, and this predicate is
+// specific to ranged targeting, not a general query another module needs.
+function pickRangedEnemy(battle, unit, x, y, maxR, dt) {
+  const seen = battle._enemyGrid.nearest(x, y, maxR, en => battle.hasLineOfSight(x, y, en.x, en.y));
+  if (seen) return seen;
+  const any = battle._enemyGrid.nearest(x, y, maxR);
+  if (any) unit.blindT += dt;
+  return any;
+}
+
+// Same idea for a ranged enemy (raiders) picking among the hero and troops. Mirrors
+// `battle.nearestFriendly`'s hero-vs-troop merge (the hero is not in `_friendlyGrid`, so it is
+// passed in as the grid's `initial` candidate) but restricts both to visible candidates first.
+function pickRangedFriendly(battle, unit, x, y, dt) {
+  const hero = battle.hero;
+  const heroVisible = battle.hasLineOfSight(x, y, hero.x, hero.y);
+  const heroDistance = dist2(x, y, hero.x, hero.y);
+  const seenTroop = battle._friendlyGrid.nearest(
+    x, y, 1e9, t => battle.hasLineOfSight(x, y, t.x, t.y),
+    heroVisible ? hero : null, heroVisible ? heroDistance : Infinity, -1);
+  if (seenTroop) {
+    return seenTroop === hero ? { obj: hero, isHero: true } : { obj: seenTroop, isHero: false };
+  }
+  const any = battle.nearestFriendly(x, y);
+  if (any) unit.blindT += dt;
+  return any;
+}
 
 export function updateHeroPhase(battle, dt, inp, h, ax) {
   const P = battle.palette;
@@ -21,7 +208,11 @@ export function updateHeroPhase(battle, dt, inp, h, ax) {
   if (!dashing) {
     h.vx += ax.x * HERO.accel * dt;
     h.vy += ax.y * HERO.accel * dt;
-    const sp = len(h.vx, h.vy), max = HERO.speed;
+    // Phase 4a: terrain caps top speed, not acceleration — the horse still responds to
+    // input at the same rate, it just cannot carry as much speed through a wood or a ford.
+    // Scaling the ceiling instead of damping velocity directly keeps this reading as
+    // terrain drag rather than input lag.
+    const sp = len(h.vx, h.vy), max = HERO.speed * battle.terrainSpeedAt(h.x, h.y);
     if (sp > max) { h.vx *= max / sp; h.vy *= max / sp; }
     if (!ax.any) { h.vx *= Math.max(0, 1 - HERO.friction * dt); h.vy *= Math.max(0, 1 - HERO.friction * dt); }
   } else {
@@ -105,13 +296,15 @@ export function updateTroopPhase(battle, dt, h) {
     const heroThreat = battle.nearestEnemy(battle.hero.x, battle.hero.y, 90);
     const stance = squadStanceNow;
     if (stance === 'charge') {
-      engage = battle.nearestEnemy(t.x, t.y);
+      engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, 1e9, dt) : battle.nearestEnemy(t.x, t.y);
     } else if (stance === 'hold') {
-      engage = battle.nearestEnemy(t.x, t.y, t.d.ranged ? t.d.range : 140);
+      const maxR = t.d.ranged ? t.d.range : 140;
+      engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, maxR, dt) : battle.nearestEnemy(t.x, t.y, maxR);
       if (!engage && heroThreat && dist2(t.x, t.y, battle.hero.x, battle.hero.y) < 260 * 260) engage = heroThreat;
       if (!engage) goal = { x: t.holdX, y: t.holdY };
     } else { // follow
-      engage = battle.nearestEnemy(t.x, t.y, t.d.ranged ? t.d.range * 0.9 : 150);
+      const maxR = t.d.ranged ? t.d.range * 0.9 : 150;
+      engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, maxR, dt) : battle.nearestEnemy(t.x, t.y, maxR);
       if (!engage && heroThreat) engage = heroThreat;
       if (!engage) goal = battle.slotPos(t);
     }
@@ -119,23 +312,41 @@ export function updateTroopPhase(battle, dt, h) {
     if (engage) {
       const d = Math.sqrt(dist2(t.x, t.y, engage.x, engage.y));
       const wantR = t.d.ranged ? t.d.range * 0.8 : t.d.range + engage.d.radius - 6;
-      if (t.d.ranged && stance === 'hold') {
+      // Phase 5, mandatory fallback: a ranged unit blind for more than 1.5s stops holding
+      // its line (HOLD's stand-ground, or keeping keepAway distance) and advances on its
+      // target at normal speed instead, so it walks itself out from behind whatever is
+      // blocking it rather than standing idle for the rest of the fight. Cleared the moment
+      // a shot actually lands (below), which is the only proof LOS is back.
+      const blind = t.d.ranged && t.blindT > BLIND_ADVANCE_T;
+      if (t.d.ranged && stance === 'hold' && !blind) {
         goal = null; // archers on hold stand ground
-      } else if (d > wantR) {
+      } else if (d > wantR || blind) {
         // surround: each unit approaches its own point on the target's circle
+        let formationGoal;
         if (!t.d.ranged && d < wantR * 3.5) {
           if (t.jit == null) t.jit = (battle.troops.indexOf(t) * 2.399);
-          goal = { x: engage.x + Math.cos(t.jit) * wantR * 0.9, y: engage.y + Math.sin(t.jit) * wantR * 0.9 };
+          formationGoal = { x: engage.x + Math.cos(t.jit) * wantR * 0.9, y: engage.y + Math.sin(t.jit) * wantR * 0.9 };
         } else {
           // approach IN FORMATION: hold your lateral slot while closing, so a charge
           // reads as a wedge bearing down — not a swarm converging on one point
           const aa = Math.atan2(engage.y - t.y, engage.x - t.x);
           const side = (t.slot.col - (t.slot.rowCount - 1) / 2) * 26;
           const rowBack = t.slot.row * 24;
-          goal = {
+          formationGoal = {
             x: engage.x - Math.cos(aa) * rowBack + Math.cos(aa + Math.PI / 2) * side,
             y: engage.y - Math.sin(aa) * rowBack + Math.sin(aa + Math.PI / 2) * side,
           };
+        }
+        if (blind) {
+          // Task 1 corrective pass: sidestep around whatever occludes the shot instead of
+          // walking into it. `formationGoal` above stays the give-up fallback so a bounded
+          // sidestep failure still produces the pre-fix behaviour rather than no goal at all.
+          const bdx = engage.x - t.x, bdy = engage.y - t.y, blen = len(bdx, bdy);
+          const bdirX = blen > 0 ? bdx / blen : 1, bdirY = blen > 0 ? bdy / blen : 0;
+          const heading = blindSidestepHeading(t, t.x, t.y, bdirX, bdirY, blen, dt, battle.blockers);
+          goal = heading ? { x: t.x + heading.x * LOOKAHEAD, y: t.y + heading.y * LOOKAHEAD } : formationGoal;
+        } else {
+          goal = formationGoal;
         }
       } else if (t.d.ranged && d < t.d.keepAway) {
         goal = { x: t.x + (t.x - engage.x), y: t.y + (t.y - engage.y) };
@@ -145,8 +356,6 @@ export function updateTroopPhase(battle, dt, h) {
       // bows down, so CHARGE trades the ranged screen for speed instead of keeping both.
       const advancingBow = t.d.ranged && stance === 'charge' && d > wantR;
       if (t.cd <= 0 && !advancingBow && d < (t.d.ranged ? t.d.range : t.d.range + engage.d.radius + 4)) {
-        if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
-        t.cd = t.d.cooldown;
         // A set line receives a charge: melee holding position hit harder against anything
         // closing at speed (wolves sprint at 158, a brute commits at 55). This is what makes
         // HOLD the answer to a pack instead of a strictly slower FOLLOW.
@@ -154,10 +363,20 @@ export function updateTroopPhase(battle, dt, h) {
           len(engage.vx, engage.vy) > BRACE_SPEED;
         const dmg = t.d.dmg * (closingFast ? BRACE_BONUS : 1);
         if (t.d.ranged) {
-          // Archers standing still shoot straighter than archers walking.
-          const spread = stance === 'hold' ? BOW_SPREAD_BRACED : BOW_SPREAD;
-          battle.fireArrow(t.x, t.y - 12, engage.x, engage.y, true, dmg, t.d.projSpeed, null, spread);
+          // Phase 5: the firing gate lives here, not inside fireArrow — checked BEFORE the
+          // cooldown is consumed, so a blind archer does not silently burn a shot into a
+          // hillside every time its cooldown comes up.
+          if (battle.hasLineOfSight(t.x, t.y - 12, engage.x, engage.y)) {
+            if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
+            t.cd = t.d.cooldown;
+            // Archers standing still shoot straighter than archers walking.
+            const spread = stance === 'hold' ? BOW_SPREAD_BRACED : BOW_SPREAD;
+            battle.fireArrow(t.x, t.y - 12, engage.x, engage.y, true, dmg, t.d.projSpeed, null, spread);
+            t.blindT = 0;
+          }
         } else {
+          if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
+          t.cd = t.d.cooldown;
           t.lunge = 1;
           battle.damageEnemy(engage, dmg,
             Math.cos(t.facing) * 85, Math.sin(t.facing) * 85, 'troop');
@@ -166,12 +385,23 @@ export function updateTroopPhase(battle, dt, h) {
     }
 
     if (goal) {
+      // Phase 4b: resolve the river-crossing waypoint BEFORE steering, so tangent steering
+      // (4c) avoids obstacles on the way to the crossing rather than fighting it — a unit
+      // whose goal is already the crossing centre has nothing left to disagree about.
+      const wp = battle.crossingWaypoint(t.x, t.y, goal.x, goal.y);
+      if (wp) goal = wp;
       const dx = goal.x - t.x, dy = goal.y - t.y, d = len(dx, dy);
       if (d > 6) {
-        const sp = t.d.speed * (stance === 'charge' ? 1.15 : 1) * clamp(d / 40, 0.5, 1.6);
-        t.vx = lerp(t.vx, dx / d * sp, 1 - Math.exp(-8 * dt));
-        t.vy = lerp(t.vy, dy / d * sp, 1 - Math.exp(-8 * dt));
-        if (!engage) t.facing = angLerp(t.facing, Math.atan2(dy, dx), 1 - Math.exp(-6 * dt));
+        let dirX = dx / d, dirY = dy / d;
+        if (steerAroundObstacle(battle, t, dt, t.x, t.y, t.d.radius, dirX, dirY, d)) {
+          dirX = battle._steerScratch.x; dirY = battle._steerScratch.y;
+        }
+        // Phase 4a: terrain zones (road/wood/scrub/ford) scale movement speed.
+        const sp = t.d.speed * (stance === 'charge' ? 1.15 : 1) * clamp(d / 40, 0.5, 1.6) *
+          battle.terrainSpeedAt(t.x, t.y);
+        t.vx = lerp(t.vx, dirX * sp, 1 - Math.exp(-8 * dt));
+        t.vy = lerp(t.vy, dirY * sp, 1 - Math.exp(-8 * dt));
+        if (!engage) t.facing = angLerp(t.facing, Math.atan2(dirY, dirX), 1 - Math.exp(-6 * dt));
       } else { t.vx *= 0.8; t.vy *= 0.8; }
     } else if (!engage) { t.vx *= 0.85; t.vy *= 0.85; }
     else { t.vx *= 0.9; t.vy *= 0.9; }
@@ -212,6 +442,9 @@ export function updateEnemyPhase(battle, dt, h) {
     if (e.type === 'wolf') {
       const best = battle.nearestFriendlyRanged(e.x, e.y, 460);
       tgt = best ? { obj: best, isHero: false } : battle.nearestFriendly(e.x, e.y);
+    } else if (e.d.ranged) {
+      // Phase 5: a ranged enemy (raider) prefers a target it can see; see pickRangedFriendly.
+      tgt = pickRangedFriendly(battle, e, e.x, e.y, dt);
     } else {
       tgt = battle.nearestFriendly(e.x, e.y);
     }
@@ -233,6 +466,7 @@ export function updateEnemyPhase(battle, dt, h) {
           for (const t of [...battle.troops]) if (dist2(e.x, e.y, t.x, t.y) < e.d.slamR * e.d.slamR) battle.damageFriendly(t, false, e.d.dmg);
         } else if (e.d.ranged) {
           battle.fireArrow(e.x, e.y - 10, to.x, to.y, false, e.d.dmg, e.d.projSpeed, e.type);
+          e.blindT = 0; // the shot only ever gets this far because LOS gated windup entry below
         } else {
           e.lunge = 1;
           if (d < e.d.range + 16) {
@@ -244,22 +478,55 @@ export function updateEnemyPhase(battle, dt, h) {
       }
     } else {
       const speedMul = battle.bloodlust ? 1.3 : 1;
+      // Phase 4a: sampled once per enemy per tick at its current position, reused for both
+      // the approach and keep-away branches below — terrain costs the same to cross either
+      // direction.
+      const terrainMul = battle.terrainSpeedAt(e.x, e.y);
       const wantR = e.d.ranged ? e.d.range * 0.85 : e.d.range + 6;
-      if (e.d.ranged && d < e.d.keepAway && !battle.bloodlust) {
+      // Phase 5, mandatory fallback: see the matching comment in updateTroopPhase. A raider
+      // blind for more than 1.5s stops kiting at range and advances instead, until a shot
+      // (below) proves LOS is back and clears blindT.
+      const blind = e.d.ranged && e.blindT > BLIND_ADVANCE_T;
+      if (e.d.ranged && d < e.d.keepAway && !battle.bloodlust && !blind) {
         const a = Math.atan2(e.y - to.y, e.x - to.x);
-        e.vx = lerp(e.vx, Math.cos(a) * (e.d.speed * speedMul), 1 - Math.exp(-6 * dt));
-        e.vy = lerp(e.vy, Math.sin(a) * (e.d.speed * speedMul), 1 - Math.exp(-6 * dt));
-      } else if (d > wantR) {
+        e.vx = lerp(e.vx, Math.cos(a) * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
+        e.vy = lerp(e.vy, Math.sin(a) * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
+      } else if (d > wantR || blind) {
         let gx = to.x, gy = to.y;
         if (!e.d.ranged && d < wantR * 3.5) { // surround instead of stacking
           if (e.jit == null) e.jit = battle.enemies.indexOf(e) * 2.399;
           gx += Math.cos(e.jit) * wantR * 0.7; gy += Math.sin(e.jit) * wantR * 0.7;
         }
-        const a = Math.atan2(gy - e.y, gx - e.x);
-        e.vx = lerp(e.vx, Math.cos(a) * (e.d.speed * speedMul), 1 - Math.exp(-6 * dt));
-        e.vy = lerp(e.vy, Math.sin(a) * (e.d.speed * speedMul), 1 - Math.exp(-6 * dt));
+        if (blind) {
+          // Task 1 corrective pass: sidestep around whatever occludes the shot instead of
+          // walking into it. On a bounded sidestep give-up, gx/gy keep the pre-fix
+          // straight-at-target goal already set above.
+          const bdx = to.x - e.x, bdy = to.y - e.y, blen = len(bdx, bdy);
+          const bdirX = blen > 0 ? bdx / blen : 1, bdirY = blen > 0 ? bdy / blen : 0;
+          const heading = blindSidestepHeading(e, e.x, e.y, bdirX, bdirY, blen, dt, battle.blockers);
+          if (heading) { gx = e.x + heading.x * LOOKAHEAD; gy = e.y + heading.y * LOOKAHEAD; }
+        }
+        // Phase 4b: resolve the crossing waypoint before steering, same ordering as troops.
+        const wp = battle.crossingWaypoint(e.x, e.y, gx, gy);
+        if (wp) { gx = wp.x; gy = wp.y; }
+        let gdx = gx - e.x, gdy = gy - e.y;
+        const gd = len(gdx, gdy);
+        if (gd > 0) {
+          gdx /= gd; gdy /= gd;
+          if (steerAroundObstacle(battle, e, dt, e.x, e.y, e.d.radius, gdx, gdy, gd)) {
+            gdx = battle._steerScratch.x; gdy = battle._steerScratch.y;
+          }
+        }
+        e.vx = lerp(e.vx, gdx * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
+        e.vy = lerp(e.vy, gdy * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
       } else { e.vx *= 0.85; e.vy *= 0.85; }
-      if (e.cd <= 0 && d < (e.d.ranged ? e.d.range : wantR + 8)) {
+      // Phase 5: the firing gate for a ranged enemy lives here, at windup ENTRY, not inside
+      // fireArrow — a raider that cannot see its target never starts the telegraph, so its
+      // cooldown effectively never advances and it keeps taking the movement branch above
+      // (including the blind-advance fallback) instead of freezing through a repeated
+      // windup-then-nothing loop every tick.
+      if (e.cd <= 0 && d < (e.d.ranged ? e.d.range : wantR + 8) &&
+          (!e.d.ranged || battle.hasLineOfSight(e.x, e.y - 10, to.x, to.y))) {
         e.windupT = e.d.windup; // telegraph
       }
     }

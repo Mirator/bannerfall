@@ -1,21 +1,25 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=ra209d001f5a8';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=ra209d001f5a8';
-import { SpatialGrid } from './battle/spatial-index.js?v=ra209d001f5a8';
-import { ACTIONS } from './input-actions.js?v=ra209d001f5a8';
-import { BASE, SQUAD_TYPES, SQUAD_LABELS } from './battle/constants.js?v=ra209d001f5a8';
-import { drawScene, drawProps } from './battle/render-scene.js?v=ra209d001f5a8';
+import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=rbe1f74f09262';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=rbe1f74f09262';
+import { SpatialGrid } from './battle/spatial-index.js?v=rbe1f74f09262';
+import { ACTIONS } from './input-actions.js?v=rbe1f74f09262';
+import { BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP } from './battle/constants.js?v=rbe1f74f09262';
+import {
+  buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
+  hasLineOfSight as losCheck,
+} from './battle/terrain.js?v=rbe1f74f09262';
+import { drawScene, drawProps } from './battle/render-scene.js?v=rbe1f74f09262';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=ra209d001f5a8';
+} from './battle/separation.js?v=rbe1f74f09262';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=ra209d001f5a8';
+} from './battle/ai-phases.js?v=rbe1f74f09262';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
-} from './battle/combat.js?v=ra209d001f5a8';
+} from './battle/combat.js?v=rbe1f74f09262';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -35,7 +39,7 @@ export class Battle {
     this.simRng = makeRng(deriveSeed(battleSeed, RNG_DOMAINS.BATTLE_SIM));
     this.fxRng = makeRng(deriveSeed(battleSeed, RNG_DOMAINS.BATTLE_FX));
     this.particles = new Particles(() => this.game.effectsEnabled);
-    this.W = 1250; this.H = 880;
+    this.W = FIELD.W; this.H = FIELD.H;
     this.zoom = 1; this.zoomT = 1;
     // biome palette (rose | meadow | night) — same scene code, different world
     this.biome = setup.biome || 'rose';
@@ -73,7 +77,7 @@ export class Battle {
     this._enemyGroups = Object.create(null);
     // Broad phases use a fixed 128px grid. It is wider than the largest normal
     // melee interaction radius, while still keeping 400-1000 unit fixtures
-    // distributed across dozens of buckets.
+    // distributed across the field's ~280 buckets (20x14 at the current size).
     this._enemyGrid = new SpatialGrid(this.W, this.H, 128);
     this._friendlyGrid = new SpatialGrid(this.W, this.H, 128);
     this._unitGrid = new SpatialGrid(this.W, this.H, 128);
@@ -94,71 +98,56 @@ export class Battle {
     const heroMaxHp = Number.isFinite(setup.heroMaxHp) && setup.heroMaxHp > 0 ? setup.heroMaxHp : HERO.hp;
     const heroHp = Number.isFinite(setup.heroHp) ? Math.min(heroMaxHp, Math.max(0, setup.heroHp)) : heroMaxHp;
     this.hero = {
-      x: cx0 - adx * this.W * 0.24, y: cy0 - ady * this.H * 0.26, vx: 0, vy: 0, facing: 0,
+      x: cx0 - adx * ENGAGE_GAP / 2, y: cy0 - ady * ENGAGE_GAP / 2, vx: 0, vy: 0, facing: 0,
       hp: heroHp, maxHp: heroMaxHp,
       swingT: 0, dashT: 0, dashCdT: 0, hurtT: 0, bob: 0, iframesT: 0,
       // last heading actually travelled - drives formation, unlike `facing` which follows aim
       travelFacing: 0,
     };
 
-    // terrain: arena template (road | camp | village) + scattered props
-    this.arena = setup.arena || 'road';
-    this.obstacles = [];
-    this.props = [];   // non-colliding dressing drawn under units
-    const simRng = this.simRng, fxRng = this.fxRng;
-    for (let i = 0; i < 16; i++) {
-      this.obstacles.push({ kind: simRng() < 0.45 ? 'rock' : 'tree', x: 140 + simRng() * (this.W - 280), y: 120 + simRng() * (this.H - 240), r: 24 + simRng() * 16, rot: fxRng() * TAU });
-    }
-    if (this.arena === 'camp') {
-      for (const [ox, oy, s] of [[0.72, 0.32, 30], [0.86, 0.5, 34], [0.74, 0.68, 28]]) {
-        this.props.push({ kind: 'tent', x: this.W * ox, y: this.H * oy, s });
-        this.obstacles.push({ kind: 'none', x: this.W * ox, y: this.H * oy, r: s * 0.9 });
-      }
-      this.props.push({ kind: 'fire', x: this.W * 0.78, y: this.H * 0.5, s: 10 });
-      for (let i = 0; i < 6; i++) this.props.push({ kind: 'stake', x: this.W * 0.62, y: this.H * (0.2 + i * 0.12), s: 10 });
-      // palisade run behind the tents — jittered per-instance so it reads hand-placed, not tiled
-      for (let i = 0; i < 7; i++) {
-        this.props.push({ kind: 'plank', x: this.W * 0.94 + (fxRng() - 0.5) * 26, y: this.H * (0.22 + i * 0.095) + (fxRng() - 0.5) * 18, s: 11 + fxRng() * 5 });
-      }
-    } else if (this.arena === 'village') {
-      for (const [ox, oy, w, hh] of [[0.2, 0.24, 56, 40], [0.34, 0.15, 46, 34], [0.14, 0.5, 50, 36]]) {
-        this.props.push({ kind: 'house', x: this.W * ox, y: this.H * oy, w, h: hh });
-        this.obstacles.push({ kind: 'none', x: this.W * ox, y: this.H * oy - 10, r: w * 0.6 });
-      }
-      this.props.push({ kind: 'mill', x: this.W * 0.12, y: this.H * 0.78, s: 30 });
-    } else if (this.arena === 'bridge') {
-      // a river cuts the arena in two; the bridge is the only crossing — chokepoint fight
-      this.props.push({ kind: 'river' });
-      const bx = this.W * 0.52, by = this.H * 0.5;
-      this.bridge = { x: bx, y: by, w: 120, h: 96 };
-      for (let y = -40; y < this.H + 40; y += 44) {
-        if (Math.abs(y - by) < this.bridge.h / 2 + 20) continue; // gap at the bridge
-        this.obstacles.push({ kind: 'none', x: bx, y, r: 42 });
-      }
-    } else {
-      // road: a cream dashed track through the middle
-      this.props.push({ kind: 'road' });
-      this.props.push({ kind: 'stone', x: this.W * 0.42, y: this.H * 0.44, s: 8 });
-      this.props.push({ kind: 'stone', x: this.W * 0.6, y: this.H * 0.62, s: 7 });
-      // roadside landmarks: a fence run and marker stones — travelers pass through here
-      for (let i = 0; i < 5; i++) this.props.push({ kind: 'plank', x: this.W * (0.30 + i * 0.045), y: this.H * 0.30, s: 9 });
-      this.props.push({ kind: 'stone', x: this.W * 0.25, y: this.H * 0.52, s: 10 });
-    }
+    // terrain: obstacles, props, movement zones, LOS blockers, river crossings — built from
+    // the world Brief when the fight has one (`setup.field`, Plan 024 Phase 2), or the
+    // legacy arena templates when it does not (see buildTerrain's own doc comment and
+    // AGENTS.md's battlefield section for why the briefless path is a normal, supported case).
+    buildTerrain(this, setup.field);
+    const fxRng = this.fxRng;
     // ground interest everywhere: grass tufts + pebble scatters so no region reads as a
     // flat colored rectangle (the critics' "battle void") — non-colliding, drawn under units
-    for (let i = 0; i < 26; i++) {
+    // scatter counts are derived from area, not fixed, so density (props per square unit)
+    // stays constant as the field size changes rather than the field reading sparser
+    // or denser than the original 1250x880 tuning as it grows.
+    const area = this.W * this.H;
+    const tuftCount = Math.round(area / 42_000);
+    for (let i = 0; i < tuftCount; i++) {
       this.props.push({ kind: 'tuft', x: 60 + fxRng() * (this.W - 120), y: 60 + fxRng() * (this.H - 120), s: 5 + fxRng() * 4, rot: fxRng() * 0.8 - 0.4 });
     }
-    for (let i = 0; i < 10; i++) {
+    const pebbleCount = Math.round(area / 110_000);
+    for (let i = 0; i < pebbleCount; i++) {
       this.props.push({ kind: 'pebbles', x: 80 + fxRng() * (this.W - 160), y: 80 + fxRng() * (this.H - 160), s: 3 + fxRng() * 3, rot: fxRng() * TAU });
     }
+    // enemy centre, hoisted so the spawn-clearance filter below and the enemy-spawn
+    // block further down stay in sync — one expression, not two copies.
+    const enemyCx = cx0 + adx * ENGAGE_GAP / 2, enemyCy = cy0 + ady * ENGAGE_GAP / 2;
     // keep spawn areas clear
     this.obstacles = this.obstacles.filter(o =>
       o.kind === 'none' ||
       (dist2(o.x, o.y, this.hero.x, this.hero.y) > 180 * 180 &&
-       dist2(o.x, o.y, this.W / 2 + adx * this.W * 0.25, this.H / 2 + ady * this.H * 0.27) > 220 * 220));
+       dist2(o.x, o.y, enemyCx, enemyCy) > 220 * 220));
+    // Obstacles never move once the fight starts, so the broad-phase grid is built exactly
+    // once here rather than every frame. updateSeparationPhase's spatial path (large battles
+    // only) also rebuilds it per frame, but that rebuild is a no-op in content since the
+    // source array never changes — this one build is what serves designed-size battles,
+    // which stay on the legacy separation path and never trigger that rebuild themselves.
+    // Phase 4c (tangent steering, ai-phases.js) queries this grid every tick.
+    this._obstacleGrid.rebuild(this.obstacles);
+    this._maxObstacleR = 0;
+    for (const o of this.obstacles) if (o.r > this._maxObstacleR) this._maxObstacleR = o.r;
+    // Reused output for steerAroundObstacle() (ai-phases.js) — one scratch entry per
+    // instance, written and read synchronously within the same call, never allocated per unit.
+    this._steerScratch = { x: 0, y: 0 };
     this.blotches = [];
-    for (let i = 0; i < 22; i++) {
+    const blotchCount = Math.round(area / 50_000);
+    for (let i = 0; i < blotchCount; i++) {
       const pts = [];
       const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 16 + fxRng() * 42;
       const n = 5 + (fxRng() * 3 | 0);
@@ -170,9 +159,10 @@ export class Battle {
     }
     // large second-tone terrain regions: the ground is a place, not a colored rectangle
     this.regions = [];
-    for (let i = 0; i < 4; i++) {
+    const regionCount = Math.round(area / 275_000);
+    for (let i = 0; i < regionCount; i++) {
       const pts = [];
-      const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 160 + fxRng() * 200;
+      const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 220 + fxRng() * 280;
       const n = 7 + (fxRng() * 3 | 0);
       for (let j = 0; j < n; j++) {
         const a = j / n * TAU;
@@ -196,33 +186,57 @@ export class Battle {
     }
     const light = this._staticPaths.light, shadeNear = this._staticPaths.shadeNear, shadeFar = this._staticPaths.shadeFar;
     light.moveTo(this.W * 0.05, -30); light.lineTo(this.W * 0.55, -30); light.lineTo(this.W * 0.95, this.H + 30); light.lineTo(this.W * 0.45, this.H + 30); light.closePath();
-    shadeNear.moveTo(this.W + 30, -30); shadeNear.lineTo(this.W - 340, -30); shadeNear.lineTo(this.W + 30, 300); shadeNear.closePath();
-    shadeNear.moveTo(-30, this.H + 30); shadeNear.lineTo(340, this.H + 30); shadeNear.lineTo(-30, this.H - 300); shadeNear.closePath();
-    shadeFar.moveTo(this.W + 30, -30); shadeFar.lineTo(this.W - 500, -30); shadeFar.lineTo(this.W + 30, 440); shadeFar.closePath();
-    shadeFar.moveTo(-30, this.H + 30); shadeFar.lineTo(500, this.H + 30); shadeFar.lineTo(-30, this.H - 440); shadeFar.closePath();
+    shadeNear.moveTo(this.W + 30, -30); shadeNear.lineTo(this.W - 680, -30); shadeNear.lineTo(this.W + 30, 600); shadeNear.closePath();
+    shadeNear.moveTo(-30, this.H + 30); shadeNear.lineTo(680, this.H + 30); shadeNear.lineTo(-30, this.H - 600); shadeNear.closePath();
+    shadeFar.moveTo(this.W + 30, -30); shadeFar.lineTo(this.W - 1000, -30); shadeFar.lineTo(this.W + 30, 880); shadeFar.closePath();
+    shadeFar.moveTo(-30, this.H + 30); shadeFar.lineTo(1000, this.H + 30); shadeFar.lineTo(-30, this.H - 880); shadeFar.closePath();
 
-    // Props which never animate are rendered once into a bounded arena-sized layer.
-    // Fire, mill motion, and bridge water remain on the dynamic pass below.
-    this._staticLayer = document.createElement('canvas');
-    this._staticLayer.width = this.W + 128; this._staticLayer.height = this.H + 128;
-    const staticCtx = this._staticLayer.getContext('2d');
-    staticCtx.translate(64, 64);
-    drawProps(this, staticCtx, false);
+    // Props which never animate are rendered once into a bounded, TILED layer (Plan 024
+    // Phase 6d). A single arena-sized canvas at this field's size is W+128 x H+128 =
+    // 2628x1888 ~ 19.8 MB — the same league as the full-map bitmap AGENTS.md bans. A 2x2
+    // grid of <=1400x1000 canvases keeps every individual canvas bounded regardless of how
+    // large the field gets, which is the actual property the rule cares about (world static
+    // geometry is "bounded Path2D caches plus camera culling", never one unbounded surface).
+    // Each tile gets the SAME full drawProps() call with its own translate; canvas content
+    // outside a tile's own width/height is simply never rasterized (a hard rectangular
+    // clip, not custom code), so a prop straddling a tile boundary draws its correct half on
+    // each side with no extra seam logic — the two halves are pixel-identical continuations
+    // of the same shape because both tiles share one world coordinate system. Padding
+    // (`PAD`) is added only on the field's OUTER edges (so an edge-hugging prop is not cut
+    // off, matching the old layer's 64px margin); the internal seam at the field's midlines
+    // carries no padding or overlap on purpose — that is exactly where the two tiles abut.
+    const PAD = 64;
+    const tileW = this.W / 2, tileH = this.H / 2;
+    this._staticTiles = [];
+    for (let ty = 0; ty < 2; ty++) {
+      for (let tx = 0; tx < 2; tx++) {
+        const wx0 = tx * tileW - (tx === 0 ? PAD : 0);
+        const wx1 = (tx + 1) * tileW + (tx === 1 ? PAD : 0);
+        const wy0 = ty * tileH - (ty === 0 ? PAD : 0);
+        const wy1 = (ty + 1) * tileH + (ty === 1 ? PAD : 0);
+        const tileCanvas = document.createElement('canvas');
+        tileCanvas.width = wx1 - wx0; tileCanvas.height = wy1 - wy0;
+        const tileCtx = tileCanvas.getContext('2d');
+        tileCtx.translate(-wx0, -wy0);
+        drawProps(this, tileCtx, false);
+        this._staticTiles.push({ canvas: tileCanvas, wx: wx0, wy: wy0, ww: tileCanvas.width, wh: tileCanvas.height });
+      }
+    }
 
     // troops
     this.troops = [];
     (setup.troops || []).forEach((t, i) => this.spawnTroop(t.type, t.hp));
     // enemies spawn AHEAD along your approach; ambushes pincer from ahead and behind
     this.enemies = [];
-    const ecx = this.W / 2 + this.adx * this.W * 0.25, ecy = this.H / 2 + this.ady * this.H * 0.27;
-    const bcx = this.W / 2 - this.adx * this.W * 0.42, bcy = this.H / 2 - this.ady * this.H * 0.40; // behind you
+    const ecx = enemyCx, ecy = enemyCy;
+    const bcx = cx0 - adx * FLANK_GAP, bcy = cy0 - ady * FLANK_GAP; // behind you
     (setup.enemies || []).forEach((e, i) => {
       const a = (i / Math.max(1, setup.enemies.length)) * TAU;
       let cx = ecx, cy = ecy;
       if (setup.ambush && i % 2 === 1) { cx = bcx; cy = bcy; }
       this.spawnEnemy(e.type,
-        clamp(cx + Math.cos(a) * (60 + this.simRng() * 120), 50, this.W - 50),
-        clamp(cy + Math.sin(a) * (50 + this.simRng() * 100), 50, this.H - 50));
+        clamp(cx + Math.cos(a) * (90 + this.simRng() * 180), 50, this.W - 50),
+        clamp(cy + Math.sin(a) * (75 + this.simRng() * 150), 50, this.H - 50));
     });
     this.totalEnemies = this.enemies.length;
     this.startTroops = this.troops.length;
@@ -244,11 +258,21 @@ export class Battle {
 
   spawnTroop(type, hp) {
     const d = UNIT_TYPES[type];
+    // Spawn behind the hero relative to the approach axis, not always to the west — on a
+    // 'W' approach the old fixed-west offset spawned troops between the hero and the enemy.
+    // Exactly two simRng() draws, in this order, so downstream RNG consumers are unperturbed.
+    const back = 60 + this.simRng() * 80;
+    const side = (this.simRng() - 0.5) * 160;
     this.troops.push({
-      type, team: 'friendly', d, x: this.hero.x - 60 - this.simRng() * 80, y: this.hero.y + (this.simRng() - 0.5) * 160,
+      type, team: 'friendly', d,
+      x: this.hero.x - this.adx * back - this.ady * side,
+      y: this.hero.y - this.ady * back - this.adx * side,
       vx: 0, vy: 0, hp: hp != null ? hp : d.hp, maxHp: d.hp, cd: this.simRng() * d.cooldown,
       facing: 0, slot: null, target: null, lunge: 0, bob: this.fxRng() * TAU, holdX: null, holdY: null, flash: 0,
       exposedT: 0,
+      // Phase 5: seconds this unit's engaged target has been out of line of sight. Only a
+      // ranged unit ever accumulates it; a melee unit's copy simply stays at 0 forever.
+      blindT: 0,
     });
   }
   spawnEnemy(type, x, y) {
@@ -257,6 +281,7 @@ export class Battle {
       type, team: 'enemy', d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
       cd: 0.5 + this.simRng() * d.cooldown, windupT: 0, facing: Math.PI,
       target: null, lunge: 0, bob: this.fxRng() * TAU, flash: 0, slamT: 0,
+      blindT: 0, // Phase 5: only a ranged enemy (raider) ever moves this off 0.
     });
   }
 
@@ -571,6 +596,24 @@ export class Battle {
 
   getSpatialStats() {
     return spatialStats(this);
+  }
+
+  // Terrain queries live in battle/terrain.js; both stay methods because ai-phases.js calls
+  // them off the instance every tick per unit, and world-battle-seams-style tests reach
+  // named instance methods rather than the module functions directly (AGENTS.md).
+  terrainSpeedAt(x, y) {
+    return terrainSpeed(this, x, y);
+  }
+
+  crossingWaypoint(x, y, tx, ty) {
+    return crossingWp(this, x, y, tx, ty);
+  }
+
+  // Phase 5: segment-vs-blocker visibility test, called from ai-phases.js for target
+  // selection and the pre-fire gate, and reached directly by
+  // tests/e2e/battlefield-terrain.spec.js.
+  hasLineOfSight(sx, sy, tx, ty) {
+    return losCheck(this, sx, sy, tx, ty);
   }
 
   // Rendering lives in battle/render-scene.js; this stays a method because main.js

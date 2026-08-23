@@ -92,3 +92,23 @@ test('bridge ambush battle composition remains visually stable', async ({ page }
   const canvas = await settle(page, 'battle_bridge', { steps: 1.5 });
   await expect(canvas).toHaveScreenshot('battle-bridge-ambush.png', VISUAL_OPTIONS);
 });
+
+// Plan 024 Phase 8: the three briefless scenarios above never carry a setup.field, so none
+// of the visual suite exercised real campaign-map terrain until now. These three are
+// brief-derived (see src/main.js's battle_river/battle_woods/battle_settlement), pinned to
+// world positions that provably yield the terrain each name promises (world seed 7, approach
+// 'E', brief seed 12345 — see plans/024-battlefield-rework.md's Phase 8 section).
+test('river-crossing battle terrain remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'battle_river', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('battle-river-crossing.png', VISUAL_OPTIONS);
+});
+
+test('wooded-highland battle terrain remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'battle_woods', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('battle-wooded-highland.png', VISUAL_OPTIONS);
+});
+
+test('bridge and settlement battle terrain remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'battle_settlement', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('battle-bridge-settlement.png', VISUAL_OPTIONS);
+});

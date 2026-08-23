@@ -350,6 +350,83 @@ defect, remove its matching annotation in the same change. An unexpected pass
 is useful drift that signals the test debt is ready to retire; never weaken the
 assertion or add a skip to make the gate green.
 
+## Battlefield terrain (Plan 024)
+
+The battlefield is 2500x1760 (`FIELD` in `src/battle/constants.js`), 4x the pre-024 area, and
+carries real campaign-map terrain instead of four hardcoded arena templates. The contract
+that makes this possible without the battle scene ever importing `world.js`:
+
+**The Brief.** `sampleBattlefield(world, approach, seed, fieldW, fieldH)`
+(`src/world/battlefield-brief.js`) is a pure, read-only function over `world` — it draws only
+from already-sampled geometry (`world.riverLines`/`roadLines`/`scenery`, `world.rivers[i].bridges`)
+plus a local RNG derived from `RNG_DOMAINS.BATTLE_TERRAIN` for ford-position jitter only, never
+from `world`'s own `simRng`/`fxRng` streams. `src/world/battle-transition.js` attaches its
+result to `setup.field` when starting a battle. `src/battle/terrain.js`'s
+`buildTerrain(battle, field)` is the only consumer: the Brief is the *entire* world-to-battle
+terrain contract, a plain serializable object of already-battlefield-space coordinates — the
+battle side does zero world maths. Do not add a second path that reaches into `world.js` from
+battle code; extend the Brief shape instead.
+
+**World north is battle north.** `setup.approach` is a compass letter already derived from
+world `dx/dy`, and `Battle` already places the enemy along that same compass. World ->
+battlefield is therefore a uniform scale (`WORLD_TO_FIELD = 4`) plus a translate — **no
+rotation, ever.** A river running north-south to your east on the map lands running
+north-south to your east on the field, for free. If a future change needs the field rotated
+relative to the map, that breaks this property and needs its own design review, not a quiet
+patch inside `sampleBattlefield`.
+
+**The briefless (template) path must keep working.** `window.game.scenario('battle_small'|
+'battle_big'|'battle_bridge')` builds a `Battle` with no `setup.field` at all —
+`buildTerrain` falls back to the original `road`/`village`/`bridge`/`camp` arena templates
+(re-centred toward the actual fight via an `ENGAGE_GAP`-relative anchor rather than the old
+absolute `W`/`H` fractions). This is not a degraded case: it is what the three legacy visual
+baselines and most of `qa_suite.js` exercise, and `terrainSpeedAt`/`hasLineOfSight`/
+`crossingWaypoint` all degenerate to cheap early-outs (empty zones/blockers/riverSegs) on it,
+so it must stay a normal, correct, zero-terrain battle rather than something that needs a
+Brief to behave.
+
+**The tiled static layer.** A single `W+128 x H+128` prop canvas at this field size is
+~19.8 MB — the same league as the full-map bitmap `AGENTS.md` already bans. The static layer
+is instead a 2x2 grid of <=1400x1000 canvases, each with its own translate, blitting only the
+tiles that intersect the camera frustum. Do not go back to one arena-sized canvas as the field
+grows further; extend the tile grid instead.
+
+**LOS blocker policy: hills, woods and houses only — never rocks, scrub, or individual
+trees.** `battle.blockers` (consumed by `hasLineOfSight`) exists purely so a ranged unit can
+be denied a shot by real terrain cover. A wood contributes ONE blocker circle at 0.8x its
+zone radius, not one per tree (only its two largest trees get a physical collider, and even
+those are never blockers) — this is deliberate: a wood should read as cover without also
+being an impassable maze. Rocks and scrub never push a blocker at all; a boulder is not arrow
+cover in this game and giving every pebble line-of-sight weight would make archery
+unplayable. If a future terrain kind needs to block arrows, add it to this same short list
+deliberately — do not let a generic "everything solid blocks LOS" rule creep back in.
+
+**Obstacle-size caps, and why they exist.** Two caps were added after measurement, not
+review, because an oversized circle on the direct path between the two forces does not just
+slow a fight down — past a threshold it can stall it forever, and tangent steering (the
+battle's only obstacle-avoidance mechanism; see `src/battle/ai-phases.js`) cannot route two
+whole armies around something wide relative to the corridor between them:
+
+- `ROCK_R_CAP = 70` in `battlefield-brief.js`. The raw mapping from world rock size would
+  otherwise produce a boulder as large as a small hill; capped so a rock stays legibly a
+  rock, not a landform.
+- `HILL_SAFE_R = 150`, applied only within `HILL_CORRIDOR_MARGIN = 260` of the hero-to-enemy
+  corridor, in `battle/terrain.js`. A hill's *size* is legitimate landform variety (up to
+  r=288 off-corridor, which resolves fine) — only a hill sitting near the actual fight line
+  needs shrinking, so this is a proximity cap, not a size cap.
+- `TREE_COLLIDER_CAP = 60` in `battle/terrain.js`, independent of the above: a wood's two
+  colliding trees are sized as a fraction of the same radius used for its LOS footprint, so
+  enlarging wood cover for gameplay reasons can inflate a tree collider into hill-stall
+  territory too, and needs its own cap.
+
+Do not raise `WOOD_R_MULT` (wood LOS-cover radius) without re-measuring all four canonical
+brief-derived fixtures (riverside `1150,1000`, wooded highland `300,1500`,
+bridge+settlement `985,640`, deep country `1700,2100`, world seed 7, approach `'E'`, brief
+seed 12345) for both a fight-resolution stall and the blind-archer fallback's `blindT`
+climbing unbounded — see Plan 024's Retrospective for the two independent ways this broke
+past 4.0x, and why LOS corridor coverage was shipped at 38% rather than the original 55-70%
+target.
+
 ## Steam-ready platform boundary
 
 Game code must use the capability object created by `src/platform/` and the

@@ -1,16 +1,16 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=ra209d001f5a8';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra209d001f5a8';
-import { SAVE_VERSION } from './save.js?v=ra209d001f5a8';
-import { buildAftermathModel } from './world-screens.js?v=ra209d001f5a8';
-import { drawScene } from './world/render-scene.js?v=ra209d001f5a8';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=rbe1f74f09262';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rbe1f74f09262';
+import { SAVE_VERSION } from './save.js?v=rbe1f74f09262';
+import { buildAftermathModel } from './world-screens.js?v=rbe1f74f09262';
+import { drawScene } from './world/render-scene.js?v=rbe1f74f09262';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=ra209d001f5a8';
+} from './world/battle-transition.js?v=rbe1f74f09262';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -20,12 +20,12 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=ra209d001f5a8';
+} from './world/settlement-interactions.js?v=rbe1f74f09262';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=ra209d001f5a8';
+} from './world/terrain.js?v=rbe1f74f09262';
 
 const P = PAL.world;
 

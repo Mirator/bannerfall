@@ -1,8 +1,8 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with their body-count
 // badge and odds pill, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, UNIT_TYPES, BALANCE, oddsWord, ODDS_WORDS } from '../data.js?v=ra209d001f5a8';
-import { TAU, dist2, rrect, shadow } from '../engine.js?v=ra209d001f5a8';
+import { PAL, UNIT_TYPES, BALANCE, oddsWord, ODDS_WORDS } from '../data.js?v=rbe1f74f09262';
+import { TAU, dist2, rrect, shadow } from '../engine.js?v=rbe1f74f09262';
 
 const P = PAL.world;
 

@@ -1,9 +1,9 @@
 // What the player can do while standing next to something: recruit and heal in a
 // settlement, buy army cap in a town, raid a camp, and the toast line that reports it.
 // Also the post-victory bookkeeping for a razed camp (campVictoryExtra).
-import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=ra209d001f5a8';
-import { dist2 } from '../engine.js?v=ra209d001f5a8';
-import { ACTIONS } from '../input-actions.js?v=ra209d001f5a8';
+import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=rbe1f74f09262';
+import { dist2 } from '../engine.js?v=rbe1f74f09262';
+import { ACTIONS } from '../input-actions.js?v=rbe1f74f09262';
 
 const P = PAL.world;
 

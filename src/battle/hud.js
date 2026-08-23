@@ -1,10 +1,184 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deploy countdown, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, enemyStrength, playerStrength } from '../data.js?v=ra209d001f5a8';
-import { clamp, rrect } from '../engine.js?v=ra209d001f5a8';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=ra209d001f5a8';
-import { stanceIcon } from './render-units.js?v=ra209d001f5a8';
+import { HERO, enemyStrength, playerStrength } from '../data.js?v=rbe1f74f09262';
+import { TAU, clamp, rrect } from '../engine.js?v=rbe1f74f09262';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rbe1f74f09262';
+import { stanceIcon } from './render-units.js?v=rbe1f74f09262';
+
+// Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
+// viewport shows about a third of the field, and squad balloons already collapse below
+// zoom < 0.95 (render-scene.js), so the player loses spatial awareness of anything not on
+// screen. Both additions below are presentation-only: draw path only, no simulation state,
+// nothing exposed anywhere a test could observe it (the `staleT` precedent in AGENTS.md —
+// exposing per-frame presentation state breaks byte-identical state comparisons elsewhere).
+const MM_W = 180, MM_H = 127, MM_MARGIN = 14;
+const CHEVRON_CAP = 12;
+const CHEVRON_MARGIN = 26;
+
+// Bakes the field outline, river/road polylines and wood/hill silhouettes into a small
+// offscreen canvas exactly once (cached on the battle instance, same pattern as
+// `_staticTiles` in battle.js): the terrain is static for the whole fight, so re-stroking
+// it every frame would be pure waste on top of the per-frame dot/frustum work below.
+// Reads the SAME already-built battle state the main scene draws from (`battle.props` for
+// the river/road polylines, `battle.obstacles` for hills, `battle.zones` for woods) rather
+// than reaching back into `setup.field` — briefless template fights (battle_small/big/
+// bridge) carry none of these, so the bake degenerates to just the outline, matching how
+// terrain.js's own briefless path is a normal, supported case.
+function bakeMinimapTerrain(battle) {
+  const P = battle.palette;
+  const canvas = document.createElement('canvas');
+  canvas.width = MM_W; canvas.height = MM_H;
+  const c = canvas.getContext('2d');
+  const sx = MM_W / battle.W, sy = MM_H / battle.H;
+  // Plan 024 Task 1 fix: the panel used to fill with P.ground, the SAME colour as the
+  // battlefield behind it (measured: night biome panel 59,59,104 against adjacent field
+  // ground 79,78,115 — under 20 units apart per channel, functionally invisible). `P.ink`
+  // is deliberately far from every biome's ground hue (it is the outline/shadow colour, so
+  // every biome already tunes it for maximum separation from `ground`), which is exactly
+  // the contrast this panel needs, and it stays inside the existing per-battle palette
+  // rather than inventing a new hardcoded colour. Verified by pixel-scan in all three
+  // biomes — see plans/024's Phase 8 section for the measured before/after deltas.
+  c.fillStyle = P.ink;
+  c.fillRect(0, 0, MM_W, MM_H);
+  // roads under rivers under woods/hills, same back-to-front order as the main scene
+  c.globalAlpha = 0.5;
+  c.strokeStyle = P.cream; c.lineWidth = 2; c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const p of battle.props) {
+    if (p.kind !== 'roadPoly') continue;
+    c.beginPath();
+    c.moveTo(p.pts[0][0] * sx, p.pts[0][1] * sy);
+    for (let i = 1; i < p.pts.length; i++) c.lineTo(p.pts[i][0] * sx, p.pts[i][1] * sy);
+    c.stroke();
+  }
+  c.globalAlpha = 1;
+  c.strokeStyle = P.water; c.lineWidth = 2.5; c.lineCap = 'round'; c.lineJoin = 'round';
+  for (const p of battle.props) {
+    if (p.kind !== 'riverPoly') continue;
+    c.beginPath();
+    c.moveTo(p.pts[0][0] * sx, p.pts[0][1] * sy);
+    for (let i = 1; i < p.pts.length; i++) c.lineTo(p.pts[i][0] * sx, p.pts[i][1] * sy);
+    c.stroke();
+  }
+  c.fillStyle = P.tree;
+  for (const z of battle.zones) {
+    if (z.kind !== 'wood') continue;
+    c.beginPath(); c.ellipse(z.x * sx, z.y * sy, Math.max(1.5, z.r * sx), Math.max(1.5, z.r * sy), 0, 0, TAU); c.fill();
+  }
+  c.fillStyle = P.rock;
+  for (const o of battle.obstacles) {
+    if (o.kind !== 'hill') continue;
+    c.beginPath(); c.ellipse(o.x * sx, o.y * sy, Math.max(1.5, o.r * sx), Math.max(1.5, o.r * sy), 0, 0, TAU); c.fill();
+  }
+  // The frame used to be P.ink, which is now the fill colour too and would vanish — P.cream
+  // (the panel's own text/lit-face colour) keeps the frame visible against the darker fill.
+  c.strokeStyle = P.cream; c.lineWidth = 2;
+  c.strokeRect(1, 1, MM_W - 2, MM_H - 2);
+  return canvas;
+}
+
+// Corner panel: baked terrain, then per-frame friendly/enemy/hero dots and the camera
+// frustum rectangle. Placed bottom-right so it never contends with the top-left army panel,
+// the bottom-centre squad panel, or the left-edge retreat prompt.
+function drawMinimap(battle, ctx, W, Hh) {
+  const P = battle.palette, cam = battle.game.camera, h = battle.hero;
+  if (!battle._minimapCanvas) battle._minimapCanvas = bakeMinimapTerrain(battle);
+  const mx = W - MM_W - MM_MARGIN, my = Hh - MM_H - MM_MARGIN;
+  const sx = MM_W / battle.W, sy = MM_H / battle.H;
+  ctx.save();
+  ctx.globalAlpha = 0.92;
+  ctx.fillStyle = P.ink;
+  rrect(ctx, mx - 4, my - 4, MM_W + 8, MM_H + 8, 8); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.drawImage(battle._minimapCanvas, mx, my);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(mx, my, MM_W, MM_H); ctx.clip();
+  ctx.translate(mx, my);
+  for (const t of battle.troops) {
+    ctx.fillStyle = P.friend;
+    ctx.beginPath(); ctx.arc(t.x * sx, t.y * sy, 1.6, 0, TAU); ctx.fill();
+  }
+  for (const e of battle.enemies) {
+    ctx.fillStyle = P.enemy;
+    ctx.beginPath(); ctx.arc(e.x * sx, e.y * sy, 1.6, 0, TAU); ctx.fill();
+  }
+  ctx.fillStyle = P.hero;
+  ctx.beginPath(); ctx.arc(h.x * sx, h.y * sy, 2.4, 0, TAU); ctx.fill();
+  // camera frustum: the world-space rectangle currently on screen, in field space
+  const tl = cam.toWorld(0, 0), br = cam.toWorld(cam.w, cam.h);
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 1.4; ctx.globalAlpha = 0.85;
+  ctx.strokeRect(tl.x * sx, tl.y * sy, (br.x - tl.x) * sx, (br.y - tl.y) * sy);
+  ctx.restore();
+  ctx.restore();
+}
+
+// Off-screen chevrons: a small clamped arrow at the screen edge for any friendly/enemy
+// outside the camera frustum, so a fight that has spread beyond the viewport still reads.
+// Capped at CHEVRON_CAP per side (nearest to the camera centre first) so a large battle
+// does not ring the whole screen in arrows.
+function drawOffscreenChevrons(battle, ctx, W, Hh) {
+  const P = battle.palette, cam = battle.game.camera;
+  const cx = W / 2, cy = Hh / 2;
+  const camWx = cam.x + cam.sx, camWy = cam.y + cam.sy;
+  const toScreen = (wx, wy) => ({ x: (wx - camWx) * cam.zoom + cx, y: (wy - camWy) * cam.zoom + cy });
+  // Reserved HUD rectangles the clamped arrow must not land inside: the top-left army
+  // panel, the minimap panel itself, and the bottom-centre squad panel (sized generously —
+  // its exact height depends on squad count, so this over-covers rather than risks a clip).
+  const reserved = [
+    { x: 10, y: 10, w: 240, h: 42 },
+    { x: W - MM_W - MM_MARGIN - 8, y: Hh - MM_H - MM_MARGIN - 8, w: MM_W + 16, h: MM_H + 16 },
+    { x: W / 2 - 190, y: Hh - 150, w: 380, h: 150 },
+  ];
+  const inReserved = (x, y) => reserved.some(r => x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h);
+  const clampChevron = (x, y) => {
+    let cxp = clamp(x, CHEVRON_MARGIN, W - CHEVRON_MARGIN);
+    let cyp = clamp(y, CHEVRON_MARGIN, Hh - CHEVRON_MARGIN);
+    if (inReserved(cxp, cyp)) {
+      // Nudge along whichever screen edge it is already clamped to until it clears the
+      // reserved rectangle, rather than hiding the arrow — losing the last few units'
+      // signal right where the HUD is densest would defeat the point of the chevron.
+      for (const r of reserved) {
+        if (cxp <= r.x + r.w && cxp >= r.x && cyp <= r.y + r.h && cyp >= r.y) {
+          if (cyp <= CHEVRON_MARGIN + 1) cyp = r.y + r.h + 6;
+          else if (cyp >= Hh - CHEVRON_MARGIN - 1) cyp = r.y - 6;
+          else if (cxp <= CHEVRON_MARGIN + 1) cxp = r.x + r.w + 6;
+          else cxp = r.x - 6;
+        }
+      }
+    }
+    return { x: cxp, y: cyp };
+  };
+  const drawSide = (units, color) => {
+    const off = [];
+    for (const u of units) {
+      const s = toScreen(u.x, u.y);
+      if (s.x >= 0 && s.x <= W && s.y >= 0 && s.y <= Hh) continue; // on screen already
+      const d2 = (s.x - cx) * (s.x - cx) + (s.y - cy) * (s.y - cy);
+      off.push({ s, d2 });
+    }
+    off.sort((a, b) => a.d2 - b.d2);
+    const n = Math.min(CHEVRON_CAP, off.length);
+    for (let i = 0; i < n; i++) {
+      const { s, d2 } = off[i];
+      const a = Math.atan2(s.y - cy, s.x - cx);
+      const p = clampChevron(s.x, s.y);
+      const dist = Math.sqrt(d2);
+      const alpha = clamp(1 - dist / 1600, 0.35, 0.95);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(a);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(8, 0); ctx.lineTo(-5, -5.5); ctx.lineTo(-5, 5.5); ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+  drawSide(battle.troops, P.friend);
+  drawSide(battle.enemies, P.enemy);
+  ctx.globalAlpha = 1;
+}
 
 export function drawHud(battle, ctx) {
   const P = battle.palette;
@@ -19,6 +193,12 @@ export function drawHud(battle, ctx) {
   ctx.font = '700 15px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(`Warband ${battle.troops.length}   ·   Slain ${battle.kills}/${battle.totalEnemies}`, 26, 31);
+
+  // Plan 024 Phase 7: a minimap and off-screen chevrons, so a field 4x the viewport still
+  // reads. Drawn for both 'fight' and 'end'/'intro' alike — cheap (baked terrain, a handful
+  // of per-frame dots/arrows) and there is no state where hiding it helps the player.
+  drawMinimap(battle, ctx, W, Hh);
+  drawOffscreenChevrons(battle, ctx, W, Hh);
 
   // bottom center: hero hp + dash + one row per squad.
   // Three rows instead of one chip strip: the player must be able to see, at a glance,
