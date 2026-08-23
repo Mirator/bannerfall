@@ -9,7 +9,7 @@ in `#qa-status`, so it is useful both to a human opening the page and to
 Playwright.
 
 `tests/e2e/qa.spec.js` is the exit-code-bearing Playwright layer. It starts the
-existing Python server, checks browser/runtime errors, verifies all 22 record
+existing Python server, checks browser/runtime errors, verifies all 25 record
 names, and proves that running QA preserves `bf_save` while using
 `bf_save_test`.
 
@@ -324,33 +324,86 @@ isolated contexts using `bf_save` and raw `window.__g`; calls through
 
 ## Legacy check inventory
 
-The 21 deterministic records cover:
+The 25 deterministic records cover:
 
 1. menu-to-world transition;
 2. battle invariants and victory;
 3. end-banner timing;
-4. defeat penalties;
-5. volunteer rally floor;
-6. victory loot, survivors, and hero regeneration;
-7. troop commands and hold positions;
-8. squad selection, per-squad orders, and per-squad hold points;
-9. recruitment costs, capacity, and refusals;
-10. healing refusals and success;
-11. roaming-party victory removal;
-12. camp-raid razing (loot only — a raid never changes the warband);
-13. post-battle grace decay;
-14. roaming-party strength bounds;
-15. weighted spawn-tier distribution, swept over several seeds, shifting toward
+4. hero offence: a swing landing for `HERO.swingDmg` on the aim ray, an enemy
+   behind that ray staying untouched, and a dash trampling for `HERO.dashDmg`
+   exactly once while granting i-frames;
+5. the retreat decision: parking at the escape edge fills nothing, a released
+   hold resets the bar, and a sustained 1.3s hold disengages;
+6. defeat penalties;
+7. volunteer rally floor;
+8. victory loot, survivors, and hero regeneration;
+9. troop commands and hold positions;
+10. squad selection, per-squad orders, and per-squad hold points;
+11. recruitment costs, capacity, and refusals;
+12. healing refusals and success;
+13. army-cap expansion: town-only, priced by `armyCapCost()`, refused when
+    short, escalating by a step, raising the recruit ceiling, and persisted;
+14. roaming-party victory removal;
+15. camp-raid razing (loot only — a raid never changes the warband);
+16. post-battle grace decay;
+17. roaming-party strength bounds;
+18. weighted spawn-tier distribution, swept over several seeds, shifting toward
     `strong` as camps are razed (Plan 020);
-16. break-off-and-raid: occupying a settlement suspends its service, and
+19. the spawn timer itself: armed at 30s, a 40s cadence after that, filling to
+    `partyCap()` and stopping there, with the roster persisted;
+20. break-off-and-raid: occupying a settlement suspends its service, and
     defeating the occupier there restores it (Plan 020);
-17. the deadlock floor guarantee, driven at its worst case: nothing beatable on
+21. the deadlock floor guarantee, driven at its worst case: nothing beatable on
     the map still yields a winnable target, and the last unclaimed settlement
     is never claimed (Plan 020, the plan's STOP-condition risk);
-18. seeded battle determinism;
-19. the RNG-domain effects-independence check;
-20. the 200-step performance smoke budget;
-21. river-pursuit movement without freezing.
+22. seeded battle determinism;
+23. the RNG-domain effects-independence check;
+24. the 200-step performance smoke budget;
+25. river-pursuit movement without freezing.
+
+## Visual baselines are captured on Linux, on purpose
+
+`VISUAL_OPTIONS` in `visual-regression.spec.js` pairs a per-pixel threshold with a
+1.5% differing-area cap, and its comment explains that as absorbing the way Chromium
+rasterizes text and antialiased edges differently across platforms. That reasoning
+holds for *rasterization*. It does not hold for a different **font family**, and the
+canvas draws every string through `system-ui, sans-serif`, which resolves to whatever
+the host has installed.
+
+`menu-campaign-vignette.png` was captured on a host where `system-ui` resolved to a
+narrower face than Linux gives. Every Linux Chromium — CI's pinned build and any local
+one — produced exactly 23418 differing pixels, 3.0% of the canvas, which is double the
+cap. `Browser QA` was red on `main` from the commit that added that snapshot
+(`794c4267`, Plan 018) until it was recaptured, eleven consecutive runs, and every one
+of those failures looked like a flaky visual test rather than a font mismatch. Nothing
+else differed: the ribbon, mountains, castle, road and column were pixel-identical, and
+the title ribbon is sized from `measureText`, so even the art shifted with the metrics.
+
+So: **capture baselines on Linux**, the platform CI runs. A snapshot recaptured on macOS
+or Windows will fail CI at roughly 3% on any screen with a sentence of text on it, and
+`--update-snapshots` on the wrong host silently re-baselines to a rendering CI can never
+reproduce. If a text-heavy screen ever needs a baseline that is genuinely portable, the
+fix is to stop drawing through `system-ui` — bundle a font and name it in the canvas font
+strings — not to widen the cap. Never widen the cap to get green: at 1.5% it is what
+makes a missing landmark or unit group fail, and the 3% font mismatch was the proof that
+the cap is set tightly enough to matter.
+
+## Two battle-input rules the hero records depend on
+
+Both were found by writing those records, and both silently make an input test
+vacuous rather than failing it, so keep them in mind when adding one.
+
+A battle opens in `state === 'intro'` and `Battle.update()` runs **no phases at
+all** while that banner is up (about 1.1s, or 0.6s once any key is pressed).
+Swing and dash inputs are simply not read there, so a record that taps before
+stepping past the intro asserts nothing. `hero_swing_and_dash_damage_enemies`
+asserts the state transition explicitly for that reason.
+
+A *landed* hit sets `battle.freeze` (hit-stop) and `Battle.update()` returns
+early while it runs, which drops the next tick's input on the floor. That is
+why the swing helper in that record steps 0.1s after every swing: without it
+the "enemy behind the aim ray is not hit" case passes because nothing happened
+at all, which is not the same claim.
 
 ## Adding coverage
 

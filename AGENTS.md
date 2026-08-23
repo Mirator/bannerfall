@@ -1,5 +1,27 @@
 # Bannerfall agent guide
 
+This is the canonical engineering contract for Bannerfall. `CLAUDE.md` is the
+short orientation and defers to this file; `tests/README.md` owns the test
+harness architecture, fixture construction and placement rules. Read the section
+that covers a subsystem before changing it — most rules here exist because a
+specific defect or measurement put them there.
+
+## Contents
+
+- [Architecture boundary](#architecture-boundary)
+- [Commands and gates](#commands-and-gates)
+- [Module layout and seams](#module-layout-and-seams)
+- [World simulation](#world-simulation)
+- [Battle simulation](#battle-simulation)
+- [Simulation must not read presentation](#simulation-must-not-read-presentation)
+- [Performance budgets](#performance-budgets)
+- [Determinism and RNG domains](#determinism-and-rng-domains)
+- [Visual regression](#visual-regression)
+- [Save schema and persistence](#save-schema-and-persistence)
+- [Campaign lifecycle](#campaign-lifecycle)
+- [Expected failures and test debt](#expected-failures-and-test-debt)
+- [Steam-ready platform boundary](#steam-ready-platform-boundary)
+
 ## Architecture boundary
 
 Bannerfall is a static HTML5 canvas game using native ES modules. `index.html`
@@ -7,7 +29,7 @@ loads `src/main.js` directly; there is no production build step and no runtime
 package dependency. `scripts/serve.py` is the local no-cache server and listens
 on `127.0.0.1:8474`.
 
-## Canonical commands
+## Commands and gates
 
 From the repository root:
 
@@ -39,23 +61,19 @@ incompatible module generations.
 Use `npm run test:headed` when a visible Chromium session is useful for
 debugging. Playwright starts the server automatically for test commands.
 
-Performance QA: run `npm run test:perf` after scheduler, Canvas rendering,
-battle-loop, or party-navigation changes. The fixed-timestep scheduler may
-skip a render only when no simulation update or explicit invalidation occurred;
-resize, boot, scene changes, and visible UI changes invalidate the frame. The
-watchdog must never draw while `document.hidden`, and direct test API calls
-remain synchronous. Static world geometry uses bounded `Path2D` caches plus
-camera culling; battle static props use an arena-sized layer. Never introduce
-a full-map bitmap. Scratch arrays/entries are instance-owned, clear logical
-lengths, and null stale references when shrinking. Battle units carry immutable
-`team` tags for constant-time separation classification. Party replans use
-seeded staggering and exact river collision/visibility; do not approximate or
-quantize collision answers. World roads and rivers are single-source cached
-sampled polylines: add a curve only through `World.buildTerrainGeometry()`
-(implemented in `src/world/terrain.js`) so rendering, collision, navigation, and
-movement bonuses cannot diverge.
-Structural Canvas budgets are machine-independent
-and must never be raised or bypassed to obtain green CI.
+Which focused coverage a change owes, beyond the required `npm test` gate:
+
+| Change | Also run |
+| --- | --- |
+| anything under `src/` | `npm run release:cache`, then `npm run test:release` |
+| scheduler, Canvas rendering, battle loop, party navigation | `npm run test:perf` |
+| any persisted field, migration or validation | `npx playwright test tests/e2e/save-schema.spec.js` |
+| persistence, battle result, save, party AI, strongholds | `npx playwright test tests/e2e/campaign-persistence.spec.js` |
+| stance constants in `src/battle/constants.js` | `npx playwright test tests/e2e/stance-balance.spec.js` |
+| production visuals | `npm run test:visual` |
+| Playwright or CI configuration | `npm run test:tooling` |
+
+## Module layout and seams
 
 Scene module layout: the two scene classes are split across `src/battle/` and
 `src/world/`. `battle.js` keeps construction, the ordered tick pipeline and the
@@ -87,6 +105,8 @@ directly off the instance. Hot per-tick one-liners (`blockedAt`,
 class rather than being moved out behind a delegator that would cost more than the
 body it forwards to.
 
+## World simulation
+
 Simulation ownership: `World.update()` is the ordered campaign pipeline.
 `updateWorldScreens()` (Plan 021) runs FIRST and returns `true` whenever a
 world-scene modal — the pre-battle brief or the post-battle aftermath — is
@@ -99,6 +119,19 @@ camp assault input runs third, roaming-party AI owns navigation and encounter
 handoff, then party spawning and camera/effects maintenance finish the tick.
 Keep campaign arrays (`parties`, `save.troops`, `save.camps`) and their timers in
 those world phases; do not add a second map snapshot boundary.
+
+A world-scene modal genuinely pauses the campaign, not just visually covers
+it: gating the pipeline on `updateWorldScreens()` freezes `grace` for free
+(it only decays inside `updateParties()`, which never runs while a screen is
+open), and `World.isBlocking()` — `true` whenever `this.screen` is set — lets
+`main.js` gate `stats.playT` accrual the same way, so leaving a screen open
+cannot inflate reported campaign time. `World.isTimeFrozen()` is its Plan 023
+companion and gates `stats.playT` identically, so neither an open modal nor a
+stopped map can inflate reported campaign time; the 4-second autosave is
+deliberately NOT gated, because a save write is durability rather than simulation
+and while frozen it rewrites identical bytes. All three freezes (modal,
+stopped-hero, and the `playT` gate) are deliberate and covered by tests, not
+incidental side effects to "fix".
 
 Plan 023: the campaign world is alive ONLY while the hero rides.
 `World.timeFlowing()` — realized hero speed at or above `BALANCE.worldWakeSpeed`
@@ -153,18 +186,7 @@ It is scoped to the current scene instance, so re-apply it after any `scenario()
 The `world_brief` and `world_aftermath` scenarios apply it internally for their
 single setup tick, so every consumer of those keeps working unchanged.
 
-A world-scene modal genuinely pauses the campaign, not just visually covers
-it: gating the pipeline on `updateWorldScreens()` freezes `grace` for free
-(it only decays inside `updateParties()`, which never runs while a screen is
-open), and `World.isBlocking()` — `true` whenever `this.screen` is set — lets
-`main.js` gate `stats.playT` accrual the same way, so leaving a screen open
-cannot inflate reported campaign time. `World.isTimeFrozen()` is its Plan 023
-companion and gates `stats.playT` identically, so neither an open modal nor a
-stopped map can inflate reported campaign time; the 4-second autosave is
-deliberately NOT gated, because a save write is durability rather than simulation
-and while frozen it rewrites identical bytes. All three freezes (modal,
-stopped-hero, and the `playT` gate) are deliberate and covered by tests, not
-incidental side effects to "fix".
+## Battle simulation
 
 `Battle.update()` owns the ordered fight pipeline. `updateSceneState()` handles
 intro/end gates, `updateActivePhases()` runs live commands, hero, troop/enemy,
@@ -179,15 +201,21 @@ an ECS, so adding a cross-phase context object requires a new design review.
 Battle orders are per-squad. One squad exists per `UNIT_TYPES` key and membership is
 derived from a troop's type, never assigned, so `save.troops` stays `{type, hp}` and
 squad state costs no save-schema version. `Battle.squads` owns per-squad stance;
-`updateTroopPhase()` reads it through `squadStance(t)` and must not read a global command.
-Hold anchors are still per-troop (`holdX`/`holdY`) plus one global `holdPoint`; the
-`squads[type].holdX/holdY` fields are written but not yet read, so do not rely on them. `Battle.command` remains the all-squads aggregate (`'mixed'` when squads
-diverge) because the legacy QA record and the input-action contract assert on it; keep
-that mirror intact. Selection (`selectedSquad`) is input/presentation state and stays out
-of the save. Stance trade-offs live in named constants in `src/battle/constants.js`
-(brace bonus, bow spread, charge exposure, no-death stall) — tune those, not scattered
-literals, and re-run `tests/e2e/stance-balance.spec.js`. The phases that read them are
-in `src/battle/ai-phases.js`.
+`updateTroopPhase()` reads it through `squadStance(t)` and must not read a global
+command. Hold anchors exist at two levels and both are live: troop movement steers to
+the per-troop `holdX`/`holdY` in `updateTroopPhase()`, while `squads[type].holdX/holdY`
+is the anchor each squad's hold banner is drawn from in `battle/render-scene.js`. The
+banner used to be gated on the aggregate `command`, which is never `'hold'` under a
+split order, so the affordance disappeared exactly when squads were used independently;
+keep it per-squad. `Battle.command` remains the all-squads aggregate (`'mixed'` when
+squads diverge) because the legacy QA record and the input-action contract assert on it;
+keep that mirror intact. Selection (`selectedSquad`) is input/presentation state and
+stays out of the save. Stance trade-offs live in named constants in
+`src/battle/constants.js` (brace bonus, bow spread, charge exposure, no-death stall) —
+tune those, not scattered literals, and re-run `tests/e2e/stance-balance.spec.js`. The
+phases that read them are in `src/battle/ai-phases.js`.
+
+## Simulation must not read presentation
 
 `Camera.toWorld()` is a simulation input: it feeds hero aim, hero facing, and therefore
 FOLLOW formation slots. It must never include the shake offset that `apply()` adds at
@@ -207,29 +235,31 @@ update per rendered frame. The coordinate comparison sidesteps that ordering
 entirely while staying just as boot-safe, since the default pointer sits on
 the hero token (canvas centre) at construction.
 
-Canvas visual QA lives in `tests/e2e/visual-regression.spec.js` and runs in CI
-on every pull request as part of `npm test`; use `npm run test:visual` for the
-focused suite. It uses seeded scenarios,
-explicit fixed steps, and a frozen page-side update hook; do not add wall-clock sleeps or
-change production visuals solely to make a screenshot pass. Baselines are
-platform-neutral and intentionally tolerate only the documented small raster
-difference (`threshold: 0.20`, `maxDiffPixelRatio: 0.015`). Review actual,
-expected, and diff PNGs before using `--update-snapshots`; never update a
-baseline to conceal an unexplained regression. See `tests/README.md` for the
-five covered world/battle states and the baseline workflow.
+## Performance budgets
 
-After persistence, battle-result, save, party-AI, or stronghold changes, also
-run the focused campaign coverage:
+Performance QA: run `npm run test:perf` after scheduler, Canvas rendering,
+battle-loop, or party-navigation changes. The fixed-timestep scheduler may
+skip a render only when no simulation update or explicit invalidation occurred;
+resize, boot, scene changes, and visible UI changes invalidate the frame. The
+watchdog must never draw while `document.hidden`, and direct test API calls
+remain synchronous. Static world geometry uses bounded `Path2D` caches plus
+camera culling; battle static props use an arena-sized layer. Never introduce
+a full-map bitmap. Scratch arrays/entries are instance-owned, clear logical
+lengths, and null stale references when shrinking. Battle units carry immutable
+`team` tags for constant-time separation classification. Party replans use
+seeded staggering and exact river collision/visibility; do not approximate or
+quantize collision answers. World roads and rivers are single-source cached
+sampled polylines: add a curve only through `World.buildTerrainGeometry()`
+(implemented in `src/world/terrain.js`) so rendering, collision, navigation, and
+movement bonuses cannot diverge.
+Structural Canvas budgets are machine-independent
+and must never be raised or bypassed to obtain green CI.
 
-```text
-npx playwright test tests/e2e/campaign-persistence.spec.js
-```
-
-## Deterministic QA conventions
+## Determinism and RNG domains
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,
 pinned world seeds, and fixed timesteps rather than wall-clock sleeps. Preserve
-the existing 21 named legacy records and their result shape. Do not weaken an
+the existing 25 named legacy records and their result shape. Do not weaken an
 assertion, raise a performance budget, or ignore page/console errors to obtain
 green CI.
 
@@ -241,7 +271,20 @@ share a generic gameplay RNG with presentation code. Validate changes with
 `rng_domains_keep_simulation_independent_of_effects`. Use `??` for seed
 defaults so the valid seed `0` remains deterministic.
 
-## Save-slot isolation
+## Visual regression
+
+Canvas visual QA lives in `tests/e2e/visual-regression.spec.js` and runs in CI
+on every pull request as part of `npm test`; use `npm run test:visual` for the
+focused suite. It uses seeded scenarios,
+explicit fixed steps, and a frozen page-side update hook; do not add wall-clock sleeps or
+change production visuals solely to make a screenshot pass. Baselines are
+platform-neutral and intentionally tolerate only the documented small raster
+difference (`threshold: 0.20`, `maxDiffPixelRatio: 0.015`). Review actual,
+expected, and diff PNGs before using `--update-snapshots`; never update a
+baseline to conceal an unexplained regression. See `tests/README.md` for the
+five covered world/battle states and the baseline workflow.
+
+## Save schema and persistence
 
 Any call through `window.game` marks the page as test mode and writes
 `bf_save_test`. It must never overwrite a real player's `bf_save`. Real
@@ -260,6 +303,19 @@ fields there when they must survive refresh; deliberately transient movement,
 presentation, and input state stays out of the save. Persistence tests must
 cover both explicit `persistRun()` and the timed autosave boundary, followed by
 a reload/Continue assertion.
+
+Any save-field change must deliberately increment or migrate the schema in
+`src/save.js`, update both fresh-save defaults and validation, and add legacy,
+current, and malformed fixtures. The current save schema is version 3;
+unversioned (v0), version-1, and version-2 saves migrate deterministically,
+including deriving a missing legacy roaming-party `home` from its canonical
+camp and defaulting `save.settlements` to every settlement unoccupied. Current
+version parties must have a finite valid `home`, and accepted saves must be
+safe for immediate world/battle construction. Preserve `bf_save`/`bf_save_test`
+isolation.
+Run `npx playwright test tests/e2e/save-schema.spec.js` and
+`npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
+the required `npm test` gate.
 
 Every world-to-battle transition must finish all map-side mutations, including
 encounter removal and battle-count updates, then call `Game.persistRun()` once
@@ -288,6 +344,8 @@ untouched. The aftermath modal that follows battle end rides on
 constructor beside the existing toast replay — never on `save`, so no schema
 change and a refresh mid-aftermath simply loses the screen. It is skipped
 when `save.won`: the final victory screen already is that fight's aftermath.
+
+## Campaign lifecycle
 
 Roaming-party lifecycle: removing a party for an encounter is temporary unless
 all enemies die. Both retreat and ordinary defeat restore the surviving enemy
@@ -331,24 +389,18 @@ tracking the player forever. An explicit `band` argument still overrides the
 draw (used by QA to probe the `[2,24]` strength clamp directly); never assert
 a tier-distribution property from a single seed — sweep several.
 
-Any save-field change must deliberately increment or migrate the schema in
-`src/save.js`, update both fresh-save defaults and validation, and add legacy,
-current, and malformed fixtures. The current save schema is version 3;
-unversioned (v0), version-1, and version-2 saves migrate deterministically,
-including deriving a missing legacy roaming-party `home` from its canonical
-camp and defaulting `save.settlements` to every settlement unoccupied. Current
-version parties must have a finite valid `home`, and accepted saves must be
-safe for immediate world/battle construction. Preserve `bf_save`/`bf_save_test`
-isolation.
-Run `npx playwright test tests/e2e/save-schema.spec.js` and
-`npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
-the required `npm test` gate.
+## Expected failures and test debt
 
-The campaign spec has AUDIT-02 and AUDIT-05 as normal passing regressions.
-AUDIT-03 is the only remaining active `test.fail` annotation. When fixing that
-defect, remove its matching annotation in the same change. An unexpected pass
-is useful drift that signals the test debt is ready to retire; never weaken the
-assertion or add a skip to make the gate green.
+The campaign spec has AUDIT-02, AUDIT-03 and AUDIT-05 as normal passing
+regressions. The one active `test.fail` annotation in the suite is `deliberate
+orders beat giving no order at all` in `tests/e2e/stance-balance.spec.js`, which
+records the measured finding that Plan 019's premise is not met: over organic camp
+raids, pressing no order wins more often than any deliberate squad order. Remove
+that annotation only when commanding actually beats not commanding, and remove it
+in the same change that makes it true. An unexpected pass is useful drift that
+signals the test debt is ready to retire; never weaken the assertion or add a skip
+to make the gate green. Expected failures are always `test.fail` with a plan or
+finding reference — never `skip` or `fixme`.
 
 ## Battlefield terrain (Plan 024)
 

@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <title>Bannerfall</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Relative on purpose: a project Pages site is served from a subpath, where the
+     browser's implicit /favicon.ico request would miss the file entirely. -->
+<link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
 <style>
   html, body { margin:0; padding:0; height:100%; background:#1E2A4A; overflow:hidden; }
   #game { display:block; width:100vw; height:100vh; cursor: crosshair; }
