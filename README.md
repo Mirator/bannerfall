@@ -32,7 +32,7 @@ npx playwright install chromium
 Run `npm test` before submitting gameplay or test changes. It starts and stops
 the existing Python server on port 8474 automatically, runs the browser suite,
 and returns a nonzero exit code for a failed QA record, page exception, or
-browser console error. `npm run test:qa` runs the focused legacy 17-check suite;
+browser console error. `npm run test:qa` runs the focused legacy record suite;
 `npm run test:headed` opens Chromium for local debugging. See `AGENTS.md` for
 the agent contract and `tests/README.md` for test architecture and extension
 rules.
@@ -40,9 +40,9 @@ rules.
 ### Save compatibility
 
 `src/save.js` is the canonical versioned save schema and migration boundary.
-It accepts the unversioned legacy format, writes current saves as version 1,
-and rejects malformed or unsupported future data before it reaches the world
-simulation. Keep the field-level contract in that module; see
+It migrates the unversioned legacy format and versions 1 and 2, writes current
+saves as version 3, and rejects malformed or unsupported future data before it
+reaches the world simulation. Keep the field-level contract in that module; see
 `tests/README.md` for valid fixture construction and the focused schema test
 command.
 
@@ -51,7 +51,7 @@ command.
 - `index.html` — entry point
 - `src/` — game code (engine, world map, battles, data)
 - `tests/runner.html` — human-readable browser QA runner
-- `tests/qa_suite.js` — deterministic 17-check regression suite
+- `tests/qa_suite.js` — deterministic 25-record regression suite
 - `tests/e2e/` — Playwright launch, isolation, and reporting tests
 - `scripts/` — local dev helpers (static server, screenshot server)
 - `critiques/` — design critique notes from the build process
