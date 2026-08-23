@@ -12,10 +12,12 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE } from '../data.js?v=rc29d87ba530c';
-import { dist2 } from '../engine.js?v=rc29d87ba530c';
-import { ACTIONS } from '../input-actions.js?v=rc29d87ba530c';
-import { buildBriefModel } from '../world-screens.js?v=rc29d87ba530c';
+import { WORLD, BALANCE } from '../data.js?v=rbe1f74f09262';
+import { dist2 } from '../engine.js?v=rbe1f74f09262';
+import { ACTIONS } from '../input-actions.js?v=rbe1f74f09262';
+import { buildBriefModel } from '../world-screens.js?v=rbe1f74f09262';
+import { sampleBattlefield } from './battlefield-brief.js?v=rbe1f74f09262';
+import { FIELD } from '../battle/constants.js?v=rbe1f74f09262';
 
 export function startBattle(world, comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief = false) {
   const save = world.save;
@@ -28,10 +30,12 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
   world.persistParties();
   world.game.persistRun();
   world.game.sfx.horn(147);
+  const approach = world.pendingApproach || 'E';
+  const battleSeed = (Math.abs(world.hero.x * 31 + world.hero.y * 17) | 0) + 7;
   world.game.startBattle({
     troops: save.troops.map(t => ({ type: t.type, hp: t.hp })),
     enemies: comp.map(c => ({ type: c })),
-    seed: (Math.abs(world.hero.x * 31 + world.hero.y * 17) | 0) + 7,
+    seed: battleSeed,
     title,
     arena: arena || (world.nearSettlement(200) ? 'village' : world.nearRiver(world.hero.x) ? 'bridge' : 'road'),
     biome: world.biomeAt(world.hero.x),
@@ -41,8 +45,13 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
     // scenario('battle_*') visual baselines (never routed through a brief) are
     // provably untouched — only fights reached via confirmBrief() set world.
     brief,
+    // Plan 024 Phase 2: a pure, read-only sample of the map around the hero, in field
+    // space. NOT named `brief` — that field above already means "reached via the
+    // pre-battle modal". Derived only, never persisted (AGENTS.md save-schema rule):
+    // Battle/battle-transition never write this to `save`, so no schema version is spent.
+    field: sampleBattlefield(world, approach, battleSeed, FIELD.W, FIELD.H),
     deploy: world.pendingDeploy,
-    approach: world.pendingApproach || 'E',
+    approach,
     // (pending* are per-battle one-shots)
     heroHp: save.heroHp,
     heroMaxHp: save.heroMaxHp,

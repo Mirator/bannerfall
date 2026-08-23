@@ -1,5 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rc29d87ba530c';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rbe1f74f09262';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -33,6 +33,9 @@ export const RNG_DOMAINS = Object.freeze({
   BATTLE_FX: 0x27182818,
   CAMERA_SHAKE: 0x9E3779B9,
   AUDIO_FX: 0xDEADBEEF,
+  // Plan 024: battlefield-brief ford jitter (Phase 2) and any obstacle/zone terrain draw
+  // (Phase 3) — gameplay-affecting, so it gets its own stream rather than sharing BATTLE_FX.
+  BATTLE_TERRAIN: 0x6A09E667,
 });
 
 export function deriveSeed(seed, domain) {

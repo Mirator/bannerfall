@@ -36,9 +36,10 @@ conditions, and update its status row when done.
 | 018 | Recompose the title screen around an animated campaign vignette | P1 | M | 017 | DONE |
 | 019 | Give the player squads to command and stances worth choosing | P0 | L | 018 | DONE as optional depth — premise unmet, see plan |
 | 020 | Make encounters uneven, and make avoiding them cost something | P0 | L | 019 | DONE |
-| 021 | Make the encounter legible — unit counts, hover details, and battle brief/aftermath screens | P1 | L | 020 | DONE |
+| 021 | Make the encounter legible — unit counts, hover details, and battle brief/aftermath screens | P1 | L | 020 | DONE |
 | 022 | Split the two scene god-files into src/battle/ and src/world/ | Medium | L | 001-021 | DONE |
 | 023 | Make the world map alive only while the hero rides | P0 | M | 001-022 | DONE |
+| 024 | Rework the battlefield | P0 | XL | 001-023 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -113,6 +114,18 @@ explicitly selected because its impact becomes high when battle populations grow
   and simulation-seam work. It introduces only the host-facing persistence,
   lifecycle, and action boundaries; the Electron shell and Steamworks SDK remain
   explicitly deferred until desktop packaging is scheduled.
+- Plan 024 depends on Plan 009 (the canonical terrain geometry it reads instead of
+  duplicating), Plan 013 (RNG domain isolation, for its own `RNG_DOMAINS.BATTLE_TERRAIN`
+  stream), Plan 014 (the world/battle module seams it extends with `battlefield-brief.js`
+  and `battle/terrain.js`), and Plan 022 (the `src/battle/`/`src/world/` split it builds
+  directly on top of). It quadruples the battlefield's area, derives it from the actual
+  patch of campaign map the fight is happening on instead of four hardcoded arena
+  templates, and adds line-of-sight cover, terrain movement costs, river crossings and a
+  minimap. Several of its own design choices needed correction after measurement rather
+  than review (rock/hill sizing, the Phase 5 blind-archer fallback) — see the plan's own
+  Retrospective section for the honest record, including a confirmed pre-existing
+  `separation.js` defect found but deliberately left out of scope, and a LOS cover target
+  (55-70% corridor coverage) that was not reached (shipped at 38%).
 
 ## Deferred audit findings
 

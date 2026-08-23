@@ -1,12 +1,12 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rc29d87ba530c';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=rc29d87ba530c';
-import { stableSortPrefix } from './spatial-index.js?v=rc29d87ba530c';
-import { SQUAD_TYPES } from './constants.js?v=rc29d87ba530c';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=rc29d87ba530c';
-import { drawHud } from './hud.js?v=rc29d87ba530c';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rbe1f74f09262';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=rbe1f74f09262';
+import { stableSortPrefix } from './spatial-index.js?v=rbe1f74f09262';
+import { SQUAD_TYPES } from './constants.js?v=rbe1f74f09262';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=rbe1f74f09262';
+import { drawHud } from './hud.js?v=rbe1f74f09262';
 
 // ------------------------------------------------------------- drawing
 export function drawScene(battle, ctx) {
@@ -60,7 +60,18 @@ export function drawScene(battle, ctx) {
   // blotches
   ctx.fillStyle = P.groundShade;
   ctx.fill(battle._staticPaths.blotches);
-  ctx.drawImage(battle._staticLayer, -64, -64);
+  // Plan 024 Phase 6d: the static prop layer is a 2x2 grid of bounded canvases (built once
+  // in the Battle constructor), not one arena-sized bitmap. Blit only the tiles the camera
+  // can actually see this frame — cheap because there are only ever 4 — using the same
+  // world-space frustum every other culled static geometry in this codebase computes via
+  // `cam.toWorld`.
+  const viewTL = cam.toWorld(0, 0), viewBR = cam.toWorld(cam.w, cam.h);
+  const vx0 = Math.min(viewTL.x, viewBR.x), vx1 = Math.max(viewTL.x, viewBR.x);
+  const vy0 = Math.min(viewTL.y, viewBR.y), vy1 = Math.max(viewTL.y, viewBR.y);
+  for (const tile of battle._staticTiles) {
+    if (tile.wx + tile.ww < vx0 || tile.wx > vx1 || tile.wy + tile.wh < vy0 || tile.wy > vy1) continue;
+    ctx.drawImage(tile.canvas, tile.wx, tile.wy);
+  }
   drawProps(battle, ctx, true);
 
   // Hold banners: one per squad actually holding, drawn from that squad's own anchor.
@@ -228,7 +239,45 @@ export function drawObstacle(battle, ctx, o) {
   const P = battle.palette;
   if (o.kind === 'none') return;
   if (o.kind === 'tree') tree(ctx, o.x, o.y, o.r * 1.15, P.tree, P.treeShade, P.groundShade);
+  else if (o.kind === 'hill') drawHillTerrain(ctx, o.x, o.y, o.r * 0.7, P);
   else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot);
+}
+
+// Plan 024 Phase 6c: a battlefield hill needs to read as TERRAIN units fight around, not a
+// landmark glimpsed from afar — `mountain()` (src/engine.js) is exactly that landmark icon,
+// used for the campaign map's mountain ridges. Adapts its silhouette (same asymmetric-apex +
+// shadow-side-outcrop path, so both maps keep one art direction) rather than inventing a new
+// shape, but recolors it for the battle ground plane: a filled rock body, a `P.groundShade`
+// sun-side wedge (the same second-tone motif the ground's own blotches/regions/light-and-
+// shade wedges already use, instead of `mountain()`'s cream highlight, which reads as a snow
+// cap at this scale) and an ink rim stroke tying the silhouette to the ground it sits on.
+function drawHillTerrain(ctx, x, y, s, P) {
+  // cast shadow first — every standing object in this scene obeys the same up-left light
+  ctx.save();
+  ctx.globalAlpha = 0.25;
+  ctx.fillStyle = P.ink;
+  ctx.beginPath(); ctx.moveTo(x - s * 0.6, y + s * 0.42); ctx.lineTo(x + s * 1.75, y + s * 0.42);
+  ctx.lineTo(x + s * 1.15, y + s * 0.62); ctx.lineTo(x - s * 0.4, y + s * 0.62); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  const ax = x - s * 0.12;
+  const apex = [ax, y - s], footL = [x - s, y + s * 0.4], footR = [x + s * 1.1, y + s * 0.42];
+  const outcropPeak = [x + s * 0.78, y - s * 0.18], outcropL = [x + s * 0.55, y + s * 0.42], outcropR = [x + s * 1.25, y + s * 0.42];
+  // filled rock body
+  ctx.fillStyle = P.rock;
+  ctx.beginPath(); ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(outcropL[0], outcropL[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]); ctx.lineTo(outcropR[0], outcropR[1]); ctx.closePath(); ctx.fill();
+  // sun-side wedge toward the global light (down-right), the ground's own second tone
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = P.groundShade;
+  ctx.beginPath(); ctx.moveTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.lineTo(x + s * 0.28, y + s * 0.42); ctx.closePath(); ctx.fill();
+  ctx.restore();
+  // ink rim: outlines the whole silhouette so it holds together as a solid landform
+  ctx.strokeStyle = P.ink; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]);
+  ctx.lineTo(outcropR[0], outcropR[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath();
+  ctx.stroke();
 }
 
 export function drawProps(battle, ctx, dynamicOnly = false) {
@@ -236,7 +285,76 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
   for (const p of battle.props) {
     const dynamic = p.kind === 'fire' || p.kind === 'mill' || p.kind === 'river';
     if (dynamicOnly !== dynamic) continue;
-    if (p.kind === 'river') {
+    if (p.kind === 'riverPoly') {
+      // A Brief-derived river: the real sampled polyline, not a straight column through the
+      // middle. A thick round-joined stroke approximates the channel at the Brief's real
+      // width; the lighter dashes are the same "water in motion" cue the old fixed river used.
+      ctx.strokeStyle = P.water; ctx.lineWidth = p.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p.pts[0][0], p.pts[0][1]);
+      for (let i = 1; i < p.pts.length; i++) ctx.lineTo(p.pts[i][0], p.pts[i][1]);
+      ctx.stroke();
+      ctx.strokeStyle = P.waterLight; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      for (let i = 1; i < p.pts.length; i += 2) {
+        const ax = p.pts[i - 1][0], ay = p.pts[i - 1][1], bx = p.pts[i][0], by = p.pts[i][1];
+        ctx.beginPath();
+        ctx.moveTo(ax + (bx - ax) * 0.3, ay + (by - ay) * 0.3);
+        ctx.lineTo(ax + (bx - ax) * 0.55, ay + (by - ay) * 0.55);
+        ctx.stroke();
+      }
+    } else if (p.kind === 'roadPoly') {
+      // A Brief-derived road: the real sampled polyline instead of a straight quadratic
+      // through the middle.
+      ctx.strokeStyle = P.cream; ctx.lineWidth = Math.max(10, p.width * 0.3); ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      ctx.moveTo(p.pts[0][0], p.pts[0][1]);
+      for (let i = 1; i < p.pts.length; i++) ctx.lineTo(p.pts[i][0], p.pts[i][1]);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (p.kind === 'ford') {
+      // A shallow crossing: a pale patch across the channel with stepping stones, oriented
+      // across the real flow direction (`tx,ty`) rather than a fixed axis.
+      const acrossA = Math.atan2(p.ty, p.tx) + Math.PI / 2;
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(acrossA);
+      ctx.globalAlpha = 0.85; ctx.fillStyle = shade(P.cream, 0.85);
+      ctx.fillRect(-p.w / 2, -22, p.w, 44);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = P.rock;
+      for (let i = 0; i < 6; i++) {
+        const sx = -p.w / 2 + (i + 0.5) * (p.w / 6);
+        ctx.beginPath(); ctx.ellipse(sx, i % 2 ? 8 : -8, 10, 7, 0, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+    } else if (p.kind === 'bridgeSpan') {
+      // Same built-wooden-thing style as the legacy fixed bridge, oriented across the real
+      // flow direction (`tx,ty`) at the Brief's real crossing width, instead of a fixed axis.
+      const acrossA = Math.atan2(p.ty, p.tx) + Math.PI / 2;
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(acrossA);
+      for (let pi = 0; pi < 8; pi++) {
+        ctx.fillStyle = pi % 2 ? '#BE9245' : '#DDB870';
+        ctx.fillRect(-p.w / 2 + pi * (p.w / 8), -48, p.w / 8, 96);
+      }
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(-p.w / 2, -48); ctx.lineTo(p.w / 2, -48); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-p.w / 2, 48); ctx.lineTo(p.w / 2, 48); ctx.stroke();
+      ctx.fillStyle = P.ink;
+      for (const [px, py] of [[-p.w / 2, -48], [p.w / 2, -48], [-p.w / 2, 48], [p.w / 2, 48]]) {
+        ctx.beginPath(); ctx.arc(px, py, 6, 0, TAU); ctx.fill();
+      }
+      ctx.restore();
+    } else if (p.kind === 'tree') {
+      // Decorative-only wood-clump trees (Phase 3): all but the 2 largest per clump, which
+      // get a real obstacle collider instead and are drawn via drawObstacle's depth-sorted
+      // pass — this branch never sees those, so there is no double-draw.
+      tree(ctx, p.x, p.y, p.r * 1.15, P.tree, P.treeShade, P.groundShade);
+    } else if (p.kind === 'scrub') {
+      ctx.fillStyle = P.treeShade;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r * 0.9, p.r * 0.6, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = P.tree;
+      ctx.beginPath(); ctx.ellipse(p.x - p.r * 0.15, p.y - p.r * 0.15, p.r * 0.55, p.r * 0.4, 0, 0, TAU); ctx.fill();
+    } else if (p.kind === 'river') {
       const bx = battle.bridge.x;
       ctx.fillStyle = P.water;
       ctx.fillRect(bx - 45, -40, 90, battle.H + 80);
@@ -337,6 +455,70 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       }
     } else if (p.kind === 'stone') {
       rock(ctx, p.x, p.y, p.s, P.rock, P.rockShade, P.groundShade, 0.8);
+    } else if (p.kind === 'boulder') {
+      // Plan 024 Phase 6b: a bigger, purely decorative cousin of 'stone' — same two-tone
+      // rock treatment, no collider, scattered as generic ground interest.
+      rock(ctx, p.x, p.y, p.s, P.rock, P.rockShade, P.groundShade, p.rot || 0.4);
+    } else if (p.kind === 'log') {
+      // A fallen trunk: a shaded cylinder body with a cut end-cap, oriented by `p.rot`.
+      shadow(ctx, p.x, p.y + p.s * 0.3, p.s * 1.3, p.s * 0.7, P.groundShade);
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot || 0);
+      ctx.fillStyle = '#5A3324';
+      ctx.fillRect(-p.s * 1.3, -p.s * 0.4, p.s * 2.6, p.s * 0.8);
+      ctx.fillStyle = '#7A4A32';
+      ctx.fillRect(-p.s * 1.3, -p.s * 0.4, p.s * 2.6, p.s * 0.32);
+      ctx.fillStyle = '#3E2418';
+      ctx.beginPath(); ctx.ellipse(p.s * 1.3, 0, p.s * 0.22, p.s * 0.4, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.rect(-p.s * 1.3, -p.s * 0.4, p.s * 2.6, p.s * 0.8); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(p.s * 1.3, 0, p.s * 0.22, p.s * 0.4, 0, 0, TAU); ctx.stroke();
+      ctx.restore();
+    } else if (p.kind === 'stump') {
+      // What is left where a tree used to be: same trunk-brown as the tent/plank props,
+      // with a growth-ring highlight and an ink rim.
+      shadow(ctx, p.x, p.y + p.s * 0.3, p.s * 0.8, p.s * 0.6, P.groundShade);
+      ctx.fillStyle = '#6B3A2A';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s * 0.7, p.s * 0.5, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s * 0.7, p.s * 0.5, 0, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = '#8A5138'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s * 0.4, p.s * 0.28, 0, 0, TAU); ctx.stroke();
+    } else if (p.kind === 'reeds') {
+      // River-bank dressing: a small fan of thin curved blades, angled by `p.rot`. Ground
+      // level, no cast shadow — same treatment as 'tuft'.
+      ctx.strokeStyle = P.treeShade; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      for (let i = -2; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.moveTo(p.x + i * 3, p.y);
+        ctx.quadraticCurveTo(p.x + i * 3 + p.rot * 4, p.y - p.s * 0.6, p.x + i * 5 + p.rot * 8, p.y - p.s);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = P.tree; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y); ctx.quadraticCurveTo(p.x + p.rot * 4, p.y - p.s * 0.6, p.x + p.rot * 8, p.y - p.s);
+      ctx.stroke();
+    } else if (p.kind === 'crops') {
+      // A tended patch near a settlement: a tidy 3x3 grid of short blade strokes, unlike
+      // the irregular wild 'tuft' scatter — reads as cultivated, not wild growth.
+      ctx.strokeStyle = P.treeShade; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      for (let row = -1; row <= 1; row++) {
+        for (let col = -1; col <= 1; col++) {
+          const cx = p.x + col * p.s * 0.9, cy = p.y + row * p.s * 0.55;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + p.rot * 3, cy - p.s * 0.6); ctx.stroke();
+        }
+      }
+    } else if (p.kind === 'bones') {
+      // A scattered skull-and-ribs — the oldest battlefield-dressing cliche there is, but
+      // it earns its place: flat cream fill, ink outline, ground level, no shadow.
+      ctx.fillStyle = P.cream; ctx.strokeStyle = P.ink; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s * 0.5, p.s * 0.4, 0, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const rx = p.x + p.s * (0.9 + i * 0.4) * p.rot;
+        ctx.moveTo(rx, p.y - p.s * 0.15); ctx.lineTo(rx + p.s * 0.22 * p.rot, p.y + p.s * 0.15);
+      }
+      ctx.stroke();
     }
   }
 }

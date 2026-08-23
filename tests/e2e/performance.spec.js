@@ -139,7 +139,7 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
       drawEntries: battle._drawEntries,
       woundedEntries: battle._woundedEntries,
       drawnBars: battle._drawnBars,
-      static: battle._staticLayer || battle._staticPaths,
+      static: battle._staticTiles || battle._staticLayer || battle._staticPaths,
       allUnits: battle._allUnits,
       alertEntry: battle._alerts[0],
       drawEntry: battle._drawEntries[0],
@@ -180,7 +180,7 @@ test('battle rendering reuses scratch storage and static terrain', async ({ page
     CanvasRenderingContext2D.prototype.beginPath = original;
     return {
       beginPath,
-      same: Object.fromEntries(Object.entries(refs).filter(([k]) => ['alerts', 'drawEntries', 'woundedEntries', 'drawnBars', 'static', 'allUnits'].includes(k)).map(([k, v]) => [k, v === (k === 'static' ? (battle._staticLayer || battle._staticPaths) : battle['_' + k])])),
+      same: Object.fromEntries(Object.entries(refs).filter(([k]) => ['alerts', 'drawEntries', 'woundedEntries', 'drawnBars', 'static', 'allUnits'].includes(k)).map(([k, v]) => [k, v === (k === 'static' ? (battle._staticTiles || battle._staticLayer || battle._staticPaths) : battle['_' + k])])),
       sameEntries,
       drawFound: !!refs.drawEntry && battle._drawEntries.includes(refs.drawEntry),
       teams: [...battle.troops].every(t => t.team === 'friendly') && [...battle.enemies].every(e => e.team === 'enemy'),
@@ -224,7 +224,7 @@ test('battle spatial queries match the legacy nearest-target semantics', async (
       [battle.hero.x, battle.hero.y, 1e9], [100, 100, 35], [625, 440, 180], [1180, 820, 1e9],
       [enemies[0].x + 24, enemies[0].y - 11, 80],
     ];
-    for (let i = 0; i < 100; i++) points.push([(i * 137) % 1250, (i * 71) % 880, [24, 90, 1e9][i % 3]]);
+    for (let i = 0; i < 100; i++) points.push([(i * 137) % 2500, (i * 71) % 1760, [24, 90, 1e9][i % 3]]);
     const checks = points.map(([x, y, maxR]) => {
       let expected = null, best = 1e18;
       for (const e of enemies) {

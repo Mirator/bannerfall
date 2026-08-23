@@ -1,11 +1,13 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=rc29d87ba530c';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rc29d87ba530c';
-import { Battle } from './battle.js?v=rc29d87ba530c';
-import { World } from './world.js?v=rc29d87ba530c';
-import { ACTIONS } from './input-actions.js?v=rc29d87ba530c';
-import { createWebPlatform } from './platform/web-platform.js?v=rc29d87ba530c';
-import { SaveRepository } from './persistence/save-repository.js?v=rc29d87ba530c';
+import { PAL, WORLD } from './data.js?v=rbe1f74f09262';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rbe1f74f09262';
+import { Battle } from './battle.js?v=rbe1f74f09262';
+import { World } from './world.js?v=rbe1f74f09262';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=rbe1f74f09262';
+import { FIELD } from './battle/constants.js?v=rbe1f74f09262';
+import { ACTIONS } from './input-actions.js?v=rbe1f74f09262';
+import { createWebPlatform } from './platform/web-platform.js?v=rbe1f74f09262';
+import { SaveRepository } from './persistence/save-repository.js?v=rbe1f74f09262';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -716,6 +718,39 @@ window.game = {
         troops: [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'archer' }, { type: 'archer' }],
         enemies: [{ type: 'bandit' }, { type: 'bandit' }, { type: 'wolf' }, { type: 'wolf' }, { type: 'raider' }],
         seed: 21, title: 'AMBUSHED!', arena: 'bridge', biome: 'meadow', ambush: true,
+        onEnd: () => game.startWorld(null),
+      });
+    } else if (name === 'battle_river' || name === 'battle_woods' || name === 'battle_settlement') {
+      // Plan 024 Phase 8: brief-derived battle scenarios, pinned to world positions that
+      // provably yield the terrain each name promises. Verified at world seed 7, approach
+      // 'E', brief seed 12345 (see plans/024-battlefield-rework.md's Phase 8 section):
+      //   battle_river      (1150,1000) — 1 river, ford crossing, 7 woods, 2 hills, 2 roads
+      //   battle_woods      (300,1500)  — no river, 8 woods, 6 hills, 7 scrub
+      //   battle_settlement (985,640)   — 1 river with a real bridge, settlement, 8 woods, 2 roads
+      // Unlike battle_small/big/bridge (deliberately briefless template fights), these carry a
+      // real setup.field, so they are the only scenarios/baselines that exercise the terrain
+      // sampled from the actual campaign map — see AGENTS.md's battlefield section.
+      game.testSeed = 7;
+      game.startWorld(null);
+      const world = game.scene;
+      const pos = {
+        battle_river: [1150, 1000],
+        battle_woods: [300, 1500],
+        battle_settlement: [985, 640],
+      }[name];
+      world.hero.x = pos[0]; world.hero.y = pos[1];
+      const approach = 'E', battleSeed = 12345;
+      const field = sampleBattlefield(world, approach, battleSeed, FIELD.W, FIELD.H);
+      const titles = {
+        battle_river: 'RIVER CROSSING',
+        battle_woods: 'WOODED HIGHLAND',
+        battle_settlement: 'BRIDGE & SETTLEMENT',
+      };
+      game.startBattle({
+        troops: [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'archer' }, { type: 'archer' }],
+        enemies: [{ type: 'bandit' }, { type: 'bandit' }, { type: 'bandit' }, { type: 'bandit' }, { type: 'raider' }, { type: 'raider' }],
+        seed: battleSeed, title: titles[name], biome: world.biomeAt(world.hero.x),
+        approach, field,
         onEnd: () => game.startWorld(null),
       });
     } else if (name === 'world_brief') {
