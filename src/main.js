@@ -1,15 +1,15 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=r3d4da160c3c7';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3d4da160c3c7';
-import { Battle } from './battle.js?v=r3d4da160c3c7';
-import { World } from './world.js?v=r3d4da160c3c7';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r3d4da160c3c7';
-import { FIELD } from './battle/constants.js?v=r3d4da160c3c7';
-import { ACTIONS } from './input-actions.js?v=r3d4da160c3c7';
-import { createWebPlatform } from './platform/web-platform.js?v=r3d4da160c3c7';
-import { SaveRepository } from './persistence/save-repository.js?v=r3d4da160c3c7';
-import { buildSummaryModel } from './world-screens.js?v=r3d4da160c3c7';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=r3d4da160c3c7';
+import { PAL, WORLD } from './data.js?v=r8fa9ac718319';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r8fa9ac718319';
+import { Battle } from './battle.js?v=r8fa9ac718319';
+import { World } from './world.js?v=r8fa9ac718319';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r8fa9ac718319';
+import { FIELD } from './battle/constants.js?v=r8fa9ac718319';
+import { ACTIONS } from './input-actions.js?v=r8fa9ac718319';
+import { createWebPlatform } from './platform/web-platform.js?v=r8fa9ac718319';
+import { SaveRepository } from './persistence/save-repository.js?v=r8fa9ac718319';
+import { buildSummaryModel } from './world-screens.js?v=r8fa9ac718319';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=r8fa9ac718319';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -213,6 +213,12 @@ class Game {
     this._lastSave = this.scene.save;
     this.camera.zoom = 1;
     this.camera.x = this.scene.hero.x; this.camera.y = this.scene.hero.y;
+    // Plan 023: the map-edge clamp rides on the camera-follow path, which does not run
+    // until the hero moves. The hero starts near the western limit, so on a wide display
+    // the opening frame centred on him showed out-of-bounds ground west of the map border
+    // and then snapped east on the first moving tick. Clamp once at scene entry so the
+    // first frame is already the framing the player keeps.
+    this.scene.clampCamera();
     this.invalidate();
     this.persistRun();
   }
