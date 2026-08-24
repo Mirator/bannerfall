@@ -1,20 +1,20 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r06a7e18cad00';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r06a7e18cad00';
-import { SAVE_VERSION } from './save.js?v=r06a7e18cad00';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r3d4da160c3c7';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r3d4da160c3c7';
+import { SAVE_VERSION } from './save.js?v=r3d4da160c3c7';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=r06a7e18cad00';
-import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r06a7e18cad00';
-import { drawScene } from './world/render-scene.js?v=r06a7e18cad00';
+} from './region.js?v=r3d4da160c3c7';
+import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r3d4da160c3c7';
+import { drawScene } from './world/render-scene.js?v=r3d4da160c3c7';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r06a7e18cad00';
+} from './world/battle-transition.js?v=r3d4da160c3c7';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -25,12 +25,13 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=r06a7e18cad00';
+} from './world/settlement-interactions.js?v=r3d4da160c3c7';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r06a7e18cad00';
+} from './world/terrain.js?v=r3d4da160c3c7';
+import { WORLD_ART } from './world/visual-style.js?v=r3d4da160c3c7';
 
 const P = PAL.world;
 
@@ -147,19 +148,43 @@ export class World {
     // other. The segment arrays below are a derived query representation, not a second map.
     this.terrain = this.buildTerrainGeometry();
     this.riverLines = this.terrain.rivers;
+    this.riverProfiles = this.terrain.riverProfiles;
+    for (let i = 0; i < this.rivers.length; i++) {
+      this.rivers[i].widths = this.riverProfiles[i].profiles.map(profile => profile.width);
+    }
     this.roadLines = this.terrain.roads;
+    // Canonical collider cores remain untouched, but a visual ridge that the new authored
+    // water envelope passes through is suppressed on the map. It remains available to
+    // battlefield sampling and simulation; only the misleading in-channel silhouette goes.
+    for (const item of this.scenery) if (item.kind === 'mtn' && item.mapVisible !== false) {
+      const riverDistance = Math.min(...this.riverLines.flatMap(line => line.slice(1).map((b, i) =>
+        distToSegment(item.x, item.y, line[i][0], line[i][1], b[0], b[1]))));
+      if (riverDistance < item.s * 1.8 + WORLD_ART.rivers.maxWidth / 2) item.mapVisible = false;
+    }
     this.riverSegs = this.linesToSegments(this.riverLines);
-    this.riverBands = this.riverLines.map(line => {
+    this.riverBands = this.riverLines.map((line, riverIndex) => {
       const raw = this.linesToSegments([line]);
       const segs = new Float64Array(raw.length * 8);
+      const halfWidths = new Float64Array(raw.length);
+      const profiles = this.riverProfiles[riverIndex].profiles;
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
       raw.forEach((s, i) => {
         const o = i * 8;
         for (let j = 0; j < 8; j++) segs[o + j] = s[j];
+        const a = profiles[Math.min(profiles.length - 1, i)];
+        const b = profiles[Math.min(profiles.length - 1, i + 1)];
+        halfWidths[i] = Math.max((a.left + b.left) / 2, (a.right + b.right) / 2);
         if (s[4] < minX) minX = s[4]; if (s[5] > maxX) maxX = s[5];
         if (s[6] < minY) minY = s[6]; if (s[7] > maxY) maxY = s[7];
       });
-      return { minX, maxX, minY, maxY, segs };
+      const leftHalfWidths = new Float64Array(raw.length), rightHalfWidths = new Float64Array(raw.length);
+      raw.forEach((_, i) => {
+        const a = profiles[Math.min(profiles.length - 1, i)];
+        const b = profiles[Math.min(profiles.length - 1, i + 1)];
+        leftHalfWidths[i] = (a.left + b.left) / 2; rightHalfWidths[i] = (a.right + b.right) / 2;
+      });
+      return { minX, maxX, minY, maxY, segs, halfWidths, leftHalfWidths, rightHalfWidths,
+        maxHalfWidth: Math.max(...halfWidths) };
     });
     this.bridgePts = [];
     for (const r of this.rivers) {
@@ -274,10 +299,10 @@ export class World {
     return false;
   }
   // Terrain rules: rivers block except within reach of a bridge; mountains and rocks are solid.
-  // The bridge exemption (95) must overlap the river-block band (22) with margin from every
+  // The bridge exemption (95) must overlap the widest river-block band with margin from every
   // approach angle, or a dead pocket forms where units freeze against the bank.
   blockedAt(x, y) {
-    if (!this.nearAnyBridge(x, y) && this.riverDistanceAt(x, y, 22) < 22) return true;
+    if (this.riverBlockedAt(x, y)) return true;
     for (const o of this.solids) {
       if (dist2(x, y, o.x, o.y) < o.r * o.r) return true;
     }
@@ -315,8 +340,22 @@ export class World {
   // keeps the coherent river/bridge rule while making AI freezes structurally impossible.
   riverBlockedAt(x, y, pad) {
     if (this.nearAnyBridge(x, y)) return false;
-    const reach = 22 + (pad || 0);
-    return this.riverDistanceAt(x, y, reach) < reach;
+    const extra = pad || 0;
+    for (const band of this.riverBands) {
+      const bandReach = band.maxHalfWidth + extra;
+      if (x < band.minX - bandReach || x > band.maxX + bandReach ||
+          y < band.minY - bandReach || y > band.maxY + bandReach) continue;
+      for (let o = 0, i = 0; o < band.segs.length; o += 8, i++) {
+        const ax = band.segs[o], ay = band.segs[o + 1], bx = band.segs[o + 2], by = band.segs[o + 3];
+        const cross = (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+        const reach = (cross >= 0 ? band.leftHalfWidths[i] : band.rightHalfWidths[i]) + extra;
+        const minX = band.segs[o + 4], maxX = band.segs[o + 5];
+        const minY = band.segs[o + 6], maxY = band.segs[o + 7];
+        if (x < minX - reach || x > maxX + reach || y < minY - reach || y > maxY + reach) continue;
+        if (distToSegment(x, y, ax, ay, bx, by) < reach) return true;
+      }
+    }
+    return false;
   }
   blockedAtPad(x, y, pad) {
     return this.riverBlockedAt(x, y, pad);

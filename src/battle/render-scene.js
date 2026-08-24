@@ -1,12 +1,12 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r06a7e18cad00';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r06a7e18cad00';
-import { stableSortPrefix } from './spatial-index.js?v=r06a7e18cad00';
-import { SQUAD_TYPES } from './constants.js?v=r06a7e18cad00';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r06a7e18cad00';
-import { drawHud } from './hud.js?v=r06a7e18cad00';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r3d4da160c3c7';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r3d4da160c3c7';
+import { stableSortPrefix } from './spatial-index.js?v=r3d4da160c3c7';
+import { SQUAD_TYPES } from './constants.js?v=r3d4da160c3c7';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r3d4da160c3c7';
+import { drawHud } from './hud.js?v=r3d4da160c3c7';
 
 // ------------------------------------------------------------- drawing
 
@@ -365,11 +365,20 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // A Brief-derived river: the real sampled polyline, not a straight column through the
       // middle. A thick round-joined stroke approximates the channel at the Brief's real
       // width; the lighter dashes are the same "water in motion" cue the old fixed river used.
-      ctx.strokeStyle = P.water; ctx.lineWidth = p.width; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(p.pts[0][0], p.pts[0][1]);
-      for (let i = 1; i < p.pts.length; i++) ctx.lineTo(p.pts[i][0], p.pts[i][1]);
-      ctx.stroke();
+      ctx.strokeStyle = P.water; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (p.widths) {
+        for (let i = 1; i < p.pts.length; i++) {
+          ctx.lineWidth = (p.widths[i - 1] + p.widths[i]) / 2;
+          ctx.beginPath(); ctx.moveTo(p.pts[i - 1][0], p.pts[i - 1][1]);
+          ctx.lineTo(p.pts[i][0], p.pts[i][1]); ctx.stroke();
+        }
+      } else {
+        ctx.lineWidth = p.width;
+        ctx.beginPath();
+        ctx.moveTo(p.pts[0][0], p.pts[0][1]);
+        for (let i = 1; i < p.pts.length; i++) ctx.lineTo(p.pts[i][0], p.pts[i][1]);
+        ctx.stroke();
+      }
       ctx.strokeStyle = P.waterLight; ctx.lineWidth = 4; ctx.lineCap = 'round';
       for (let i = 1; i < p.pts.length; i += 2) {
         const ax = p.pts[i - 1][0], ay = p.pts[i - 1][1], bx = p.pts[i][0], by = p.pts[i][1];

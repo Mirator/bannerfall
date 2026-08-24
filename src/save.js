@@ -1,6 +1,6 @@
 // Campaign save schema — the pure boundary between persisted text and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r06a7e18cad00';
-import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r06a7e18cad00';
+import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r3d4da160c3c7';
+import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r3d4da160c3c7';
 
 // Version 2 made party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.

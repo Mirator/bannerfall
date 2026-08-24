@@ -1,15 +1,15 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=r06a7e18cad00';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r06a7e18cad00';
-import { Battle } from './battle.js?v=r06a7e18cad00';
-import { World } from './world.js?v=r06a7e18cad00';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r06a7e18cad00';
-import { FIELD } from './battle/constants.js?v=r06a7e18cad00';
-import { ACTIONS } from './input-actions.js?v=r06a7e18cad00';
-import { createWebPlatform } from './platform/web-platform.js?v=r06a7e18cad00';
-import { SaveRepository } from './persistence/save-repository.js?v=r06a7e18cad00';
-import { buildSummaryModel } from './world-screens.js?v=r06a7e18cad00';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=r06a7e18cad00';
+import { PAL, WORLD } from './data.js?v=r3d4da160c3c7';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3d4da160c3c7';
+import { Battle } from './battle.js?v=r3d4da160c3c7';
+import { World } from './world.js?v=r3d4da160c3c7';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r3d4da160c3c7';
+import { FIELD } from './battle/constants.js?v=r3d4da160c3c7';
+import { ACTIONS } from './input-actions.js?v=r3d4da160c3c7';
+import { createWebPlatform } from './platform/web-platform.js?v=r3d4da160c3c7';
+import { SaveRepository } from './persistence/save-repository.js?v=r3d4da160c3c7';
+import { buildSummaryModel } from './world-screens.js?v=r3d4da160c3c7';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=r3d4da160c3c7';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -799,7 +799,7 @@ window.game = {
       // Plan 024 Phase 8: brief-derived battle scenarios, pinned to world positions that
       // provably yield the terrain each name promises. Verified at world seed 7, approach
       // 'E', brief seed 12345 (see plans/024-battlefield-rework.md's Phase 8 section):
-      //   battle_river      (1150,1000) — 1 river, ford crossing, 7 woods, 2 hills, 2 roads
+      //   battle_river      (1025,940)  — 1 river and its ford inside the gameplay camera
       //   battle_woods      (300,1500)  — no river, 8 woods, 6 hills, 7 scrub
       //   battle_settlement (985,640)   — 1 river with a real bridge, settlement, 8 woods, 2 roads
       // Unlike battle_small/big/bridge (deliberately briefless template fights), these carry a
@@ -809,7 +809,7 @@ window.game = {
       game.startWorld(null);
       const world = game.scene;
       const pos = {
-        battle_river: [1150, 1000],
+        battle_river: [1025, 940],
         battle_woods: [300, 1500],
         battle_settlement: [985, 640],
       }[name];

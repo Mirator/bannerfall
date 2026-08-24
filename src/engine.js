@@ -1,5 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r06a7e18cad00';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r3d4da160c3c7';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -349,10 +349,11 @@ const LIGHT_COS = Math.cos(LIGHT_ANGLE), LIGHT_SIN = Math.sin(LIGHT_ANGLE);
 // Hard-edged cast shadow for a "standing" object of given height: a flat ellipse stretched away
 // from the object along the shared light direction, growing with height, rather than a soft
 // centered contact blob.
-export function shadow(ctx, x, y, r, h, color) {
+export function shadow(ctx, x, y, r, h, color, alpha = 1) {
   ctx.fillStyle = color;
   const len = h * 0.55;
   ctx.save();
+  ctx.globalAlpha *= alpha;
   ctx.translate(x + LIGHT_COS * len, y + LIGHT_SIN * len * 0.6);
   ctx.rotate(LIGHT_ANGLE);
   ctx.beginPath();
@@ -362,8 +363,8 @@ export function shadow(ctx, x, y, r, h, color) {
 }
 
 // Thronefall-style two-tone triangle tree (stacked)
-export function tree(ctx, x, y, s, light, dark, trunk) {
-  shadow(ctx, x, y, s * 0.5, s * 1.3, trunk);
+export function tree(ctx, x, y, s, light, dark, trunk, shadowAlpha = 1) {
+  shadow(ctx, x, y, s * 0.5, s * 1.3, trunk, shadowAlpha);
   for (let i = 0; i < 2; i++) {
     const yy = y - i * s * 0.55, ss = s * (1 - i * 0.28);
     ctx.fillStyle = dark;
@@ -374,8 +375,8 @@ export function tree(ctx, x, y, s, light, dark, trunk) {
 }
 
 // Two-tone rock
-export function rock(ctx, x, y, s, light, dark, shadowC, rot = 0.3) {
-  shadow(ctx, x, y + s * 0.2, s * 0.9, s * 0.8, shadowC);
+export function rock(ctx, x, y, s, light, dark, shadowC, rot = 0.3, shadowAlpha = 1) {
+  shadow(ctx, x, y + s * 0.2, s * 0.9, s * 0.8, shadowC, shadowAlpha);
   const pts = [];
   for (let i = 0; i < 6; i++) {
     const a = rot + i / 6 * TAU;
@@ -393,10 +394,10 @@ export function rock(ctx, x, y, s, light, dark, shadowC, rot = 0.3) {
 
 // Mountain cluster (for world map) — three tones: shadow face, lit face, snow cap.
 // One extra facet is what separates "volumetric rock" from "flat triangle" at a glance.
-export function mountain(ctx, x, y, s, ink, cream) {
+export function mountain(ctx, x, y, s, ink, cream, shadowAlpha = 0.25) {
   // cast shadow first — mountains obey the same up-left light as every other standing object
   ctx.save();
-  ctx.globalAlpha = 0.25;
+  ctx.globalAlpha *= shadowAlpha;
   ctx.fillStyle = ink;
   ctx.beginPath(); ctx.moveTo(x - s * 0.6, y + s * 0.42); ctx.lineTo(x + s * 1.75, y + s * 0.42);
   ctx.lineTo(x + s * 1.15, y + s * 0.62); ctx.lineTo(x - s * 0.4, y + s * 0.62); ctx.closePath(); ctx.fill();

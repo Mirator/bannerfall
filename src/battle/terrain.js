@@ -21,8 +21,8 @@
 // never from `fxRng` (decoration only). The pre-existing area-scaled rock/tree scatter below
 // keeps using `simRng` exactly as it did before this phase — it is not new, and its draw count
 // and order are unchanged, so it does not shift anything downstream.
-import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r06a7e18cad00';
-import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r06a7e18cad00';
+import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r3d4da160c3c7';
+import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r3d4da160c3c7';
 
 // See the corridor-safety comment above the hill loop in buildFromBrief for the measurement
 // behind these two numbers.
@@ -122,9 +122,10 @@ function addGroundDetail(battle, fxRng) {
 
 // Reed clusters along a river bank, offset to either side of the polyline by roughly the
 // visible channel's half-width. Purely decorative — never touches battle.zones/obstacles.
-function scatterReeds(battle, pts, width, fxRng) {
-  const bank = width * 0.5 + 12;
+function scatterReeds(battle, pts, width, fxRng, widths = null) {
   for (let i = 1; i < pts.length; i += 2) {
+    const localWidth = widths ? (widths[i - 1] + widths[i]) / 2 : width;
+    const bank = localWidth * 0.5 + 12;
     const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
     const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
     const nx = -dy / len, ny = dx / len; // unit normal, either bank
@@ -436,9 +437,10 @@ function riverTangentAt(pointLists, x, y) {
 // channel width, stepped at r*0.9 so consecutive circles overlap into a solid wall), skipping
 // any circle within `crossing.w` of a crossing so the crossing stays genuinely passable.
 // This generalises the old fixed bridge-wall (battle.js, pre-Phase-3) to a real sampled curve.
-function buildRiverChain(battle, pts, r, crossings) {
-  const step = r * 0.9;
+function buildRiverChain(battle, pts, r, crossings, widths = null) {
   for (let i = 1; i < pts.length; i++) {
+    const localR = widths ? (widths[i - 1] + widths[i]) / 4 : r;
+    const step = localR * 0.9;
     const [ax, ay] = pts[i - 1], [bx, by] = pts[i];
     const segLen = Math.hypot(bx - ax, by - ay);
     const n = Math.max(1, Math.round(segLen / step));
@@ -446,7 +448,7 @@ function buildRiverChain(battle, pts, r, crossings) {
       const t = j / n;
       const x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
       if (crossings.some(c => dist2(x, y, c.x, c.y) < c.w * c.w)) continue;
-      battle.obstacles.push({ kind: 'none', x, y, r });
+      battle.obstacles.push({ kind: 'none', x, y, r: localR });
     }
   }
 }
@@ -457,9 +459,9 @@ function buildFromBrief(battle, field, terrainRng, fxRng) {
 
   // ---- Rivers + crossings --------------------------------------------------------------
   for (const river of field.rivers) {
-    buildRiverChain(battle, river.pts, river.width * 0.5, field.crossings);
-    battle.props.push({ kind: 'riverPoly', pts: river.pts, width: river.width });
-    scatterReeds(battle, river.pts, river.width, fxRng);
+    buildRiverChain(battle, river.pts, river.width * 0.5, field.crossings, river.widths);
+    battle.props.push({ kind: 'riverPoly', pts: river.pts, width: river.width, widths: river.widths });
+    scatterReeds(battle, river.pts, river.width, fxRng, river.widths);
   }
   battle.riverSegs = toSegments(riverPtLists);
   for (const c of field.crossings) {

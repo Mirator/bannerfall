@@ -1,17 +1,18 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=r06a7e18cad00';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r06a7e18cad00';
+import { PAL, WORLD } from '../data.js?v=r3d4da160c3c7';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r3d4da160c3c7';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
   drawSpecPanel,
-} from '../world-screens.js?v=r06a7e18cad00';
+} from '../world-screens.js?v=r3d4da160c3c7';
 import {
   settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
   strongholdStateId, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r06a7e18cad00';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=r06a7e18cad00';
+} from '../region.js?v=r3d4da160c3c7';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=r3d4da160c3c7';
+import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r3d4da160c3c7';
 
 const P = PAL.world;
 
@@ -36,86 +37,192 @@ export function drawScene(world, ctx) {
   ctx.fillRect(0, 0, cam.w, cam.h);
   cam.apply(ctx);
   ctx.fillStyle = P.ground;
-  ctx.fillRect(-40, -40, world.W + 80, world.H + 80);
-  ctx.strokeStyle = P.ink; ctx.lineWidth = 30;
-  ctx.strokeRect(-15, -15, world.W + 30, world.H + 30);
+  // Camera-safe overscan prevents an empty navy slab at the eastern/western limits on
+  // wide displays. Simulation bounds remain unchanged; this is only backdrop paint.
+  ctx.fillRect(-cam.w, -cam.h, world.W + cam.w * 2, world.H + cam.h * 2);
+  // A slim cartographic edge marks the playable boundary without turning the screen edge
+  // into a heavy navy bar when the camera reaches the map limits.
+  ctx.strokeStyle = P.ink; ctx.lineWidth = 3; ctx.globalAlpha = 0.22;
+  ctx.strokeRect(-3.5, -3.5, world.W + 7, world.H + 7);
+  ctx.globalAlpha = 1;
 
-  // ground blotches — cooler earth tone WITH the same hard ink edge every other shape
-  // class carries (the battle terrain got this; the world map must speak the same language)
-  ctx.fillStyle = '#C4873B'; ctx.fill(world._staticPaths.blotches);
-
-  // world light grading: the same sun that lights every object sweeps one broad band
-  // across the land; far corners fall into stepped shade — a lit world, not a color fill
+  // Three cached elevation countries establish a west→east hierarchy. Their irregular
+  // authored boundaries are broad and low-contrast, never screen-spanning light triangles.
+  for (const regionPath of world._staticPaths.regions) {
+    const style = WORLD_ART.regions.find(region => region.id === regionPath.id);
+    ctx.globalAlpha = 0.48;
+    ctx.fillStyle = style.ground;
+    ctx.fill(regionPath.path);
+  }
+  ctx.globalAlpha = 1;
+  // Wide, curved midpoint bands hide the polygon seams so regional changes read as a
+  // gradual country transition rather than a screen-spanning triangular light facet.
   ctx.save();
-  ctx.globalAlpha = 0.07;
-  ctx.fillStyle = '#FFF6E0';
-  ctx.fill(world._staticPaths.light);
-  ctx.fillStyle = P.ink;
-  ctx.globalAlpha = 0.06;
-  ctx.fill(world._staticPaths.shade);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const transitionColors = ['#ECA23C', '#E39A39'];
+  world._staticPaths.transitions.forEach((path, i) => {
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = transitionColors[i]; ctx.lineWidth = 180; ctx.stroke(path);
+    ctx.globalAlpha = 0.28;
+    ctx.strokeStyle = transitionColors[i]; ctx.lineWidth = 92; ctx.stroke(path);
+  });
   ctx.restore();
 
-  // rivers with bridges — solid ink-outlined bands, same hard-edge language as every
-  // other shape on this map (no alpha washes: layered translucency self-intersects into
-  // visible gaps at the river's sharper hand-authored bends, and reads as hazy against
-  // the flat-color rest of the scene). A narrow solid highlight + one animated dash pass
-  // is enough to sell current without stacking soft bands.
-  for (let ri = 0; ri < world.rivers.length; ri++) {
-    const r = world.rivers[ri];
-    const path = world._staticPaths.rivers[ri];
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    // crisp ink bank, solid like every other outline on the map
-    ctx.strokeStyle = P.ink; ctx.lineWidth = 38;
-    ctx.stroke(path);
-    // deep water body
-    ctx.strokeStyle = P.water; ctx.lineWidth = 32;
-    ctx.stroke(path);
-    // shallow center channel — a solid lighter band reads as depth, not a soft glow
-    ctx.strokeStyle = P.waterLight; ctx.lineWidth = 12;
-    ctx.stroke(path);
-    // flowing current: a dashed pass drifting downstream sells live water
-    ctx.strokeStyle = P.cream; ctx.lineWidth = 4;
-    ctx.setLineDash([12, 26]); ctx.lineDashOffset = -world.time * 50;
-    ctx.stroke(path);
-    ctx.setLineDash([]); ctx.lineDashOffset = 0;
-    for (const [bx, by] of r.bridges) drawBridge(world, ctx, bx, by);
-  }
+  // Forest floors and riparian ground are geography-supporting regions, not decoration.
+  ctx.save();
+  ctx.globalAlpha = 0.055;
+  ctx.fillStyle = WORLD_ART.palette.forestFloor;
+  ctx.fill(world._staticPaths.forestFloors);
+  ctx.fillStyle = WORLD_ART.palette.riparian;
+  for (const path of world._staticPaths.riparian) ctx.fill(path);
+  ctx.restore();
 
-  // roads between settlements
-  ctx.strokeStyle = P.cream; ctx.lineWidth = 5; ctx.setLineDash([14, 16]);
-  ctx.globalAlpha = 0.32;
-  const S = WORLD.settlements;
-  // gentle sag through a jittered midpoint: trails worn by travel, not ruler-drawn debug lines
-  // no redundant diagonals: roads that crisscross at odd angles read as debug lines
-  ctx.stroke(world._staticPaths.roads);
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = WORLD_ART.palette.roadShadow;
+  ctx.fill(world._staticPaths.deadGround);
+  ctx.restore();
+
+  // Farmland is static ground-plane geometry: two cached draws, regardless of plot count.
+  ctx.fillStyle = WORLD_ART.palette.field; ctx.globalAlpha = 0.72; ctx.fill(world._staticPaths.fields);
+  ctx.strokeStyle = WORLD_ART.palette.furrow; ctx.lineWidth = 3; ctx.globalAlpha = 0.55;
+  ctx.stroke(world._staticPaths.fieldFurrows); ctx.globalAlpha = 1;
+
+  // One filled water body, one soft bank and one interrupted flow cue. Filled asymmetric
+  // boundaries avoid the parallel-pipeline look produced by stacked centerline strokes.
+  for (let ri = 0; ri < world.rivers.length; ri++) {
+    const river = world._staticPaths.rivers[ri];
+    ctx.globalAlpha = WORLD_ART.shadow.terrainAlpha; ctx.fillStyle = WORLD_ART.palette.bank; ctx.fill(river.bank);
+    ctx.globalAlpha = 1; ctx.fillStyle = WORLD_ART.palette.water; ctx.fill(river.water);
+    ctx.globalAlpha = 0.18; ctx.fillStyle = WORLD_ART.palette.waterDeep;
+    for (const path of river.deepBends) ctx.fill(path);
+    ctx.globalAlpha = 0.58; ctx.strokeStyle = WORLD_ART.palette.sand;
+    ctx.lineWidth = 7; ctx.lineCap = 'round';
+    for (const path of river.sandBanks) ctx.stroke(path);
+    ctx.globalAlpha = 0.42; ctx.fillStyle = '#9FD8D5';
+    for (const shallow of river.shallows) {
+      ctx.fill(shallow.path);
+      const [x, y] = shallow.stone, [nx, ny] = shallow.normal;
+      ctx.fillStyle = '#72777D'; ctx.beginPath(); ctx.ellipse(x + nx * 8, y + ny * 4, 4.5, 3, 0.2, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#9FD8D5';
+    }
+    ctx.globalAlpha = 0.9; ctx.fillStyle = WORLD_ART.palette.sand;
+    for (const island of river.islands) ctx.fill(island);
+    ctx.save();
+    ctx.globalAlpha = WORLD_ART.rivers.highlightAlpha;
+    ctx.strokeStyle = WORLD_ART.palette.waterLight;
+    ctx.lineWidth = WORLD_ART.rivers.highlightWidth; ctx.lineCap = 'round';
+    ctx.setLineDash(WORLD_ART.rivers.highlightDash); ctx.lineDashOffset = -world.time * 5;
+    ctx.stroke(river.flowHighlight); ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+
+  // Roads use cached per-route classes: regional spines carry more visual weight than
+  // village lanes, while every route remains quieter than a landmark or unit marker.
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  const hud = worldHudLayout(cam.w, cam.h);
+  const roadHudRects = [hud.resource, hud.objective];
+  if (world.msgT > 0 && world.msg) roadHudRects.push({ x: cam.w / 2 - 220, y: 60, w: 440, h: 54 });
+  const distanceToRect = (x, y, rect) => Math.hypot(
+    Math.max(rect.x - x, 0, x - rect.x - rect.w),
+    Math.max(rect.y - y, 0, y - rect.y - rect.h));
+  const roadVisibility = section => {
+    const sx = (section.x - cam.x) * cam.zoom + cam.w / 2;
+    const sy = (section.y - cam.y) * cam.zoom + cam.h / 2;
+    const edgeAlpha = Math.min(1, sx / WORLD_ART.roads.edgeFade, (cam.w - sx) / WORLD_ART.roads.edgeFade,
+      sy / WORLD_ART.roads.edgeFade, (cam.h - sy) / WORLD_ART.roads.edgeFade);
+    const hudAlpha = Math.min(1, ...roadHudRects.map(rect => distanceToRect(sx, sy, rect) / WORLD_ART.roads.hudFade));
+    return Math.max(0, Math.min(edgeAlpha, hudAlpha));
+  };
+  for (const road of world._staticPaths.roads) {
+    // Paint every shoulder first, then every road surface. Interleaving the two made
+    // the next section's shoulder overprint the previous section as a dotted seam.
+    for (const section of road.sections) {
+      const visibility = roadVisibility(section);
+      if (visibility <= 0) continue;
+      ctx.strokeStyle = WORLD_ART.palette.roadShadow;
+      ctx.lineWidth = section.width + WORLD_ART.roads.shadowExtra;
+      ctx.globalAlpha = WORLD_ART.roads.shadowAlpha * visibility; ctx.stroke(section.path);
+    }
+    for (const section of road.sections) {
+      const visibility = roadVisibility(section);
+      if (visibility <= 0) continue;
+      ctx.strokeStyle = WORLD_ART.palette.road; ctx.lineWidth = section.width;
+      ctx.globalAlpha = WORLD_ART.roads.alpha * visibility; ctx.stroke(section.path);
+    }
+  }
+  ctx.lineCap = 'round'; ctx.setLineDash([]); ctx.globalAlpha = 1;
 
   // scenery below entities
   for (const it of world.scenery) {
-    if (!world.visible(it.x, it.y, it.kind === 'mtn' ? it.s * 1.5 : it.s * 2.2)) continue;
-    if (it.kind === 'mtn') mountain(ctx, it.x, it.y, it.s, P.ink, P.cream);
-    // deep green pines: vegetation must never share a hue family with hostile POI markers
-    else if (it.kind === 'tree') tree(ctx, it.x, it.y, it.s, '#4F7231', '#3A5624', P.groundShade);
-    // low shrub clumps fill the bare midground between the big scenery pieces
-    else if (it.kind === 'shrub') {
-      // vegetation, not mud: small dark-olive teardrop cluster in the trees' shape language
-      for (const [ox, s2] of [[0, it.s], [it.s * 1.1, it.s * 0.75], [-it.s * 1.0, it.s * 0.65]]) {
-        const tx = it.x + ox, ts = s2;
-        ctx.fillStyle = '#5C6E31';
-        ctx.beginPath(); ctx.moveTo(tx, it.y - ts * 1.6); ctx.lineTo(tx + ts * 0.7, it.y); ctx.lineTo(tx - ts * 0.7, it.y); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#46551F';
-        ctx.beginPath(); ctx.moveTo(tx, it.y - ts * 1.6); ctx.lineTo(tx + ts * 0.7, it.y); ctx.lineTo(tx, it.y); ctx.closePath(); ctx.fill();
+    if (it.kind === 'field') continue;
+    if (it.mapVisible === false) continue;
+    const cluster = it.clusterId && world.visualClusters.get(it.clusterId);
+    if (cluster && !world.visible(cluster.x, cluster.y, cluster.r)) continue;
+    const visualKind = it.kind === 'mapFrame' ? it.visualKind : it.kind;
+    const cullR = visualKind === 'mtn' ? WORLD_ART.scale.mountain.max * 1.7 : it.s * 3.2;
+    if (!cluster && !world.visible(it.x, it.y, cullR)) continue;
+    if (visualKind === 'mtn') {
+      // One simulation ridge becomes a three-peak visual cluster. The central peak still
+      // matches the canonical collider; the overlapping foothill is silhouette, not new terrain.
+      const peak = Math.max(WORLD_ART.scale.mountain.min,
+        Math.min(WORLD_ART.scale.mountain.max, it.s * WORLD_ART.scale.mountain.main));
+      const lead = !cluster || cluster.items[0] === it;
+      const peakCount = cluster ? cluster.items.filter(item => (item.visualKind || item.kind) === 'mtn').length : 1;
+      if (lead && peakCount < WORLD_ART.clusters.foothills.max) {
+        mountain(ctx, it.x - peak * 0.62, it.y + peak * 0.17, peak * WORLD_ART.scale.mountain.companion, P.ink, P.cream, WORLD_ART.shadow.mountainAlpha);
       }
+      mountain(ctx, it.x, it.y, peak, WORLD_ART.palette.ink, '#FFF8E8', WORLD_ART.shadow.mountainAlpha);
     }
-    else rock(ctx, it.x, it.y, it.s, '#C9C4B4', '#8E897C', P.groundShade, it.rot);
+    // deep green pines: vegetation must never share a hue family with hostile POI markers
+    else if (visualKind === 'tree') {
+      // Small deterministic groves fill the midground while keeping scenery generation,
+      // battlefield sampling and RNG consumption exactly as before.
+      const main = Math.max(WORLD_ART.scale.tree.min,
+        Math.min(WORLD_ART.scale.tree.max, it.s * WORLD_ART.scale.tree.main));
+      const region = worldRegionAt(it.x);
+      if (!cluster || cluster.items[0] === it) {
+        tree(ctx, it.x - main * 0.7, it.y + main * 0.14, main * WORLD_ART.scale.tree.companions[0], region.vegetation, WORLD_ART.palette.treeDark, P.groundShade, WORLD_ART.shadow.treeAlpha);
+        tree(ctx, it.x + main * 0.72, it.y + main * 0.22, main * WORLD_ART.scale.tree.companions[1], WORLD_ART.palette.tree, WORLD_ART.palette.treeDark, P.groundShade, WORLD_ART.shadow.treeAlpha);
+      }
+      tree(ctx, it.x, it.y, main, region.vegetation, WORLD_ART.palette.treeDark, P.groundShade, WORLD_ART.shadow.treeAlpha);
+    }
+    // low shrub clumps fill the bare midground between the big scenery pieces
+    else if (visualKind === 'shrub') {
+      // One low silhouette reinforces its parent cluster without reading as an isolated tree.
+      shadow(ctx, it.x, it.y, it.s * 1.35, it.s * 0.8, P.groundShade, WORLD_ART.shadow.smallAlpha);
+      ctx.fillStyle = WORLD_ART.palette.treeDark;
+      ctx.beginPath();
+      ctx.moveTo(it.x - it.s * 1.25, it.y);
+      ctx.lineTo(it.x - it.s * 0.62, it.y - it.s * 0.8);
+      ctx.lineTo(it.x, it.y - it.s * 0.3);
+      ctx.lineTo(it.x + it.s * 0.68, it.y - it.s * 0.92);
+      ctx.lineTo(it.x + it.s * 1.28, it.y);
+      ctx.closePath(); ctx.fill();
+    }
+    else {
+      // Rock items read as deliberate outcrops, never unexplained lone pebbles.
+      const main = Math.max(WORLD_ART.scale.rock.min,
+        Math.min(WORLD_ART.scale.rock.max, it.s * WORLD_ART.scale.rock.main));
+      rock(ctx, it.x, it.y, main, WORLD_ART.palette.rock, WORLD_ART.palette.rockDark, P.groundShade, it.rot, WORLD_ART.shadow.smallAlpha);
+      rock(ctx, it.x - main * 0.9, it.y + main * 0.28, main * WORLD_ART.scale.rock.companions[0], '#C9C5BA', '#6E7180', P.groundShade, it.rot + 0.7, WORLD_ART.shadow.smallAlpha);
+      rock(ctx, it.x + main * 0.85, it.y + main * 0.34, main * WORLD_ART.scale.rock.companions[1], '#DED9CB', '#858394', P.groundShade, it.rot - 0.5, WORLD_ART.shadow.smallAlpha);
+    }
+  }
+
+  // Crossings sit over both route and water and enter/leave with their river context.
+  for (const river of world.rivers) {
+    for (const [bx, by] of river.bridges) if (world.visible(bx, by, WORLD_ART.scale.bridge.max)) {
+      drawBridge(world, ctx, bx, by);
+    }
   }
 
   // settlements
-  for (const s of WORLD.settlements) if (world.visible(s.x, s.y, 140)) drawSettlement(world, ctx, s);
+  for (const s of WORLD.settlements) if (world.visible(s.x, s.y, 180)) drawSettlement(world, ctx, s);
   // camps
   for (const c of WORLD.camps) {
     const st = world.save.camps.find(x => x.id === c.id);
-    if (world.visible(c.x, c.y, 140)) drawCamp(world, ctx, c, st.razed);
+    if (world.visible(c.x, c.y, 180)) drawCamp(world, ctx, c, st.razed);
   }
 
   // parties
@@ -131,6 +238,7 @@ export function drawScene(world, ctx) {
   // Plan 023: the frozen-world wash sits OVER the map and its particles but UNDER the
   // cloud vignette, HUD, hover panel and any modal, so HUD text stays fully legible.
   drawFreezeCue(world, ctx, cam);
+  drawCameraEdgeVeil(world, ctx, cam);
   // corner cloud vignette — atmosphere continuity with the menu and battle scenes
   ctx.fillStyle = 'rgba(255,246,227,0.92)';
   for (const [ox, oy, r] of [[0, 0, 44], [38, 12, 34], [-32, 14, 30], [18, -24, 26]]) {
@@ -194,62 +302,93 @@ export function drawFreezeCue(world, ctx, cam) {
 export function drawBridge(world, ctx, bx, by) {
   ctx.save();
   ctx.translate(bx, by);
+  let nearestWidth = WORLD_ART.rivers.normalWidth, nearestD = Infinity;
+  for (const river of world._staticPaths.rivers) river.line.forEach((p, i) => {
+    const d = (p[0] - bx) ** 2 + (p[1] - by) ** 2;
+    if (d < nearestD) { nearestD = d; nearestWidth = river.profile[i].width; }
+  });
+  const deckW = Math.max(WORLD_ART.scale.bridge.min, Math.min(WORLD_ART.scale.bridge.max, nearestWidth + 18));
+  const deckH = 18;
+  // Dark abutments and tiny flat foam marks make contact with both bank and water explicit.
+  ctx.fillStyle = P.ink; ctx.globalAlpha = 0.28;
+  ctx.fillRect(-deckW / 2 - 5, -deckH / 2 - 4, 8, deckH + 8);
+  ctx.fillRect(deckW / 2 - 3, -deckH / 2 - 4, 8, deckH + 8);
+  ctx.fillStyle = WORLD_ART.palette.waterLight; ctx.globalAlpha = 0.38;
+  ctx.beginPath(); ctx.ellipse(-deckW * 0.34, -deckH * 0.7, 7, 2, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(deckW * 0.32, deckH * 0.72, 6, 1.8, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = P.ink; ctx.globalAlpha = 0.22;
-  ctx.beginPath(); ctx.ellipse(2, 4, 29, 23, 0, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2, 4, deckW / 2, deckH / 2 + 3, 0, 0, TAU); ctx.fill();
   ctx.globalAlpha = 1;
-  const planks = 6, pw = 52 / planks;
+  const planks = 6, pw = deckW / planks;
   for (let i = 0; i < planks; i++) {
     ctx.fillStyle = i % 2 ? '#E8D7A8' : P.cream;
-    ctx.fillRect(-26 + i * pw, -20, pw, 40);
+    ctx.fillRect(-deckW / 2 + i * pw, -deckH / 2, pw, deckH);
   }
   ctx.strokeStyle = P.ink; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.4;
   for (let i = 1; i < planks; i++) {
-    ctx.beginPath(); ctx.moveTo(-26 + i * pw, -18); ctx.lineTo(-26 + i * pw, 18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-deckW / 2 + i * pw, -deckH / 2 + 2); ctx.lineTo(-deckW / 2 + i * pw, deckH / 2 - 2); ctx.stroke();
   }
   ctx.globalAlpha = 1;
   ctx.strokeStyle = P.ink; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(-26, -20); ctx.lineTo(26, -20); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-26, 20); ctx.lineTo(26, 20); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-deckW / 2, -deckH / 2); ctx.lineTo(deckW / 2, -deckH / 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-deckW / 2, deckH / 2); ctx.lineTo(deckW / 2, deckH / 2); ctx.stroke();
   ctx.lineWidth = 2.5;
   for (let px = -19; px <= 19; px += 12.5) {
-    ctx.beginPath(); ctx.moveTo(px, -20); ctx.lineTo(px, -25); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(px, 20); ctx.lineTo(px, 25); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px, -deckH / 2); ctx.lineTo(px, -deckH / 2 - 5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px, deckH / 2); ctx.lineTo(px, deckH / 2 + 5); ctx.stroke();
   }
   ctx.fillStyle = P.ink;
-  for (const [px, py] of [[-26, -20], [26, -20], [-26, 20], [26, 20]]) {
+  for (const [px, py] of [[-deckW / 2, -deckH / 2], [deckW / 2, -deckH / 2], [-deckW / 2, deckH / 2], [deckW / 2, deckH / 2]]) {
     ctx.beginPath(); ctx.arc(px, py, 3.5, 0, TAU); ctx.fill();
   }
   ctx.restore();
 }
 
 export function drawSettlement(world, ctx, s) {
+  ctx.save();
   const town = s.kind === 'town';
-  shadow(ctx, s.x, s.y + 10, town ? 52 : 34, 14, P.groundShade);
+  const landmarkScale = town ? WORLD_ART.scale.fort.scale : WORLD_ART.scale.village.scale;
+  ctx.translate(s.x, s.y); ctx.scale(landmarkScale, landmarkScale); ctx.translate(-s.x, -s.y);
+  shadow(ctx, s.x, s.y + 12, town ? 70 : 52, town ? 36 : 28, P.groundShade, WORLD_ART.shadow.landmarkAlpha);
+  const roofColor = town ? '#394B70'
+    : s.id === 'ashford' ? '#24569A' : s.id === 'brindle' ? '#326746' : '#D8672B';
   // houses
   const house = (hx, hy, w, hh) => {
     // extruded: lit front + dark side wall + two-tone roof — drawn volume, not a flat glyph
     const ext = w * 0.26;
-    ctx.fillStyle = '#3A4A72'; ctx.fillRect(hx - w / 2, hy - hh, w, hh);
-    ctx.fillStyle = P.ink;
+    ctx.fillStyle = '#FFF4D8'; ctx.fillRect(hx - w / 2, hy - hh, w, hh);
+    ctx.fillStyle = '#D8C79E';
     ctx.beginPath(); ctx.moveTo(hx + w / 2, hy - hh); ctx.lineTo(hx + w / 2 + ext, hy - hh - ext * 0.4);
     ctx.lineTo(hx + w / 2 + ext, hy - ext * 0.4); ctx.lineTo(hx + w / 2, hy); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = P.cream;
+    ctx.fillStyle = roofColor;
     ctx.beginPath(); ctx.moveTo(hx - w / 2 - 3, hy - hh); ctx.lineTo(hx, hy - hh - w * 0.55); ctx.lineTo(hx + w / 2 + 3, hy - hh); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = shade(P.cream, 0.8);
+    ctx.fillStyle = shade(roofColor, 0.7);
     ctx.beginPath(); ctx.moveTo(hx, hy - hh - w * 0.55); ctx.lineTo(hx + w / 2 + 3, hy - hh);
     ctx.lineTo(hx + w / 2 + ext, hy - hh - ext * 0.4); ctx.closePath(); ctx.fill();
+    // Tiny amber windows are enough to make each building read as inhabited at map scale.
+    ctx.fillStyle = P.accent;
+    ctx.fillRect(hx - w * 0.27, hy - hh * 0.55, Math.max(3, w * 0.13), Math.max(3, hh * 0.23));
+    ctx.fillStyle = '#8F4A2B';
+    ctx.fillRect(hx + w * 0.12, hy - Math.max(7, hh * 0.48), Math.max(4, w * 0.14), Math.max(7, hh * 0.48));
   };
   if (town) {
     // keep with towers
-    ctx.fillStyle = P.ink; ctx.fillRect(s.x - 45, s.y - 60, 90, 60);
+    ctx.fillStyle = '#6F7890'; ctx.fillRect(s.x - 45, s.y - 60, 90, 60);
     ctx.fillStyle = P.cream; ctx.fillRect(s.x - 45, s.y - 70, 90, 12);
     for (const tx of [-45, 45]) {
-      ctx.fillStyle = P.ink; ctx.fillRect(s.x + tx - 12, s.y - 90, 24, 90);
+      ctx.fillStyle = '#59657F'; ctx.fillRect(s.x + tx - 12, s.y - 90, 24, 90);
       ctx.fillStyle = P.cream; ctx.fillRect(s.x + tx - 15, s.y - 98, 30, 10);
     }
     ctx.fillStyle = P.accent;
     ctx.beginPath(); ctx.moveTo(s.x, s.y - 98); ctx.lineTo(s.x, s.y - 124); ctx.lineTo(s.x + 20, s.y - 118); ctx.lineTo(s.x, s.y - 112); ctx.closePath(); ctx.fill();
     house(s.x - 80, s.y + 26, 30, 22); house(s.x + 78, s.y + 20, 26, 18);
+    // Gate, slit windows and stepped stone base turn the keep from a block into a landmark.
+    ctx.fillStyle = P.ink;
+    rrect(ctx, s.x - 12, s.y - 30, 24, 30, 10); ctx.fill();
+    ctx.fillStyle = '#27324D';
+    for (const wx of [-27, 0, 27]) ctx.fillRect(s.x + wx - 2, s.y - 48, 4, 12);
+    ctx.fillStyle = '#69748A';
+    ctx.fillRect(s.x - 58, s.y, 116, 8);
   } else {
     // tilled fields flank the village: irregular angled furrow strips in two close earth
     // tones — organic farmland, not a debug rectangle with pinstripes
@@ -269,30 +408,44 @@ export function drawSettlement(world, ctx, s) {
       }
       ctx.restore();
     }
-    // varied silhouettes: a long hall, a small hut, and a watchtower — not three same cubes
-    house(s.x - 24, s.y + 10, 40, 18);
-    house(s.x + 22, s.y + 16, 20, 14);
+    // A readable miniature village: varied roofs overlap into one strong silhouette while
+    // remaining open enough that the hero can be seen when riding through it.
+    house(s.x - 30, s.y + 10, 40, 18);
+    house(s.x + 18, s.y + 16, 22, 15);
+    house(s.x + 43, s.y + 5, 24, 17);
+    house(s.x - 2, s.y - 5, 26, 20);
+    // Chapel tower supplies a clear vertical landmark among the clustered roofs.
+    ctx.fillStyle = '#FFF4D8'; ctx.fillRect(s.x + 5, s.y - 42, 17, 34);
+    ctx.fillStyle = shade(roofColor, 0.7);
+    ctx.beginPath(); ctx.moveTo(s.x + 2, s.y - 42); ctx.lineTo(s.x + 13.5, s.y - 57);
+    ctx.lineTo(s.x + 25, s.y - 42); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = P.accent; ctx.fillRect(s.x + 11, s.y - 31, 5, 9);
     ctx.fillStyle = P.ink; ctx.fillRect(s.x - 2, s.y - 34, 12, 26);
     ctx.fillStyle = P.cream;
     ctx.beginPath(); ctx.moveTo(s.x - 6, s.y - 34); ctx.lineTo(s.x + 4, s.y - 44); ctx.lineTo(s.x + 14, s.y - 34); ctx.closePath(); ctx.fill();
     // windmill vane
     ctx.strokeStyle = P.ink; ctx.lineWidth = 3;
-    const a = world.time * 0.8;
-    ctx.beginPath(); ctx.moveTo(s.x - 40, s.y - 30); ctx.lineTo(s.x - 40, s.y + 6); ctx.stroke();
-    for (let i = 0; i < 4; i++) {
-      const aa = a + i * Math.PI / 2;
-      ctx.beginPath(); ctx.moveTo(s.x - 40, s.y - 30); ctx.lineTo(s.x - 40 + Math.cos(aa) * 16, s.y - 30 + Math.sin(aa) * 16); ctx.stroke();
+    if (s.id === 'ashford') {
+      const a = world.time * 0.8;
+      ctx.beginPath(); ctx.moveTo(s.x - 40, s.y - 30); ctx.lineTo(s.x - 40, s.y + 6); ctx.stroke();
+      for (let i = 0; i < 4; i++) {
+        const aa = a + i * Math.PI / 2;
+        ctx.beginPath(); ctx.moveTo(s.x - 40, s.y - 30); ctx.lineTo(s.x - 40 + Math.cos(aa) * 16, s.y - 30 + Math.sin(aa) * 16); ctx.stroke();
+      }
     }
+    // Warm village green and path bind the separate buildings into one destination.
+    ctx.save();
+    ctx.globalAlpha = 0.48; ctx.strokeStyle = '#FFE7AF'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(s.x - 60, s.y + 22); ctx.quadraticCurveTo(s.x, s.y + 5, s.x + 62, s.y + 20); ctx.stroke();
+    ctx.restore();
   }
-  // name — on a small cream chip, matching the game's one pill/chip text convention
+  // Dark destination plates match the HUD hierarchy and stay readable over pale roads.
   ctx.font = '800 14px system-ui, sans-serif';
   ctx.textAlign = 'center';
   const nw = ctx.measureText(s.name).width + 18;
-  ctx.fillStyle = P.cream;
-  rrect(ctx, s.x - nw / 2, s.y + 34, nw, 20, 6); ctx.fill();
-  ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
-  rrect(ctx, s.x - nw / 2, s.y + 34, nw, 20, 6); ctx.stroke();
   ctx.fillStyle = P.ink;
+  rrect(ctx, s.x - nw / 2, s.y + 34, nw, 20, 6); ctx.fill();
+  ctx.fillStyle = P.cream;
   ctx.fillText(s.name, s.x, s.y + 45);
   // the specialization glyph rides on the name chip — one compact status icon
   {
@@ -353,6 +506,35 @@ export function drawSettlement(world, ctx, s) {
     ctx.beginPath(); ctx.arc(s.x, s.y, (town ? 76 : 58) + pulse, 0, TAU); ctx.stroke();
     ctx.restore();
   }
+  ctx.restore();
+}
+
+// A restrained screen-space frame turns unavoidable camera clipping of large, non-
+// interactive silhouettes into a deliberate edge treatment. It never affects culling,
+// world coordinates, input, or HUD contrast.
+function drawCameraEdgeVeil(world, ctx, cam) {
+  const size = WORLD_ART.framing.edgeVeil;
+  const alpha = WORLD_ART.framing.edgeVeilAlpha;
+  if (world._edgeVeilW !== cam.w || world._edgeVeilH !== cam.h) {
+    const specs = [
+      [0, 0, size, 0], [cam.w, 0, cam.w - size, 0],
+      [0, 0, 0, size], [0, cam.h, 0, cam.h - size],
+    ];
+    world._edgeVeilGradients = specs.map(([x0, y0, x1, y1]) => {
+      const g = ctx.createLinearGradient(x0, y0, x1, y1);
+      g.addColorStop(0, `rgba(30,42,74,${alpha})`);
+      g.addColorStop(1, 'rgba(30,42,74,0)');
+      return g;
+    });
+    world._edgeVeilW = cam.w; world._edgeVeilH = cam.h;
+  }
+  const rects = [[0, 0, size, cam.h], [cam.w - size, 0, size, cam.h],
+    [0, 0, cam.w, size], [0, cam.h - size, cam.w, size]];
+  ctx.save();
+  for (let i = 0; i < rects.length; i++) {
+    ctx.fillStyle = world._edgeVeilGradients[i]; ctx.fillRect(...rects[i]);
+  }
+  ctx.restore();
 }
 
 export function drawCamp(world, ctx, c, razed) {
@@ -364,7 +546,10 @@ export function drawCamp(world, ctx, c, razed) {
     }
     return;
   }
-  shadow(ctx, c.x, c.y + 8, c.stronghold ? 52 : 28, 12, P.groundShade);
+  ctx.save();
+  const campScale = c.stronghold ? WORLD_ART.scale.fort.scale : WORLD_ART.scale.camp.scale;
+  ctx.translate(c.x, c.y); ctx.scale(campScale, campScale); ctx.translate(-c.x, -c.y);
+  shadow(ctx, c.x, c.y + 8, c.stronghold ? 52 : 28, 12, P.groundShade, WORLD_ART.shadow.landmarkAlpha);
   const tent = (tx, ty, s) => {
     ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.moveTo(tx - s, ty); ctx.lineTo(tx, ty - s * 1.2); ctx.lineTo(tx + s, ty); ctx.closePath(); ctx.fill();
@@ -385,9 +570,12 @@ export function drawCamp(world, ctx, c, razed) {
     tent(c.x - 26, c.y + 26, 15); tent(c.x + 26, c.y + 28, 17);
     ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.moveTo(c.x, c.y - 52); ctx.lineTo(c.x, c.y - 80); ctx.lineTo(c.x + 20, c.y - 73); ctx.lineTo(c.x, c.y - 66); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = P.ink;
     ctx.font = '800 15px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(c.name, c.x, c.y + 58);
+    const holdW = ctx.measureText(c.name).width + 22;
+    ctx.fillStyle = P.ink;
+    rrect(ctx, c.x - holdW / 2, c.y + 43, holdW, 22, 6); ctx.fill();
+    ctx.fillStyle = P.cream;
+    ctx.fillText(c.name, c.x, c.y + 55);
     // Milestone 025 Slice A: the hold's power state is a map-readable word chip,
     // not a hidden number — its colour deepens as the hold weakens toward Exposed.
     const powerId = strongholdStateId(world.save);
@@ -414,11 +602,10 @@ export function drawCamp(world, ctx, c, razed) {
     ctx.textAlign = 'center';
     const cw2 = ctx.measureText('Bandit camp').width + 16;
     const ly2 = Math.min(c.y + 24, world.H - 30);
-    ctx.fillStyle = P.cream;
-    rrect(ctx, c.x - cw2 / 2, ly2, cw2, 19, 6); ctx.fill();
-    ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
-    rrect(ctx, c.x - cw2 / 2, ly2, cw2, 19, 6); ctx.stroke();
     ctx.fillStyle = P.enemy;
+    rrect(ctx, c.x - cw2 / 2, ly2, cw2, 19, 6); ctx.fill();
+    ctx.fillStyle = P.cream;
     ctx.fillText('Bandit camp', c.x, ly2 + 10);
   }
+  ctx.restore();
 }
