@@ -21,8 +21,8 @@
 // never from `fxRng` (decoration only). The pre-existing area-scaled rock/tree scatter below
 // keeps using `simRng` exactly as it did before this phase — it is not new, and its draw count
 // and order are unchanged, so it does not shift anything downstream.
-import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r47a9e4eb3305';
-import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r47a9e4eb3305';
+import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r06a7e18cad00';
+import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r06a7e18cad00';
 
 // See the corridor-safety comment above the hill loop in buildFromBrief for the measurement
 // behind these two numbers.

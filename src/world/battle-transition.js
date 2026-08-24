@@ -12,13 +12,13 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r47a9e4eb3305';
-import { dist2, clamp } from '../engine.js?v=r47a9e4eb3305';
-import { ACTIONS } from '../input-actions.js?v=r47a9e4eb3305';
-import { buildBriefModel } from '../world-screens.js?v=r47a9e4eb3305';
-import { sampleBattlefield } from './battlefield-brief.js?v=r47a9e4eb3305';
-import { FIELD } from '../battle/constants.js?v=r47a9e4eb3305';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r47a9e4eb3305';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r06a7e18cad00';
+import { dist2, clamp } from '../engine.js?v=r06a7e18cad00';
+import { ACTIONS } from '../input-actions.js?v=r06a7e18cad00';
+import { buildBriefModel } from '../world-screens.js?v=r06a7e18cad00';
+import { sampleBattlefield } from './battlefield-brief.js?v=r06a7e18cad00';
+import { FIELD } from '../battle/constants.js?v=r06a7e18cad00';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r06a7e18cad00';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -335,7 +335,14 @@ export function updateWorldScreens(world, inp) {
       world.game.invalidate();
       return true;
     }
-    if (clickedRect(btn.spec)) { world.chooseSpec(options[btn.spec.index].id); return true; }
+    // drawSpecPanel returns one merged block whose `rows` are the individual option
+    // rects (it has no single `index`) — resolve the clicked row explicitly and keep
+    // keyboard/pointer selection consistent.
+    if (clickedRect(btn.spec)) {
+      const rows = btn.spec.rows || [];
+      const i = rows.findIndex(r => inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h);
+      if (i >= 0 && options[i]) { world.screen.index = i; world.chooseSpec(options[i].id); return true; }
+    }
     if (inp.pressedAction(ACTIONS.CONFIRM)) { world.chooseSpec(options[world.screen.index].id); return true; }
     if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.dismissSpecChoice(); return true; }
     return true;

@@ -1,17 +1,17 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=r47a9e4eb3305';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r47a9e4eb3305';
+import { PAL, WORLD } from '../data.js?v=r06a7e18cad00';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r06a7e18cad00';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
   drawSpecPanel,
-} from '../world-screens.js?v=r47a9e4eb3305';
+} from '../world-screens.js?v=r06a7e18cad00';
 import {
   settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
   strongholdStateId, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r47a9e4eb3305';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=r47a9e4eb3305';
+} from '../region.js?v=r06a7e18cad00';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=r06a7e18cad00';
 
 const P = PAL.world;
 
