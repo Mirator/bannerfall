@@ -288,15 +288,19 @@ npx playwright test tests/e2e/campaign-persistence.spec.js
 ## Save schema and migration
 
 `src/save.js` is the authoritative save boundary. Unversioned browser saves
-are treated as version 0, and version-1 and version-2 browser saves are
-migrated to the current version 3 shape with documented legacy defaults.
+are treated as version 0, and version-1 through version-3 browser saves are
+migrated to the current version 4 shape with documented legacy defaults.
 Version-1 roaming parties missing `home` receive the matching canonical camp
 coordinate during migration; current-version parties must carry a finite,
-valid `home`. Version 3 (Plan 020) adds `save.settlements` — one
+valid `home`. Version 3 (Plan 020) added `save.settlements` — one
 `{id, occupied}` entry per `WORLD.settlements`, recording whether a party that
 broke off from a chase currently occupies it — and an optional party
 `occupying` field naming that settlement; pre-version-3 saves never had
-either, so migration defaults every settlement to unoccupied. Unknown future
+either, so migration defaults every settlement to unoccupied. Version 4
+(Milestone 025) extends each settlement record with its `owner` and its
+permanent `spec` choice, adds the campaign-summary stat counters
+(`battlesLost`, `goldEarned`, `goldSpent`, `captures`), and migrates a v3
+settlement's implied ownership forward. Unknown future
 versions, unknown production IDs (including an unknown settlement `id` or a
 non-boolean `occupied`), malformed nested values, impossible HP/max-HP
 relationships, and out-of-range numbers are rejected and the active save slot

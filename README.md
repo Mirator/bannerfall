@@ -40,11 +40,11 @@ rules.
 ### Save compatibility
 
 `src/save.js` is the canonical versioned save schema and migration boundary.
-It migrates the unversioned legacy format and versions 1 and 2, writes current
-saves as version 3, and rejects malformed or unsupported future data before it
-reaches the world simulation. Keep the field-level contract in that module; see
-`tests/README.md` for valid fixture construction and the focused schema test
-command.
+It migrates the unversioned legacy format and versions 1, 2, and 3, writes
+current saves as version 4, and rejects malformed or unsupported future data
+before it reaches the world simulation. Keep the field-level contract in that
+module; see `tests/README.md` for valid fixture construction and the focused
+schema test command.
 
 ## Structure
 
