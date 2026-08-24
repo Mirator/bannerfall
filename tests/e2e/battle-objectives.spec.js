@@ -1,0 +1,500 @@
+import { test, expect } from '@playwright/test';
+import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
+
+// Milestone 025 Slice C regression guard: the three reusable battle objectives.
+//
+// Every test here drives the REAL ordered tick pipeline (updateActivePhases ->
+// updateObjectivePhase -> resolveBattleResult) through the synchronous fixed-step
+// API, with the live scheduler parked so rAF timing cannot contaminate a
+// measurement — the same harness rules stance-balance and battlefield-terrain
+// follow. The one architecture claim under everything: objective code computes
+// status, and ONLY resolveBattleResult() ends a fight.
+//
+// Intro rule (tests/README.md): a battle opens in 'intro' and runs no phases, so
+// every fixture forces state='fight'/deployT=0 directly, exactly like
+// battlefield-terrain. Fixture enemies are re-pinned (position AND hp) at every
+// batch boundary — an archer left shooting at a static fixture can otherwise
+// deplete it into an accidental elimination victory.
+
+const DT = 1 / 60;
+
+// Plain descriptors — functions cannot cross the evaluate boundary, so the real
+// setup objects (troop/enemy records and the onEnd callback) are built in-page.
+const HOLD_DESC = {
+  troops: ['spear', 'spear', 'spear', 'archer'],
+  enemies: ['bandit', 'bandit', 'wolf'],
+  seed: 33, title: 'HOLD THE GROUND', arena: 'road', biome: 'meadow',
+  objective: { kind: 'hold', duration: 35, radius: 170 },
+};
+
+const BREAK_DESC = {
+  troops: ['spear', 'spear', 'archer', 'knight'],
+  enemies: ['bandit', 'bandit', 'raider'],
+  seed: 44, title: 'BREAK THE POSITION', arena: 'camp', biome: 'night',
+  objective: { kind: 'break', guards: 2, hp: 260, radius: 30 },
+};
+
+// Installs the shared fixture preamble before the app loads: expands a plain
+// descriptor into a real battle setup, starts it, and skips the intro.
+async function openBattleHarness(page) {
+  await page.addInitScript(() => {
+    window.__bootObjectiveBattle = desc => {
+      window.__g.startBattle({
+        ...desc,
+        troops: desc.troops.map(type => ({ type })),
+        enemies: desc.enemies.map(type => ({ type })),
+        onEnd: () => {},
+      });
+      const b = window.__g.scene;
+      b.state = 'fight';
+      b.deployT = 0;
+      return b;
+    };
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+}
+
+test('hold zone placement is in-bounds, obstacle-clear, and deterministic', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(setup => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const build = () => {
+        const b = window.__bootObjectiveBattle(JSON.parse(JSON.stringify(setup)));
+        const o = b.objective;
+        const inBounds = o.x - o.r >= 0 && o.x + o.r <= b.W && o.y - o.r >= 0 && o.y + o.r <= b.H;
+        // Traversable: the marked ground's centre sits outside every physical
+        // obstacle and every LOS blocker (hills/woods/houses).
+        const clearPhysical = b.obstacles.every(o2 =>
+          o2.kind === 'none' || (o2.x - o.x) ** 2 + (o2.y - o.y) ** 2 > o2.r * o2.r);
+        const clearBlockers = b.blockers.every(o2 =>
+          (o2.x - o.x) ** 2 + (o2.y - o.y) ** 2 > o2.r * o2.r);
+        return { x: o.x, y: o.y, r: o.r, duration: o.duration, inBounds, clearPhysical, clearBlockers };
+      };
+      const a = build();
+      const c = build();
+      return { a, deterministic: a.x === c.x && a.y === c.y };
+    } finally { g.update = real; }
+  }, HOLD_DESC);
+  expect(out.a.inBounds, 'hold zone inside the field').toBe(true);
+  expect(out.a.clearPhysical, 'hold zone centre outside every obstacle').toBe(true);
+  expect(out.a.clearBlockers, 'hold zone centre outside every LOS blocker').toBe(true);
+  expect(out.a.duration).toBe(35);
+  expect(out.deterministic).toBe(true);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('the hold clock runs only while a squad holds and no enemy contests', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      const o = b.objective;
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      const pin = (unit, x, y) => { unit.x = x; unit.y = y; unit.hp = 99999; };
+      const pinFoes = (except, x, y) => {
+        for (const e of b.enemies) if (e !== except) pin(e, b.W - 120, b.H - 120);
+        if (except) pin(except, x, y);
+      };
+      const holder = b.troops[0];
+      const foe = b.enemies[0];
+
+      // Held and uncontested: the timer runs.
+      for (let i = 0; i < 10; i++) { pinFoes(null); pin(holder, o.x, o.y); step(0.1); }
+      const heldOnly = { held: o.held, contested: o.contested, progress: o.progress };
+
+      // An enemy inside the zone contests it: the clock pauses even though the
+      // squad is still standing on the ground.
+      for (let i = 0; i < 10; i++) { pinFoes(foe, o.x + 20, o.y); pin(holder, o.x, o.y); step(0.1); }
+      const contested = { held: o.held, contested: o.contested, progress: o.progress };
+
+      // The holder leaves: an empty zone does not bank progress either.
+      for (let i = 0; i < 10; i++) { pinFoes(foe, o.x + 20, o.y); pin(holder, o.x - o.r - 140, o.y); step(0.1); }
+      const empty = { held: o.held, contested: o.contested, progress: o.progress };
+
+      // Holder back, contest driven off: the clock resumes from where it paused.
+      for (let i = 0; i < 10; i++) { pinFoes(null); pin(holder, o.x, o.y); step(0.1); }
+      const resumed = { held: o.held, contested: o.contested, progress: o.progress };
+      return { heldOnly, contested, empty, resumed };
+    } finally { g.update = real; }
+  }, { setup: HOLD_DESC, dt: DT });
+  expect(out.heldOnly.held).toBe(true);
+  expect(out.heldOnly.contested).toBe(false);
+  expect(out.heldOnly.progress).toBeGreaterThan(0.8);
+
+  expect(out.contested.contested).toBe(true);
+  expect(out.contested.progress).toBeCloseTo(out.heldOnly.progress, 1);
+
+  expect(out.empty.held).toBe(false);
+  expect(out.empty.contested).toBe(true);
+  expect(out.empty.progress).toBeCloseTo(out.heldOnly.progress, 1);
+
+  expect(out.resumed.held).toBe(true);
+  expect(out.resumed.contested).toBe(false);
+  expect(out.resumed.progress).toBeGreaterThan(out.heldOnly.progress + 0.8);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('holding to the timeout wins through resolveBattleResult exactly once', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      const o = b.objective;
+      let endCalls = 0;
+      const realEnd = b.endBattle.bind(b);
+      b.endBattle = (...args) => { endCalls++; realEnd(...args); };
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      o.progress = o.duration - 0.5;
+      b.troops[0].x = o.x; b.troops[0].y = o.y;
+      for (let i = 0; i < 6; i++) {
+        for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; }
+        step(0.1);
+      }
+      const ended = { state: b.state, victory: b.victory, endCalls };
+      step(3); // ride out the end-banner hold so onEnd fires
+      return { ended, onEndFired: b.onEndFired, enemiesLeft: b.enemies.length };
+    } finally { g.update = real; }
+  }, { setup: HOLD_DESC, dt: DT });
+  expect(out.ended.state).toBe('end');
+  expect(out.ended.victory).toBe(true);
+  expect(out.ended.endCalls, 'objective timeout ends the fight exactly once').toBe(1);
+  expect(out.onEndFired).toBe(true);
+  // Killing every enemy remains a valid PARALLEL win — here the enemies survived.
+  expect(out.enemiesLeft).toBeGreaterThan(0);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('elimination remains a valid hold-objective victory with the clock unfinished', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      let endCalls = 0;
+      const realEnd = b.endBattle.bind(b);
+      b.endBattle = (...args) => { endCalls++; realEnd(...args); };
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      step(0.5);
+      for (const e of [...b.enemies]) b.damageEnemy(e, e.hp + 10, 0, 0, 'qa');
+      const before = { enemies: b.enemies.length, progress: b.objective.progress };
+      step(0.2);
+      return { before, state: b.state, victory: b.victory, endCalls };
+    } finally { g.update = real; }
+  }, { setup: HOLD_DESC, dt: DT });
+  expect(out.before.enemies).toBe(0);
+  expect(out.before.progress).toBeLessThan(35);
+  expect(out.state).toBe('end');
+  expect(out.victory).toBe(true);
+  expect(out.endCalls).toBe(1);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('a hold defense lost or abandoned resolves as a non-victory', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+
+  // Defeat: the commander falls.
+  const defeat = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      step(0.5);
+      b.damageFriendly(b.hero, true, b.hero.hp + 1, { type: 'bandit', x: b.hero.x, y: b.hero.y });
+      return { state: b.state, victory: b.victory, retreated: b.retreated };
+    } finally { g.update = real; }
+  }, { setup: HOLD_DESC, dt: DT });
+  expect(defeat.state).toBe('end');
+  expect(defeat.victory).toBe(false);
+  expect(defeat.retreated).toBe(false);
+
+  // Withdrawal: the held escape-edge decision — the player accepting the loss.
+  const withdraw = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      for (let i = 0; i < 34; i++) {
+        for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; }
+        step(0.1); // battle.time must pass 3 before the bar may fill
+      }
+      b.hero.x = 50; b.hero.y = b.H / 2; // approach E puts escape in the west
+      g.input.injectKey('KeyA', true);
+      for (let i = 0; i < 14; i++) {
+        for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; }
+        step(0.1);
+      }
+      g.input.injectKey('KeyA', false);
+      return { state: b.state, victory: b.victory, retreated: b.retreated };
+    } finally { g.update = real; }
+  }, { setup: HOLD_DESC, dt: DT });
+  expect(withdraw.state).toBe('end');
+  expect(withdraw.victory).toBe(false);
+  expect(withdraw.retreated).toBe(true);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('break guards spawn spread, obstacle-clear, in-bounds, and deterministically', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(setup => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const build = guardCount => {
+        const s = { ...setup, objective: { ...setup.objective, guards: guardCount } };
+        const b = window.__bootObjectiveBattle(s);
+        const targets = b.objectiveTargets.map(t => ({ x: t.x, y: t.y, r: t.r, hp: t.hp, maxHp: t.maxHp }));
+        const inBounds = targets.every(t =>
+          t.x - t.r >= 40 && t.x + t.r <= b.W - 40 && t.y - t.r >= 40 && t.y + t.r <= b.H - 40);
+        // The placement scan's own promise: a guard's footprint never overlaps a
+        // physical obstacle (clearOf radius + 24 margin).
+        const clear = targets.every(t => b.obstacles.every(o =>
+          o.kind === 'none' || (o.x - t.x) ** 2 + (o.y - t.y) ** 2 > (o.r + t.r + 24) ** 2));
+        const spread = guardCount === 1 ? true :
+          targets.some((t, i) => i > 0 && (t.x !== targets[0].x || t.y !== targets[0].y));
+        return { targets, inBounds, clear, spread };
+      };
+      const two = build(2);
+      const three = build(3);
+      const threeAgain = build(3);
+      return {
+        two: { count: two.targets.length, inBounds: two.inBounds, clear: two.clear, spread: two.spread, hp: two.targets[0].hp },
+        three: { count: three.targets.length, inBounds: three.inBounds, clear: three.clear, spread: three.spread },
+        deterministic: JSON.stringify(three.targets) === JSON.stringify(threeAgain.targets),
+      };
+    } finally { g.update = real; }
+  }, BREAK_DESC);
+  expect(out.two.count).toBe(2);
+  expect(out.two.inBounds).toBe(true);
+  expect(out.two.clear).toBe(true);
+  expect(out.two.spread).toBe(true);
+  expect(out.two.hp).toBe(260);
+  expect(out.three.count).toBe(3);
+  expect(out.three.inBounds).toBe(true);
+  expect(out.three.clear).toBe(true);
+  expect(out.three.spread).toBe(true);
+  expect(out.deterministic, 'same setup builds the same guard positions').toBe(true);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('destroying every guard wins even with defenders still standing — exactly once', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      let endCalls = 0;
+      const realEnd = b.endBattle.bind(b);
+      b.endBattle = (...args) => { endCalls++; realEnd(...args); };
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      for (let i = 0; i < 5; i++) {
+        for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; }
+        step(0.1);
+      }
+      for (const t of b.objectiveTargets) b.damageObjective(t, t.hp + 10);
+      const before = {
+        guardsAlive: b.objectiveTargets.filter(t => !t.dead).length,
+        enemies: b.enemies.length,
+      };
+      step(0.2);
+      step(3);
+      return { before, state: b.state, victory: b.victory, endCalls, onEndFired: b.onEndFired };
+    } finally { g.update = real; }
+  }, { setup: BREAK_DESC, dt: DT });
+  expect(out.before.guardsAlive).toBe(0);
+  expect(out.before.enemies).toBeGreaterThan(0);
+  expect(out.state).toBe('end');
+  expect(out.victory).toBe(true);
+  expect(out.endCalls, 'the last guard fells the position exactly once').toBe(1);
+  expect(out.onEndFired).toBe(true);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('eliminating every enemy also wins a break fight with guards still standing', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      step(0.5);
+      for (const e of [...b.enemies]) b.damageEnemy(e, e.hp + 10, 0, 0, 'qa');
+      const before = {
+        enemies: b.enemies.length,
+        guardsAlive: b.objectiveTargets.filter(t => !t.dead).length,
+      };
+      step(0.2);
+      return { before, state: b.state, victory: b.victory };
+    } finally { g.update = real; }
+  }, { setup: BREAK_DESC, dt: DT });
+  expect(out.before.enemies).toBe(0);
+  expect(out.before.guardsAlive).toBeGreaterThan(0);
+  expect(out.state).toBe('end');
+  expect(out.victory).toBe(true);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('a break fight where the last guard and the last enemy fall in the same tick ends once', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      // Count EFFECTIVE endings — resolveBattleResult checks its conditions in
+      // sequence and endBattle's own state guard makes the redundant second call a
+      // no-op, so the outcome must happen once, not the invocation.
+      let effectiveEnds = 0;
+      const realEnd = b.endBattle.bind(b);
+      b.endBattle = (...args) => { if (b.state !== 'end') effectiveEnds++; realEnd(...args); };
+      for (const e of [...b.enemies]) b.damageEnemy(e, e.hp + 10, 0, 0, 'qa');
+      for (const t of b.objectiveTargets) b.damageObjective(t, t.hp + 10);
+      // The last guard's death sets the death hit-stop, which consumes the next
+      // tick — step past it; the claim under test is ONE ending, not one tick.
+      for (let i = 0; i < 12; i++) real(dt);
+      return { state: b.state, victory: b.victory, effectiveEnds };
+    } finally { g.update = real; }
+  }, { setup: BREAK_DESC, dt: DT });
+  expect(out.state).toBe('end');
+  expect(out.victory).toBe(true);
+  expect(out.effectiveEnds, 'two simultaneous win conditions must produce ONE ending').toBe(1);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('losing the commander still loses a break fight', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      step(0.5);
+      b.damageFriendly(b.hero, true, b.hero.hp + 1, { type: 'bandit', x: b.hero.x, y: b.hero.y });
+      return { state: b.state, victory: b.victory, guardsAlive: b.objectiveTargets.filter(t => !t.dead).length };
+    } finally { g.update = real; }
+  }, { setup: BREAK_DESC, dt: DT });
+  expect(out.state).toBe('end');
+  expect(out.victory).toBe(false);
+  expect(out.guardsAlive).toBe(2);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('an Entrenched stronghold reserve wave arrives on schedule and keeps kill accounting coherent', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(dt => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const setup = {
+        troops: ['spear', 'spear', 'spear', 'archer'],
+        enemies: ['brute'],
+        seed: 55, title: 'WAVE TEST', arena: 'camp', biome: 'rose',
+        objective: { kind: 'break', guards: 3, hp: 260, radius: 30 },
+        waves: [{ at: 2, comp: ['bandit', 'wolf'] }],
+      };
+      const b = window.__bootObjectiveBattle(setup);
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      for (let i = 0; i < 19; i++) { for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; } step(0.1); }
+      const before = { time: b.time, enemies: b.enemies.map(e => e.type), pending: b.pendingWaves.length, total: b.totalEnemies };
+      for (let i = 0; i < 6; i++) step(0.1);
+      const after = {
+        time: b.time, enemies: b.enemies.map(e => e.type).sort(),
+        pending: b.pendingWaves.length, total: b.totalEnemies,
+        flash: b.commandFlash && b.commandFlash.text,
+      };
+      // Now wipe everything — original, wave, and guards — and the fight must end
+      // in a coherent victory (totalEnemies feeds the loot formula). The guard
+      // deaths set hit-stop, so step past it before judging the result.
+      for (const e of [...b.enemies]) b.damageEnemy(e, e.hp + 10, 0, 0, 'qa');
+      for (const t of b.objectiveTargets) b.damageObjective(t, t.hp + 10);
+      for (let i = 0; i < 12; i++) real(dt);
+      return { before, after, state: b.state, victory: b.victory, loot: b.loot };
+    } finally { g.update = real; }
+  }, DT);
+  expect(out.before.time).toBeLessThan(2);
+  expect(out.before.enemies).toEqual(['brute']);
+  expect(out.before.pending).toBe(1);
+  expect(out.after.time).toBeGreaterThanOrEqual(2);
+  expect(out.after.pending).toBe(0);
+  expect(out.after.enemies).toEqual(['bandit', 'brute', 'wolf']);
+  expect(out.after.total).toBe(3);
+  expect(out.after.flash).toBe('REINFORCEMENTS!');
+  expect(out.state).toBe('end');
+  expect(out.victory).toBe(true);
+  expect(out.loot).toBeGreaterThan(0);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('the objective panel surface exposes live progress for both kinds', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const hold = await page.evaluate(({ setup, dt }) => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      const o = b.objective;
+      const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
+      for (let i = 0; i < 5; i++) { for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; } step(0.1); }
+      b.troops[0].x = o.x; b.troops[0].y = o.y;
+      for (let i = 0; i < 5; i++) { for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; } step(0.1); }
+      return window.game.state().battle.objective;
+    } finally { g.update = real; }
+  }, { setup: HOLD_DESC, dt: DT });
+  expect(hold.kind).toBe('hold');
+  expect(hold.duration).toBe(35);
+  expect(hold.held).toBe(true);
+  expect(hold.contested).toBe(false);
+  expect(hold.progress).toBeGreaterThan(0);
+
+  const brk = await page.evaluate(setup => {
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = window.__bootObjectiveBattle(setup);
+      b.objectiveTargets[0].dead = true;
+      return window.game.state().battle.objective;
+    } finally { g.update = real; }
+  }, BREAK_DESC);
+  expect(brk.kind).toBe('break');
+  expect(brk.guardsTotal).toBe(2);
+  expect(brk.guardsAlive).toBe(1);
+  assertNoRuntimeErrors(runtimeErrors);
+});

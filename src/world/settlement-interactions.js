@@ -1,20 +1,50 @@
 // What the player can do while standing next to something: recruit and heal in a
-// settlement, buy army cap in a town, raid a camp, and the toast line that reports it.
-// Also the post-victory bookkeeping for a razed camp (campVictoryExtra).
-import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=rbe1f74f09262';
-import { dist2 } from '../engine.js?v=rbe1f74f09262';
-import { ACTIONS } from '../input-actions.js?v=rbe1f74f09262';
+// settlement, buy army cap in a town, raid a camp, claim a neutral settlement, and
+// the toast line that reports it. Also the post-victory bookkeeping for a razed
+// camp (campVictoryExtra) and the stronghold-assault request with its objective
+// descriptor (Milestone 025).
+import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=r47a9e4eb3305';
+import { dist2 } from '../engine.js?v=r47a9e4eb3305';
+import { ACTIONS } from '../input-actions.js?v=r47a9e4eb3305';
+import {
+  REGION, SPECIALIZATIONS, OWNERSHIP,
+  encounterObjective, strongholdModifiers, strongholdStateId, strongholdAdvantageLines,
+  settlementRecord, STRONGHOLD_POWER_LABELS,
+} from '../region.js?v=r47a9e4eb3305';
 
 const P = PAL.world;
 
 export function say(world, text, t = 2.4) { world.msg = text; world.msgT = t; }
 
-// each settlement quotes its own prices — Ashford's farm lads are cheap, Brindle's hunters too
+// each settlement quotes its own prices — Ashford's farm lads are cheap, Brindle's hunters too.
+// Milestone 025: an active specialization at THIS settlement overrides the local price for
+// its unit type; occupied land stops applying its benefit (isSpecActive checks held state).
 export function costAt(world, s, type) {
   const d = UNIT_TYPES[type];
+  if (s) {
+    const rec = settlementRecord(world.save, s.id);
+    if (rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied && rec.spec) {
+      const effect = SPECIALIZATIONS[rec.spec].effect;
+      if (type === 'spear' && effect.spearCost != null) return effect.spearCost;
+      if (type === 'archer' && effect.archerCost != null) return effect.archerCost;
+    }
+  }
   if (s && type === 'spear' && s.spearCost) return s.spearCost;
   if (s && type === 'archer' && s.archerCost) return s.archerCost;
   return d.cost;
+}
+
+// Local heal price: Coldwell's springs are free, a Market halves the standard rate.
+export function healCostAt(world, s) {
+  if (s && s.freeHeal) return 0;
+  if (s) {
+    const rec = settlementRecord(world.save, s.id);
+    if (rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied && rec.spec) {
+      const effect = SPECIALIZATIONS[rec.spec].effect;
+      if (effect.healCost != null) return effect.healCost;
+    }
+  }
+  return BALANCE.healCost;
 }
 
 export function recruit(world, type) {
@@ -24,6 +54,7 @@ export function recruit(world, type) {
   if (world.save.troops.length >= world.save.armyCap) { world.say('Army is at capacity'); return; }
   if (world.save.gold < cost) { world.say('Not enough gold'); return; }
   world.save.gold -= cost;
+  if (world.save.stats) world.save.stats.goldSpent += cost;
   world.save.troops.push({ type });
   world.game.sfx.coin();
   world.say(`${d.name} joined your warband`);
@@ -55,13 +86,14 @@ export function updateSettlementInteractions(world, inp) {
       if (inp.pressedAction(ACTIONS.WORLD_PRIMARY)) world.recruit('archer');
       if (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) world.recruit('knight');
       if (inp.pressedAction(ACTIONS.HEAL)) {
-        const healCost = s.freeHeal ? 0 : BALANCE.healCost;
+        const healCost = healCostAt(world, s);
         const heroHurt = world.save.heroHp < world.save.heroMaxHp;
         const troopsHurt = world.save.troops.some(t => t.hp != null && t.hp < UNIT_TYPES[t.type].hp);
         if (!heroHurt && !troopsHurt) world.say('Already rested');
         else if (world.save.gold < healCost) world.say('Not enough gold');
         else {
           world.save.gold -= healCost;
+          world.save.stats.goldSpent += healCost;
           world.save.heroHp = world.save.heroMaxHp;
           for (const t of world.save.troops) delete t.hp;
           world.game.sfx.coin();
@@ -72,8 +104,20 @@ export function updateSettlementInteractions(world, inp) {
         const cost = world.armyCapCost();
         if (world.save.gold >= cost) {
           world.save.gold -= cost; world.save.armyCap += 2;
+          world.save.stats.goldSpent += cost;
           world.game.sfx.coin(); world.say(`Army capacity is now ${world.save.armyCap}`);
         } else world.say(`Need ${cost} gold`);
+      }
+    }
+    // Milestone 025 Slice B: claiming neutral ground. G at the gates of an
+    // unoccupied, unowned settlement brings it under the banner without a fight —
+    // and queues the one-time specialization choice. Occupied land must be won
+    // back by the sword (the retake battle's onWinExtra).
+    if (s && !world.isSettlementOccupied(s) &&
+        settlementRecord(world.save, s.id)?.owner === OWNERSHIP.NEUTRAL &&
+        inp.pressedAction(ACTIONS.CLAIM)) {
+      if (world.claimSettlement(s)) {
+        world.particles.ring(world.hero.x, world.hero.y, 44, P.hero, 0.6, 4);
       }
     }
   }
@@ -102,7 +146,9 @@ export function updateSettlementInteractions(world, inp) {
 export function campVictoryExtra(world, camp, st) {
   return () => {
     st.razed = true;
-    world.save.gold += camp.stronghold ? 200 : 60;
+    const bonus = camp.stronghold ? 200 : 60;
+    world.save.gold += bonus;
+    if (world.save.stats) world.save.stats.goldEarned += bonus;
     if (camp.stronghold) world.save.won = true;
     const strongCamp = WORLD.camps.find(c => c.id === 'strong');
     for (const p of (world.save.parties || [])) {
@@ -127,27 +173,55 @@ export function campVictoryExtra(world, camp, st) {
   };
 }
 
-// Plan 021 decision 8: WORLD_PRIMARY on a camp/stronghold now opens the brief instead
+// Plan 021 decision 8: WORLD_PRIMARY on a camp/stronghold opens the brief instead
 // of committing immediately. `comp` in the descriptor is display-only — an unscouted
 // camp shows unknown in the brief (decision 6) and the real roll happens at confirm.
+//
+// Milestone 025 Slice E: the stronghold is assaultable at ANY power state once
+// found — an early attack is possible but clearly dangerous. Its descriptor carries
+// the Break-the-position objective (guard count already reduced by razed linked
+// camps) plus the power summary the brief renders; the garrison thinning and the
+// reinforcement wave are applied at CONFIRM time in battle-transition.js so an
+// abandoned brief never mutates the fight the player would have faced.
 export function updateCampInteraction(world, inp, settlement) {
   const camp = world.nearCamp();
   if (!camp || !inp.pressedAction(ACTIONS.WORLD_PRIMARY) || settlement) return false;
-  const razedCount = world.save.camps.filter(c => c.razed && c.id !== 'strong').length;
-  if (camp.stronghold && razedCount < 3) {
-    world.say(`Wolfsjaw won't fall while its camps still feed it — cut the supply lines (${razedCount}/3)`);
+  const st = world.save.camps.find(c => c.id === camp.id);
+  if (camp.stronghold) {
+    const mods = strongholdModifiers(world.save);
+    // The watchtower's reward is knowledge: with a watchtower held, the hold's
+    // deployment is revealed even before an assault is committed.
+    if (mods.revealDeployment && !st.garrison) st.garrison = world.rollGarrison(camp);
+    const label = STRONGHOLD_POWER_LABELS[mods.stateId];
+    world.requestBattle({
+      campId: camp.id,
+      title: `ASSAULT ON ${camp.name.toUpperCase()}`,
+      subtitle: `${label} — ${strongholdAdvantageLines(mods)[0]}`,
+      arena: 'camp',
+      ambush: false,
+      approach: world.approachTo(camp.x, camp.y),
+      deploy: 4, // YOU are storming THEM — they scramble to arms, not a parade formup
+      comp: st.garrison ? st.garrison.slice() : null,
+      // The razed-camp guard reduction is part of the fight itself, not just the
+      // brief prose: the objective the player must break carries mods.guards, so
+      // "2 defensive guards remain" is literally how many guards stand.
+      objective: { ...encounterObjective('stronghold'), guards: mods.guards },
+      stronghold: { mods, advantages: strongholdAdvantageLines(mods), label },
+      canWithdraw: true, // explicit WORLD_PRIMARY press — always player-initiated
+      partyMeta: { campId: camp.id },
+    });
     return true;
   }
-  const st = world.save.camps.find(c => c.id === camp.id);
   world.requestBattle({
     campId: camp.id,
-    title: camp.stronghold ? `ASSAULT ON ${camp.name.toUpperCase()}` : 'RAID THE CAMP',
-    subtitle: camp.stronghold ? 'The final battle — for the realm!' : 'One of the 3 camps — raze it to reach Wolfsjaw',
+    title: 'RAID THE CAMP',
+    subtitle: 'Break the position — one of the linked camps feeding Wolfsjaw',
     arena: 'camp',
     ambush: false,
     approach: world.approachTo(camp.x, camp.y),
     deploy: 4, // YOU are storming THEM — they scramble to arms, not a parade formup
     comp: st.garrison ? st.garrison.slice() : null,
+    objective: encounterObjective('camp'),
     canWithdraw: true, // explicit WORLD_PRIMARY press — always player-initiated
     partyMeta: { campId: camp.id },
   });

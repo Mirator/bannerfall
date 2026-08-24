@@ -1,31 +1,36 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=rbe1f74f09262';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rbe1f74f09262';
-import { SAVE_VERSION } from './save.js?v=rbe1f74f09262';
-import { buildAftermathModel } from './world-screens.js?v=rbe1f74f09262';
-import { drawScene } from './world/render-scene.js?v=rbe1f74f09262';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r47a9e4eb3305';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r47a9e4eb3305';
+import { SAVE_VERSION } from './save.js?v=r47a9e4eb3305';
+import {
+  REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
+  encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
+} from './region.js?v=r47a9e4eb3305';
+import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r47a9e4eb3305';
+import { drawScene } from './world/render-scene.js?v=r47a9e4eb3305';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rbe1f74f09262';
+} from './world/battle-transition.js?v=r47a9e4eb3305';
 import {
   say as sayToast,
   costAt as unitCostAt,
+  healCostAt as settlementHealCost,
   recruit as recruitUnit,
   approachTo as approachPoint,
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=rbe1f74f09262';
+} from './world/settlement-interactions.js?v=r47a9e4eb3305';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rbe1f74f09262';
+} from './world/terrain.js?v=r47a9e4eb3305';
 
 const P = PAL.world;
 
@@ -73,7 +78,7 @@ export class World {
       troops: Array.from({ length: BALANCE.startTroops }, () => ({ type: 'spear' })),
       armyCap: BALANCE.armyCapBase,
       camps: WORLD.camps.map(c => ({ id: c.id, razed: false })),
-      settlements: WORLD.settlements.map(s => ({ id: s.id, occupied: false })),
+      settlements: WORLD.settlements.map(s => ({ id: s.id, occupied: false, owner: OWNERSHIP.NEUTRAL })),
       won: false,
       x: WORLD.heroStart.x, y: WORLD.heroStart.y,
       parties: null,
@@ -82,12 +87,34 @@ export class World {
       // OS/browser entropy chooses a fresh campaign seed; all in-run draws use
       // the derived simulation/presentation domains below.
       runSeed: game.testSeed != null ? game.testSeed : (Math.random() * 1e9) | 0,
-      stats: { won: 0, kills: 0, lost: 0, playT: 0 },
+      stats: { won: 0, kills: 0, lost: 0, playT: 0, battlesLost: 0, goldEarned: 0, goldSpent: 0, captures: 0 },
       hard: !!game.hardNext,
       battleCount: 0,
     };
     game.hardNext = false;
     game.testSeed = null;
+
+    // Milestone 025: normalize the summary counters so result/interaction code can
+    // `+=` without shape guards (migrated v3 saves arrive with zeros already; direct
+    // fixture saves may not).
+    {
+      const stats = this.save.stats = this.save.stats || { won: 0, kills: 0, lost: 0, playT: 0 };
+      for (const k of ['battlesLost', 'goldEarned', 'goldSpent', 'captures']) stats[k] = stats[k] || 0;
+    }
+
+    // Milestone 025 Slice B/E: a queued one-time specialization choice rides on the
+    // Game like pendingAftermath — never on `save`, so no schema version is spent and
+    // a refresh at exactly the wrong moment simply loses the prompt (the ownership it
+    // belongs to is already checkpointed). Consumed below, or when an aftermath that
+    // beat it here is dismissed.
+    this.pendingSpecChoice = (!this.save.won && game.pendingSpecChoice) || null;
+    game.pendingSpecChoice = null;
+
+    // Milestone 025 Slice D: regional pressure is armed fresh on every World —
+    // including a reload — so a reloaded campaign can never open with an unavoidable
+    // raid already seconds away (the conservative-defaults rule). The timer only ever
+    // decays on live ticks, preserving the standing-still freeze invariant.
+    this.raidCdT = RAID.firstDelayT;
 
     this.hero = { x: this.save.x, y: this.save.y, vx: 0, vy: 0, facing: 0, bob: 0 };
     this.grace = save ? BALANCE.battleGrace : 0;   // ambush immunity after a battle
@@ -106,6 +133,11 @@ export class World {
       this.screen = buildAftermathModel(game.pendingAftermath);
     }
     game.pendingAftermath = null;
+    // The spec choice waits politely behind an aftermath that beat it here; with no
+    // screen in the way it opens right now, on the tick the capture checkpoint landed.
+    if (this.pendingSpecChoice && !this.screen) {
+      this.openSpecChoice(this.pendingSpecChoice);
+    }
 
     // scenery uses a fixed authored seed: it is static map input, not a campaign
     // stream, so changing effects can never perturb collision geometry.
@@ -187,7 +219,8 @@ export class World {
         this.parties.push({
           camp: p.camp, x: p.x, y: p.y, vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
           comp: p.comp, home: p.home, wander: null, wanderT: 0, waryT: p.waryT || 0,
-          clashT: p.clashT || 0, occupying: p.occupying || null, raid: null,
+          clashT: p.clashT || 0, occupying: p.occupying || null,
+          raid: p.raid || null, raidKind: p.raidKind || null,
           navT: this.simRng() * 0.3, navGoal: null, navFor: null,
           _navGoalVisibility: new Float64Array(N), _navGoalX: NaN, _navGoalY: NaN,
         });
@@ -208,6 +241,12 @@ export class World {
     this.save.parties = this.parties.map(p => {
       const rec = { camp: p.camp, x: p.x, y: p.y, comp: p.comp, home: p.home, waryT: p.waryT || 0, clashT: p.clashT || 0 };
       if (p.occupying) rec.occupying = p.occupying;
+      // Milestone 025: an inbound raid survives a save/reload — it can neither be
+      // silently cancelled by a refresh nor duplicated by one.
+      if (p.raid) {
+        rec.raid = p.raid;
+        if (p.raidKind) rec.raidKind = p.raidKind;
+      }
       return rec;
     });
   }
@@ -341,7 +380,7 @@ export class World {
       x: px, y: py,
       vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
       comp, home: { x: camp.x, y: camp.y },
-      wander: null, wanderT: 0, occupying: null, raid: null,
+      wander: null, wanderT: 0, occupying: null, raid: null, raidKind: null,
       navT: this.simRng() * 0.3, navGoal: null, navFor: null,
       _navGoalVisibility: new Float64Array(this.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
     });
@@ -563,6 +602,12 @@ export class World {
     this.enforceBeatableFloor();
     if (this.updateParties(dt)) return;
 
+    // Milestone 025 Slice D: stronghold-dispatched raids and watchtower scouting.
+    // Runs only on live ticks — standing still freezes raids with everything else,
+    // and this phase consumes simRng draws ONLY when it actually acts, so a frozen
+    // campaign stays RNG-neutral exactly like every other timer.
+    this.updateRegionalPressure(dt);
+
     // camps slowly send out new parties (visible spawn at the camp)
     this.updatePartySpawns(dt);
 
@@ -603,10 +648,19 @@ export class World {
         } else {
           const target = WORLD.settlements.find(s => s.id === p.raid);
           if (dist2(p.x, p.y, target.x, target.y) < BALANCE.raidArrivalR * BALANCE.raidArrivalR) {
+            // Milestone 025 Slice D: a raid landing on player-held ground while the hero
+            // is close enough to answer triggers a settlement-DEFENSE battle (Hold the
+            // ground) instead of an instant occupation. The clashT guard gives the
+            // cancel path (a spooked withdraw charges the party the same way) one clean
+            // way out without re-opening the brief every tick.
             const st = this.save.settlements.find(s => s.id === p.raid);
+            const defense = (p.clashT || 0) <= 0 && st && st.owner === OWNERSHIP.PLAYER && !st.occupied &&
+              dist2(this.hero.x, this.hero.y, target.x, target.y) < RAID.defenseR * RAID.defenseR;
+            if (defense) { this.requestDefenseBattle(p, target); return true; }
             st.occupied = true;
             p.occupying = p.raid;
             p.raid = null;
+            p.raidKind = null;
             // Post at the gate rather than freezing wherever the beeline happened to end.
             // The settlement's name and OCCUPIED chips are drawn BELOW it, so an occupier
             // that stopped anywhere south of centre covered its own settlement's name.
@@ -759,35 +813,216 @@ export class World {
       const ambushed = p.mood === 'chase';
       const caughtThem = p.mood === 'flee';
       const occupiedSettlement = isOccupier ? WORLD.settlements.find(s => s.id === p.occupying) : null;
+      // Milestone 025 Slice C: driving an occupier out is a Hold-the-ground capture —
+      // the field objective gives the fight its settlement shape instead of a plain
+      // skirmish in the street.
       this.requestBattle({
         party: p,
         title: occupiedSettlement ? `RETAKE ${occupiedSettlement.name.toUpperCase()}`
           : ambushed ? 'AMBUSHED!' : caughtThem ? 'RUN THEM DOWN!' : 'BANDIT SKIRMISH',
-        subtitle: occupiedSettlement ? 'Drive them out and restore the settlement’s service'
+        subtitle: occupiedSettlement ? 'Hold the ground to drive them out and restore the settlement’s service'
           : caughtThem ? 'You caught them running — give no quarter' : 'Roaming party — worth loot, no camp progress',
         arena: null,
         ambush: ambushed,
         approach: this.approachTo(p.x, p.y),
         deploy: caughtThem ? 0 : undefined, // undefined = mutual 8s formup
         comp: p.comp.slice(),
+        objective: occupiedSettlement ? encounterObjective('settlement') : null,
         // Plan 021 decision 5: withdraw is offered only when the player initiated the
         // fight — an explicit camp/stronghold press (handled in updateCampInteraction)
         // or running down a fleeing party. An ambush or a mutual skirmish is committed.
         canWithdraw: caughtThem,
         onWinExtra: occupiedSettlement ? () => {
-          const st = this.save.settlements.find(s => s.id === occupiedSettlement.id);
-          if (st) st.occupied = false;
-          this.save.toast = `${occupiedSettlement.name} is free again — its service resumes.`;
+          this.winSettlement(occupiedSettlement, { reclaimed: true });
         } : null,
-        partyMeta: { camp: p.camp, x: p.x, y: p.y, comp: p.comp.slice(), home: p.home, waryT: p.waryT, occupying: p.occupying },
+        partyMeta: {
+          camp: p.camp, x: p.x, y: p.y, comp: p.comp.slice(), home: p.home,
+          waryT: p.waryT, occupying: p.occupying, raid: p.raid, raidKind: p.raidKind,
+        },
       });
       return true;
     }
     return false;
   }
 
-  updatePartySpawns(dt) {
+  // ================================================================ Milestone 025
+  // Regional state: capture, specialization, pressure. All ownership mutations go
+  // through winSettlement/captureSettlement so the checkpoint, the counters and the
+  // spec-choice queue can never drift apart between call sites.
+  // ----------------------------------------------------------------
 
+  // The single capture bookkeeping path. `reclaimed` marks a settlement that was
+  // already ours and is being taken back from an occupier (no captures-counter
+  // change, no second spec choice — the choice is permanent for the run).
+  winSettlement(settlement, { reclaimed = false } = {}) {
+    const st = this.save.settlements.find(s => s.id === settlement.id);
+    if (!st) return;
+    const wasOwned = st.owner === OWNERSHIP.PLAYER;
+    st.occupied = false;
+    st.owner = OWNERSHIP.PLAYER;
+    if (!wasOwned) {
+      this.save.stats.captures += 1;
+      // Cadence grace after a capture: the stronghold does not instantly punish
+      // expansion (milestone requirement — a grace period after capture).
+      this.raidCdT = Math.max(this.raidCdT, RAID.graceAfterCaptureT);
+      this.say(`${settlement.name} joins your banner! Choose what it becomes.`, 3.4);
+    } else if (reclaimed) {
+      this.say(`${settlement.name} is free again — its service resumes, banner intact.`, 3.2);
+    }
+    if (!st.spec) this.queueSpecChoice(settlement.id);
+  }
+
+  // Peaceful claim of a neutral settlement (G at its gates). No battle — nobody
+  // hostile holds it — but the same checkpoint + spec-choice flow as a won fight.
+  claimSettlement(settlement) {
+    const st = this.save.settlements.find(s => s.id === settlement.id);
+    if (!st || st.occupied || st.owner === OWNERSHIP.PLAYER) return false;
+    this.winSettlement(settlement);
+    // Explicit persistence checkpoint at the moment ownership changes (milestone
+    // contract): scene is still `world`, so persistRun() writes a coherent map.
+    this.game.persistRun();
+    return true;
+  }
+
+  queueSpecChoice(id) {
+    const current = this.pendingSpecChoice;
+    this.pendingSpecChoice = id;
+    if (!this.screen) this.openSpecChoice(id);
+    void current;
+  }
+
+  openSpecChoice(id) {
+    const settlement = WORLD.settlements.find(s => s.id === id);
+    if (!settlement) { this.pendingSpecChoice = null; return; }
+    this.screen = buildSpecModel(settlement, this.save);
+  }
+
+  // Commit a specialization from the modal. Exactly one per captured settlement,
+  // permanent for the run; the immediate effects are granted here so "what is
+  // gained immediately" on the modal is literally what happens on Enter.
+  chooseSpec(specId) {
+    const id = this.pendingSpecChoice;
+    this.pendingSpecChoice = null;
+    this.screen = null;
+    const st = id && settlementRecord(this.save, id);
+    if (!st || !isValidSpec(specId)) return;
+    st.spec = specId;
+    const imm = SPECIALIZATIONS[specId].immediate;
+    if (imm.gold) {
+      this.save.gold += imm.gold;
+      this.save.stats.goldEarned += imm.gold;
+    }
+    if (imm.grantTroops) {
+      for (let i = 0; i < imm.grantTroops.count; i++) {
+        if (this.save.troops.length >= this.save.armyCap) break; // the cap still rules
+        this.save.troops.push({ type: imm.grantTroops.type });
+      }
+    }
+    if (imm.scout) {
+      const settlement = WORLD.settlements.find(s => s.id === id);
+      this.watchtowerScout(settlement, true);
+    }
+    this.game.sfx.coin();
+    this.particles.ring(this.hero.x, this.hero.y, 40, P.hero, 0.5, 3);
+    this.game.persistRun(); // the permanent choice checkpoints immediately
+  }
+
+  dismissSpecChoice() {
+    this.screen = null; // the choice stays queued — G at the gates reopens it
+  }
+
+  // Watchtower scouting: reveal camp garrisons within the tower's radius. Runs as a
+  // live-tick phase and once immediately when the tower is raised. Deterministic:
+  // rollGarrison derives its own seed, so scouting order never perturbs the stream.
+  watchtowerScout(from, immediate = false) {
+    let revealed = 0;
+    for (const c of WORLD.camps) {
+      const st = this.save.camps.find(s => s.id === c.id);
+      if (st.razed || st.garrison || c.stronghold) continue;
+      if (dist2(from.x, from.y, c.x, c.y) > REGION.watchtowerScoutR * REGION.watchtowerScoutR) continue;
+      st.garrison = this.rollGarrison(c);
+      revealed++;
+    }
+    if (revealed > 0 && !immediate) {
+      this.say(`The watchtower spies ${revealed} camp${revealed === 1 ? '' : 's'} — garrisons marked`, 3);
+    }
+    return revealed;
+  }
+
+  // Slice D: regional pressure. One stronghold-dispatched raid at a time, aimed at a
+  // player-held settlement, with cadence grace after captures and defenses.
+  updateRegionalPressure(dt) {
+    // Watchtower settlements keep their radius scouted while held.
+    for (const s of WORLD.settlements) {
+      const rec = settlementRecord(this.save, s.id);
+      if (!rec || rec.occupied || rec.owner !== OWNERSHIP.PLAYER || rec.spec !== 'watchtower') continue;
+      this.watchtowerScout(s);
+    }
+    this.raidCdT -= dt;
+    if (this.raidCdT > 0) return;
+    this.raidCdT = RAID.intervalT;
+    const targets = WORLD.settlements.filter(s => {
+      const rec = settlementRecord(this.save, s.id);
+      return rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied &&
+        !this.parties.some(p => p.raid === s.id || p.occupying === s.id);
+    });
+    if (!targets.length) return;
+    // Only one regional raid may be active at a time.
+    if (this.parties.some(p => p.raidKind === 'regional' && p.raid)) return;
+    const target = targets[(this.simRng() * targets.length) | 0];
+    const hold = WORLD.camps.find(c => c.id === REGION.strongholdId);
+    const mine = this.myStrength();
+    const comp = rollComposition(clamp(Math.round(mine * 1.1), 4, 24), this.simRng, BALANCE.compRolls.garrison);
+    const R = this.simRng;
+    let px = hold.x, py = hold.y;
+    for (let i = 0; i < 8; i++) {
+      const tx = hold.x + (R() - 0.5) * 200, ty = hold.y + (R() - 0.5) * 200;
+      if (!this.blockedAt(tx, ty)) { px = tx; py = ty; break; }
+    }
+    this.parties.push({
+      camp: hold.id,
+      x: px, y: py,
+      vx: 0, vy: 0, facing: 0, bob: this.fxRng() * TAU,
+      comp, home: { x: hold.x, y: hold.y },
+      wander: null, wanderT: 0, occupying: null,
+      raid: target.id, raidKind: 'regional',
+      navT: 0, navGoal: null, navFor: null,
+      _navGoalVisibility: new Float64Array(this.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+    });
+    this.particles.ring(hold.x, hold.y, 46, P.enemy, 0.6, 4);
+    this.say(`Wolfsjaw rides out — raiders march on ${target.name}!`, 3.6);
+    this.persistParties();
+  }
+
+  // A raid reaching held ground with the hero nearby: defend it (Hold the ground).
+  requestDefenseBattle(party, settlement) {
+    party.mood = 'raiding';
+    this.requestBattle({
+      party,
+      title: `DEFENSE OF ${settlement.name.toUpperCase()}`,
+      subtitle: 'Hold the ground until the raiders break',
+      arena: 'village',
+      ambush: true, // they arrived on top of you — no formup grace
+      approach: this.approachTo(party.x, party.y),
+      deploy: 0,
+      comp: party.comp.slice(),
+      objective: encounterObjective('settlement'),
+      canWithdraw: true, // accepting the loss temporarily is a legal choice
+      onWinExtra: () => {
+        // The raiding force was destroyed in the defense: cadence grace, per the
+        // milestone's after-a-successful-defense requirement.
+        this.raidCdT = Math.max(this.raidCdT, RAID.graceAfterDefenseT);
+        this.say(`${settlement.name} stands — the raid shatters on your shield line!`, 3.4);
+      },
+      partyMeta: {
+        camp: party.camp, x: party.x, y: party.y, comp: party.comp.slice(), home: party.home,
+        waryT: party.waryT, occupying: party.occupying, raid: party.raid, raidKind: party.raidKind,
+      },
+    });
+    return true;
+  }
+
+  updatePartySpawns(dt) {
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       this.spawnT = 40;
@@ -832,8 +1067,10 @@ export class World {
   }
 
   // ---------------------------------------------------------------- delegating seams
-  startBattle(comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief = false) {
-    return beginBattle(this, comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief);
+  // `extras` (Milestone 025) carries the objective descriptor, stronghold
+  // reinforcement waves and brief display info assembled at confirm time.
+  startBattle(comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief = false, extras = null) {
+    return beginBattle(this, comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief, extras);
   }
 
   requestBattle(descriptor) {
@@ -858,6 +1095,10 @@ export class World {
 
   costAt(s, type) {
     return unitCostAt(this, s, type);
+  }
+
+  healCostAt(s) {
+    return settlementHealCost(this, s);
   }
 
   recruit(type) {

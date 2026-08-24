@@ -124,7 +124,8 @@ test('current-schema player save round-trips through Continue', async ({ page })
     save.heroHp = 87;
     save.heroMaxHp = 140;
     save.hard = true;
-    save.stats = { won: 2, kills: 19, lost: 3, playT: 47 };
+    // Milestone 025: current-schema stats carry the campaign-summary counters.
+    save.stats = { won: 2, kills: 19, lost: 3, playT: 47, battlesLost: 1, goldEarned: 300, goldSpent: 120, captures: 0 };
     save.troops = [{ type: 'spear' }, { type: 'archer' }, { type: 'knight' }];
     world.hero.x = 1711;
     world.hero.y = 944;
@@ -168,12 +169,12 @@ test('current-schema player save round-trips through Continue', async ({ page })
     heroHp: 87,
     heroMaxHp: 140,
     hard: true,
-    stats: { won: 2, kills: 19, lost: 3, playT: expect.any(Number) },
+    stats: { won: 2, kills: 19, lost: 3, playT: expect.any(Number), battlesLost: 1, goldEarned: 300, goldSpent: 120, captures: 0 },
     troops: ['spear', 'archer', 'knight'],
     hero: { x: 1711, y: 944 },
     parties: [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], waryT: 8 }],
-    version: 3,
-    storedVersion: 3,
+    version: 4,
+    storedVersion: 4,
   });
   expect(restored.stats.playT).toBeGreaterThanOrEqual(47);
   assertNoRuntimeErrors(runtimeErrors);
@@ -348,7 +349,7 @@ test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) =
   });
   assertNoRuntimeErrors(runtimeErrors);
   expect(snapshot.scene).toBe('battle');
-  expect(snapshot.memory.version).toBe(3);
+  expect(snapshot.memory.version).toBe(4);
   expect(snapshot.stored.version).toBe(snapshot.memory.version);
   expect(snapshot.stored.x).toBe(snapshot.memory.x);
   expect(snapshot.stored.y).toBe(snapshot.memory.y);
@@ -518,7 +519,7 @@ test('an occupied settlement and its occupier survive an explicit save and Conti
 
   await page.evaluate(async ({ settlementId, sx, sy }) => {
     const world = window.__g.scene;
-    world.save.settlements = world.save.settlements.map(s => ({ id: s.id, occupied: s.id === settlementId }));
+    world.save.settlements = world.save.settlements.map(s => ({ ...s, occupied: s.id === settlementId }));
     world.parties = [{
       camp: 'c1', x: sx, y: sy, vx: 0, vy: 0, facing: 0, bob: 0,
       comp: ['bandit'], home: { x: sx, y: sy }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
@@ -566,7 +567,7 @@ test('recapturing an occupied settlement survives an explicit save and Continue'
 
   await page.evaluate(({ settlementId, sx, sy }) => {
     const world = window.__g.scene;
-    world.save.settlements = world.save.settlements.map(s => ({ id: s.id, occupied: s.id === settlementId }));
+    world.save.settlements = world.save.settlements.map(s => ({ ...s, occupied: s.id === settlementId }));
     world.parties = [{
       camp: 'c1', x: sx, y: sy, vx: 0, vy: 0, facing: 0, bob: 0,
       comp: ['bandit'], home: { x: sx, y: sy }, wander: null, wanderT: 999, waryT: 0, clashT: 0,

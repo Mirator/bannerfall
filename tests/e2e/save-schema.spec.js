@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   collectRuntimeErrors, assertNoRuntimeErrors, openPlayerGame as openPlayerGameWith,
 } from './test-helpers.js';
+import { WORLD } from '../../src/data.js';
 
 // This suite owns its own clear key so it cannot wipe the other persistence suite's slot.
 const openPlayerGame = (page, runtimeErrors) => openPlayerGameWith(page, runtimeErrors, 'qa-clear-save');
@@ -40,24 +41,28 @@ async function rejectRealSave(page, payload) {
   });
 }
 
-test('fresh run stores version 3', async ({ page }) => {
+test('fresh run stores version 4 with neutral settlement ownership', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1101);
 
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('bf_save')));
-  expect(stored.version).toBe(3);
+  expect(stored.version).toBe(4);
   expect(stored.camps.map(camp => camp.id)).toEqual(['c1', 'c2', 'c3', 'strong']);
   expect(stored.settlements).toEqual([
-    { id: 'ashford', occupied: false },
-    { id: 'brindle', occupied: false },
-    { id: 'coldwell', occupied: false },
-    { id: 'keep', occupied: false },
+    { id: 'ashford', occupied: false, owner: 'neutral' },
+    { id: 'brindle', occupied: false, owner: 'neutral' },
+    { id: 'coldwell', occupied: false, owner: 'neutral' },
+    { id: 'keep', occupied: false, owner: 'neutral' },
   ]);
+  expect(stored.stats).toEqual({
+    won: 0, kills: 0, lost: 0, playT: expect.any(Number),
+    battlesLost: 0, goldEarned: 0, goldSpent: 0, captures: 0,
+  });
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('valid unversioned save migrates defaults and is rewritten as version 3', async ({ page }) => {
+test('valid unversioned save migrates defaults and is rewritten as version 4', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1102);
@@ -76,15 +81,15 @@ test('valid unversioned save migrates defaults and is rewritten as version 3', a
 
   await reloadWithRealSave(page, legacy);
   const migratedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
-  expect(migratedBeforeContinue.version).toBe(3);
+  expect(migratedBeforeContinue.version).toBe(4);
   expect(migratedBeforeContinue.parties).toBe(null);
   expect(migratedBeforeContinue.heroHp).toBe(120);
   expect(migratedBeforeContinue.heroMaxHp).toBe(120);
   expect(migratedBeforeContinue.settlements).toEqual([
-    { id: 'ashford', occupied: false },
-    { id: 'brindle', occupied: false },
-    { id: 'coldwell', occupied: false },
-    { id: 'keep', occupied: false },
+    { id: 'ashford', occupied: false, owner: 'neutral' },
+    { id: 'brindle', occupied: false, owner: 'neutral' },
+    { id: 'coldwell', occupied: false, owner: 'neutral' },
+    { id: 'keep', occupied: false, owner: 'neutral' },
   ]);
   await page.keyboard.press('c');
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
@@ -93,23 +98,26 @@ test('valid unversioned save migrates defaults and is rewritten as version 3', a
     save: structuredClone(window.__g.scene.save),
     stored: JSON.parse(localStorage.getItem('bf_save')),
   }));
-  expect(migrated.save.version).toBe(3);
+  expect(migrated.save.version).toBe(4);
   expect(migrated.save.heroHp).toBe(120);
   expect(migrated.save.heroMaxHp).toBe(120);
   expect(migrated.save.armyCap).toBe(12);
   expect(migrated.save.won).toBe(false);
   expect(migrated.save.parties.length).toBeGreaterThan(0);
   expect(migrated.save.runSeed).toBe(777);
-  expect(migrated.save.stats).toEqual({ won: 0, kills: 0, lost: 0, playT: expect.any(Number) });
+  expect(migrated.save.stats).toEqual({
+    won: 0, kills: 0, lost: 0, playT: expect.any(Number),
+    battlesLost: 0, goldEarned: 0, goldSpent: 0, captures: 0,
+  });
   expect(migrated.save.hard).toBe(false);
   expect(migrated.save.battleCount).toBe(0);
   expect(migrated.save.settlements).toEqual([
-    { id: 'ashford', occupied: false },
-    { id: 'brindle', occupied: false },
-    { id: 'coldwell', occupied: false },
-    { id: 'keep', occupied: false },
+    { id: 'ashford', occupied: false, owner: 'neutral' },
+    { id: 'brindle', occupied: false, owner: 'neutral' },
+    { id: 'coldwell', occupied: false, owner: 'neutral' },
+    { id: 'keep', occupied: false, owner: 'neutral' },
   ]);
-  expect(migrated.stored.version).toBe(3);
+  expect(migrated.stored.version).toBe(4);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
@@ -123,14 +131,14 @@ test('version-1 roaming parties migrate a missing home from their canonical camp
   delete legacy.settlements;
   await reloadWithRealSave(page, legacy);
   const migrated = await page.evaluate(() => window.__g.loadRun());
-  expect(migrated.version).toBe(3);
+  expect(migrated.version).toBe(4);
   expect(migrated.parties).toEqual([{
     camp: 'c1', x: 1200, y: 1500, comp: ['bandit'], home: { x: 1050, y: 1500 }, waryT: 2, clashT: 0,
   }]);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('version-2 save migrates to version 3 with every settlement unoccupied, safe for world construction', async ({ page }) => {
+test('version-2 save migrates to version 4 with every settlement unowned, safe for world construction', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1111);
@@ -139,12 +147,12 @@ test('version-2 save migrates to version 3 with every settlement unoccupied, saf
   delete legacy.settlements; // version 2 never had this field
   await reloadWithRealSave(page, legacy);
   const migratedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
-  expect(migratedBeforeContinue.version).toBe(3);
+  expect(migratedBeforeContinue.version).toBe(4);
   expect(migratedBeforeContinue.settlements).toEqual([
-    { id: 'ashford', occupied: false },
-    { id: 'brindle', occupied: false },
-    { id: 'coldwell', occupied: false },
-    { id: 'keep', occupied: false },
+    { id: 'ashford', occupied: false, owner: 'neutral' },
+    { id: 'brindle', occupied: false, owner: 'neutral' },
+    { id: 'coldwell', occupied: false, owner: 'neutral' },
+    { id: 'keep', occupied: false, owner: 'neutral' },
   ]);
   await page.keyboard.press('c');
   // "immediately safe for world construction": the world must boot from the migrated save
@@ -154,17 +162,60 @@ test('version-2 save migrates to version 3 with every settlement unoccupied, saf
     version: window.__g.scene.save.version,
     settlements: window.__g.scene.save.settlements,
   }));
-  expect(restored.version).toBe(3);
+  expect(restored.version).toBe(4);
   expect(restored.settlements).toEqual(migratedBeforeContinue.settlements);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('complete version-3 save round-trips nested state without losing fields', async ({ page }) => {
+test('a version-3 save migrates ownership, raid intent, and summary counters to version 4', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1113);
+  const v3 = await currentSave(page);
+  v3.version = 3;
+  // strip every v4-only field: a genuine v3 save predates ownership, raid intent
+  // and the summary counters
+  v3.settlements = v3.settlements.map(({ id, occupied }) => ({ id, occupied }));
+  v3.settlements.find(s => s.id === 'ashford').occupied = true;
+  for (const p of v3.parties || []) { delete p.raid; delete p.raidKind; }
+  delete v3.stats.battlesLost;
+  delete v3.stats.goldEarned;
+  delete v3.stats.goldSpent;
+  delete v3.stats.captures;
+  await reloadWithRealSave(page, v3);
+  const migrated = await page.evaluate(() => window.__g.loadRun());
+  expect(migrated.version).toBe(4);
+  expect(migrated.settlements).toEqual([
+    { id: 'ashford', occupied: true, owner: 'neutral' },
+    { id: 'brindle', occupied: false, owner: 'neutral' },
+    { id: 'coldwell', occupied: false, owner: 'neutral' },
+    { id: 'keep', occupied: false, owner: 'neutral' },
+  ]);
+  expect(migrated.stats).toEqual({
+    won: v3.stats.won, kills: v3.stats.kills, lost: v3.stats.lost, playT: expect.any(Number),
+    battlesLost: 0, goldEarned: 0, goldSpent: 0, captures: 0,
+  });
+  // no party grew a raid out of thin air
+  expect(migrated.parties.every(p => p.raid === undefined)).toBe(true);
+  await page.keyboard.press('c');
+  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
+  // the occupied settlement still blocks service after the migration
+  const ashford = WORLD.settlements.find(x => x.id === 'ashford');
+  const suspended = await page.evaluate(({ sx, sy }) => {
+    const world = window.__g.scene;
+    world.hero.x = sx; world.hero.y = sy;
+    return world.isSettlementOccupied({ id: 'ashford', x: sx, y: sy });
+  }, { sx: ashford.x, sy: ashford.y });
+  expect(suspended).toBe(true);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('complete version-4 save round-trips nested state without losing fields', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1103);
   const save = await currentSave(page);
-  save.version = 3;
+  save.version = 4;
   save.gold = 731;
   save.heroHp = 87;
   save.heroMaxHp = 140;
@@ -177,19 +228,20 @@ test('complete version-3 save round-trips nested state without losing fields', a
     { id: 'strong', razed: false },
   ];
   save.settlements = [
-    { id: 'ashford', occupied: true },
-    { id: 'brindle', occupied: false },
-    { id: 'coldwell', occupied: false },
-    { id: 'keep', occupied: false },
+    { id: 'ashford', occupied: true, owner: 'player', spec: 'barracks' },
+    { id: 'brindle', occupied: false, owner: 'player' },
+    { id: 'coldwell', occupied: false, owner: 'neutral' },
+    { id: 'keep', occupied: false, owner: 'neutral' },
   ];
   save.x = 1711;
   save.y = 944;
   save.parties = [
     { camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], home: { x: 1600, y: 900 }, waryT: 8, clashT: 0 },
-    { camp: 'c2', x: 700, y: 1150, comp: ['bandit'], home: { x: 1850, y: 500 }, waryT: 0, clashT: 0, occupying: 'ashford' },
+    { camp: 'c2', x: 700, y: 1150, comp: ['bandit'], home: { x: 1850, y: 500 }, waryT: 0, clashT: 0, occupying: 'coldwell' },
+    { camp: 'c3', x: 900, y: 400, comp: ['wolf'], home: { x: 2350, y: 1150 }, waryT: 0, clashT: 0, raid: 'brindle', raidKind: 'regional' },
   ];
   save.runSeed = 4422;
-  save.stats = { won: 2, kills: 19, lost: 3, playT: 47.5 };
+  save.stats = { won: 2, kills: 19, lost: 3, playT: 47.5, battlesLost: 1, goldEarned: 300, goldSpent: 120, captures: 2 };
   save.hard = true;
   save.battleCount = 9;
   save.toast = 'Keep the banner high';
@@ -200,7 +252,7 @@ test('complete version-3 save round-trips nested state without losing fields', a
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
 
   const restored = await page.evaluate(() => structuredClone(window.__g.scene.save));
-  expect(restored.version).toBe(3);
+  expect(restored.version).toBe(4);
   expect(restored.gold).toBe(731);
   expect(restored.heroHp).toBe(87);
   expect(restored.heroMaxHp).toBe(140);
@@ -211,10 +263,7 @@ test('complete version-3 save round-trips nested state without losing fields', a
   expect(restored.y).toBe(944);
   expect(restored.parties).toEqual(save.parties);
   expect(restored.runSeed).toBe(4422);
-  expect(restored.stats.playT).toBeGreaterThanOrEqual(47.5);
-  expect(restored.stats.won).toBe(2);
-  expect(restored.stats.kills).toBe(19);
-  expect(restored.stats.lost).toBe(3);
+  expect(restored.stats).toEqual(save.stats);
   expect(restored.hard).toBe(true);
   expect(restored.battleCount).toBe(9);
   expect(restored.toast).toBe(null);
@@ -264,7 +313,7 @@ test('unknown future version is cleared and cannot Continue', async ({ page }) =
   await openPlayerGame(page, runtimeErrors);
   await startRawWorld(page, 1105);
   const save = await currentSave(page);
-  save.version = 4;
+  save.version = 5;
   const result = await rejectRealSave(page, save);
   expect(result).toEqual({ loaded: null, stored: null });
   assertNoRuntimeErrors(runtimeErrors);

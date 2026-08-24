@@ -1,13 +1,15 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=rbe1f74f09262';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rbe1f74f09262';
-import { Battle } from './battle.js?v=rbe1f74f09262';
-import { World } from './world.js?v=rbe1f74f09262';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=rbe1f74f09262';
-import { FIELD } from './battle/constants.js?v=rbe1f74f09262';
-import { ACTIONS } from './input-actions.js?v=rbe1f74f09262';
-import { createWebPlatform } from './platform/web-platform.js?v=rbe1f74f09262';
-import { SaveRepository } from './persistence/save-repository.js?v=rbe1f74f09262';
+import { PAL, WORLD } from './data.js?v=r47a9e4eb3305';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r47a9e4eb3305';
+import { Battle } from './battle.js?v=r47a9e4eb3305';
+import { World } from './world.js?v=r47a9e4eb3305';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r47a9e4eb3305';
+import { FIELD } from './battle/constants.js?v=r47a9e4eb3305';
+import { ACTIONS } from './input-actions.js?v=r47a9e4eb3305';
+import { createWebPlatform } from './platform/web-platform.js?v=r47a9e4eb3305';
+import { SaveRepository } from './persistence/save-repository.js?v=r47a9e4eb3305';
+import { buildSummaryModel } from './world-screens.js?v=r47a9e4eb3305';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=r47a9e4eb3305';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -226,8 +228,11 @@ class Game {
     this.sceneName = 'victory';
     this.victoryT = 0;
     this.finalSave = save;
+    // Milestone 025 Slice E: the regional-conquest summary is built once, from the
+    // final save, by the same pure model builder the tests read.
+    this.summary = buildSummaryModel(save);
     this.invalidate();
-    this.clearRun(); // the campaign is over — next Enter starts a genuinely fresh run
+    this.clearRun(); // the campaign is over — the summary's Enter starts a genuinely fresh run
     this.sfx.victory();
   }
 
@@ -254,8 +259,11 @@ class Game {
       this.updateMenu(dt);
     } else if (this.sceneName === 'victory') {
       this.victoryT += dt;
-      if (this.victoryT > 1.5 && (this.input.pressedAction(ACTIONS.CONFIRM) || this.input.mouse.clicked)) {
-        this.enterMenu();
+      // Milestone 025: the summary IS the restart flow — Enter (after the reveal
+      // beat) starts a new campaign with a fresh seed, at the same difficulty the
+      // finished run was played on.
+      if (this.victoryT > 1.5 && this.input.pressedAction(ACTIONS.CONFIRM)) {
+        this.startNewCampaign(!!(this.finalSave && this.finalSave.hard));
       }
     } else if (this.scene) {
       this.scene.update(dt);
@@ -497,28 +505,70 @@ class Game {
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = P.hero;
-    ctx.font = `900 ${Math.min(90, W * 0.08)}px system-ui, sans-serif`;
-    ctx.fillText('WOLFSJAW HAS FALLEN', W / 2, H * 0.3);
-    if (this.finalSave && this.finalSave.hard) {
+    ctx.font = `900 ${Math.min(64, W * 0.06)}px system-ui, sans-serif`;
+    ctx.fillText('WOLFSJAW HAS FALLEN', W / 2, H * 0.14);
+    if (this.summary && this.summary.hard) {
       ctx.fillStyle = P.accent;
-      ctx.font = '900 20px system-ui, sans-serif';
-      ctx.fillText('— A HARD CAMPAIGN —', W / 2, H * 0.3 + Math.min(64, W * 0.055));
+      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.fillText('— A HARD CAMPAIGN —', W / 2, H * 0.14 + Math.min(52, W * 0.045));
     }
+
+    // Milestone 025 Slice E: the full regional-conquest summary.
+    const s = this.summary || buildSummaryModel(this.finalSave || {});
+    const mins = Math.floor(s.time / 60), secs = Math.round(s.time % 60);
+    const colW = Math.min(760, W - 80);
+    const lx = W / 2 - colW / 2 + 30, rx = W / 2 + colW / 2 - 30;
+    let y = H * 0.24;
+    ctx.textAlign = 'left';
+    ctx.font = '800 15px system-ui, sans-serif';
     ctx.fillStyle = P.cream;
-    const st = (this.finalSave && this.finalSave.stats) || { won: 0, kills: 0, lost: 0, playT: 0 };
-    const mins = Math.floor(st.playT / 60), secs = Math.round(st.playT % 60);
-    ctx.font = '600 18px system-ui, sans-serif';
-    ctx.fillText('The realm is yours. The bards will sing of it.', W / 2, H * 0.44);
-    ctx.font = '600 16px system-ui, sans-serif';
-    const lines = [
-      `Campaign time  ${mins}:${String(secs).padStart(2, '0')}`,
-      `Battles won  ${st.won}   ·   Foes slain  ${st.kills}   ·   Men lost  ${st.lost}`,
-      `Gold amassed  ${this.finalSave ? this.finalSave.gold : 0}`,
+    ctx.fillText('THE CAMPAIGN', lx, y);
+    ctx.textAlign = 'right';
+    ctx.fillText('THE REALM', rx, y);
+    y += 26;
+    const rowL = [
+      `Active time   ${mins}:${String(secs).padStart(2, '0')}`,
+      `Battles won   ${s.battlesWon}`,
+      `Battles lost   ${s.battlesLost}`,
+      `Soldiers lost   ${s.soldiersLost}`,
+      `Foes slain   ${s.foesSlain}`,
     ];
-    lines.forEach((l, i) => ctx.fillText(l, W / 2, H * 0.52 + i * 28));
+    const rowR = [
+      `Settlements captured   ${s.captured}/${s.totalSettlements} (held ${s.held})`,
+      `Camps razed   ${s.campsRazed}/3`,
+      `Gold earned   ${s.goldEarned}  ·  spent   ${s.goldSpent}`,
+      `Treasury   ${s.finalGold}`,
+      `Final army   ${s.army}`,
+    ];
+    ctx.font = '600 15px system-ui, sans-serif';
+    for (let i = 0; i < rowL.length; i++) {
+      ctx.textAlign = 'left'; ctx.fillStyle = P.cream;
+      ctx.fillText(rowL[i], lx, y + i * 24);
+      ctx.textAlign = 'right';
+      ctx.fillText(rowR[i], rx, y + i * 24);
+    }
+    y += rowL.length * 24 + 10;
+    if (s.specs.length) {
+      ctx.textAlign = 'center';
+      ctx.font = '800 14px system-ui, sans-serif';
+      ctx.fillStyle = P.hero;
+      ctx.fillText('THE BANNER OF YOUR KINGDOM', W / 2, y);
+      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.fillStyle = P.cream;
+      ctx.fillText(s.specs.join('   ·   '), W / 2, y + 22);
+      y += 48;
+    } else {
+      ctx.textAlign = 'center';
+      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.fillStyle = '#9BA3BF';
+      ctx.fillText('No settlement flew a specialized banner.', W / 2, y + 8);
+      y += 34;
+    }
     if (this.victoryT > 1.5 && Math.sin(this.victoryT * 4) > -0.3) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = P.hero;
       ctx.font = '800 20px system-ui, sans-serif';
-      ctx.fillText('Press ENTER for a new campaign', W / 2, H * 0.68);
+      ctx.fillText('Press ENTER for a new campaign', W / 2, H * 0.90);
     }
   }
 }
@@ -626,6 +676,7 @@ window.game = {
   state: () => {
     const s = { scene: game.sceneName };
     const sc = game.scene;
+    if (game.sceneName === 'victory') s.summary = game.summary;
     if (game.sceneName === 'menu') {
       const items = game.menuItems();
       s.menu = {
@@ -642,6 +693,21 @@ window.game = {
         hero: { x: sc.hero.x | 0, y: sc.hero.y | 0, hp: sc.hero.hp },
         troops: sc.troops.length, enemies: sc.enemies.length,
         kills: sc.kills, victory: sc.victory,
+        // Milestone 025 Slice C: the objective surface tests and baselines read.
+        objective: sc.objective ? {
+          kind: sc.objective.kind,
+          ...(sc.objective.kind === 'hold' ? {
+            progress: Math.round(sc.objective.progress * 100) / 100,
+            duration: sc.objective.duration,
+            held: sc.objective.held, contested: sc.objective.contested,
+            x: Math.round(sc.objective.x), y: Math.round(sc.objective.y),
+          } : {}),
+          ...(sc.objective.kind === 'break' ? {
+            guardsTotal: sc.objectiveTargets.length,
+            guardsAlive: sc.objectiveTargets.filter(t => !t.dead).length,
+          } : {}),
+        } : null,
+        wavesPending: sc.pendingWaves ? sc.pendingWaves.length : 0,
       };
     }
     if (game.sceneName === 'world' && sc) {
@@ -663,6 +729,15 @@ window.game = {
         parties: sc.parties.length,
         camps: sc.save.camps,
         settlements: sc.save.settlements,
+        // Milestone 025: the regional surface — ownership states, stronghold power
+        // and the raid warning are all derivable from the save/parties above, but
+        // tests read them through this documented shape instead of re-deriving.
+        region: {
+          power: STRONGHOLD_POWER_LABELS[strongholdModifiers(sc.save).stateId],
+          powerPoints: strongholdModifiers(sc.save).points,
+          raidTarget: (sc.parties.find(p => p.raid && p.raidKind === 'regional') || {}).raid || null,
+          raidCdT: Math.round(sc.raidCdT),
+        },
         // Plan 021: the numbers actually drawn — same convention (bodies, not strength)
         // and same heavy-marker rule (comp includes a brute) as World.drawParty/drawHero.
         badges: {
@@ -753,6 +828,88 @@ window.game = {
         approach, field,
         onEnd: () => game.startWorld(null),
       });
+    }     else if (name === 'battle_hold') {
+      // Milestone 025 Slice C fixture: a Hold-the-ground defense, seeded like the
+      // legacy battle fixtures so the objective HUD/ground have deterministic frames.
+      game.startBattle({
+        troops: [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'archer' }],
+        enemies: [{ type: 'bandit' }, { type: 'bandit' }, { type: 'wolf' }],
+        seed: 33, title: 'HOLD THE GROUND', arena: 'road', biome: 'meadow',
+        objective: { kind: 'hold', duration: 35, radius: 170 },
+        onEnd: () => game.startWorld(null),
+      });
+    } else if (name === 'battle_break') {
+      // Milestone 025 Slice C fixture: Break the position with two guards (a camp).
+      game.startBattle({
+        troops: [{ type: 'spear' }, { type: 'spear' }, { type: 'archer' }, { type: 'knight' }],
+        enemies: [{ type: 'bandit' }, { type: 'bandit' }, { type: 'raider' }],
+        seed: 44, title: 'BREAK THE POSITION', arena: 'camp', biome: 'night',
+        objective: { kind: 'break', guards: 2, hp: 260, radius: 30 },
+        onEnd: () => game.startWorld(null),
+      });
+    } else if (name === 'battle_stronghold') {
+      // Milestone 025 Slice E fixture: the authored finale — three guards, one
+      // reinforcement wave, Entrenched display data.
+      game.startBattle({
+        troops: [{ type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'spear' }, { type: 'archer' }, { type: 'archer' }, { type: 'knight' }],
+        enemies: [{ type: 'bandit' }, { type: 'bandit' }, { type: 'bandit' }, { type: 'raider' }, { type: 'brute' }],
+        seed: 55, title: 'ASSAULT ON WOLFSJAW HOLD', arena: 'camp', biome: 'rose',
+        objective: { kind: 'break', guards: 3, hp: 260, radius: 30 },
+        waves: [{ at: 25, comp: ['bandit', 'bandit', 'bandit', 'wolf'] }],
+        stronghold: {
+          label: 'ENTRENCHED',
+          advantages: [
+            'A reserve wave will reinforce the garrison mid-battle',
+            'All three defensive guards still stand',
+            'Their deployment is unscouted',
+          ],
+        },
+        onEnd: () => game.startWorld(null),
+      });
+    } else if (name === 'victory_summary') {
+      // Milestone 025 Slice E baseline fixture: a finished campaign with counters
+      // and specializations worth showing off.
+      const save = {
+        gold: 214, hard: false,
+        troops: [{ type: 'spear' }, { type: 'spear' }, { type: 'archer' }, { type: 'archer' }, { type: 'knight' }],
+        settlements: WORLD.settlements.map(s => ({ id: s.id, occupied: false, owner: s.id === 'ashford' || s.id === 'coldwell' ? 'player' : 'neutral' })),
+        camps: WORLD.camps.map(c => ({ id: c.id, razed: c.id !== 'strong' })),
+        stats: { won: 9, kills: 71, lost: 14, playT: 3742, battlesLost: 2, goldEarned: 812, goldSpent: 640, captures: 3 },
+        won: true,
+      };
+      save.settlements.find(s => s.id === 'ashford').spec = 'barracks';
+      save.settlements.find(s => s.id === 'coldwell').spec = 'watchtower';
+      game.startVictory(save);
+    } else if (name === 'world_region') {
+      // Milestone 025 baseline fixture: a mid-conquest map. opts: {seed, owned: [ids],
+      // spec: {id: spec}, occupied: [ids], razed: [ids]}. An occupied settlement gets
+      // its occupier posted at the canonical gate so the seizure has its banner.
+      if (opts && opts.seed != null) game.testSeed = opts.seed;
+      game.startWorld(null);
+      const world = game.scene;
+      const o = opts || {};
+      for (const id of o.owned || []) {
+        const rec = world.save.settlements.find(s => s.id === id);
+        rec.owner = 'player';
+        if (o.spec && o.spec[id]) rec.spec = o.spec[id];
+      }
+      world.save.stats.captures = (o.owned || []).length;
+      for (const id of o.occupied || []) world.save.settlements.find(s => s.id === id).occupied = true;
+      for (const id of o.razed || []) world.save.camps.find(c => c.id === id).razed = true;
+      if ((o.occupied || []).length) {
+        const at = WORLD.settlements.find(s => s.id === o.occupied[0]);
+        world.parties.length = 0;
+        world.parties.push({
+          camp: 'c1', x: at.x, y: at.y, vx: 0, vy: 0, facing: 0, bob: 0,
+          comp: ['bandit', 'bandit', 'raider'],
+          home: { x: WORLD.camps[0].x, y: WORLD.camps[0].y },
+          wander: null, wanderT: 0, waryT: 0, clashT: 0,
+          occupying: o.occupied[0], raid: null,
+          navT: 0, navGoal: null, navFor: null,
+          _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+        });
+        world.persistParties();
+      }
     } else if (name === 'world_brief') {
       // Plan 021: opens the brief through the PRODUCTION requestBattle path (a real
       // party clash or a real WORLD_PRIMARY press), never by assigning world.screen

@@ -1,17 +1,26 @@
 // Campaign save schema — the pure boundary between persisted text and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=rbe1f74f09262';
+import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r47a9e4eb3305';
+import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r47a9e4eb3305';
 
-// Version 2 makes party.home a runtime invariant. Version 0 is the original
+// Version 2 made party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
-// Version 3 (Plan 020) adds save.settlements — settlement-occupation state for the
-// break-off-and-raid mechanic — and an optional party.occupying field naming the
-// settlement a roaming party currently occupies.
-export const SAVE_VERSION = 3;
+// Version 3 (Plan 020) added save.settlements — settlement-occupation state —
+// and an optional party.occupying field.
+// Version 4 (Milestone 025) makes ownership persistent: settlements gain `owner`
+// ('neutral' | 'player') and an optional permanent `spec`; roaming parties gain an
+// optional `raid` target (and a `raidKind` for stronghold-dispatched raids); stats
+// gain the campaign-summary counters (battlesLost, goldEarned, goldSpent,
+// captures). Stronghold power is deliberately NOT persisted — it is a pure
+// derivation over owned settlements and razed linked camps (src/region.js).
+export const SAVE_VERSION = 4;
 
 const CAMP_IDS = new Set(WORLD.camps.map(c => c.id));
 const SETTLEMENT_IDS = new Set(WORLD.settlements.map(s => s.id));
 const UNIT_IDS = new Set(Object.keys(UNIT_TYPES));
 const ENEMY_IDS = new Set(Object.keys(ENEMY_TYPES));
+const SPEC_IDS = new Set(Object.keys(SPECIALIZATIONS));
+const OWNER_IDS = new Set([OWNERSHIP.NEUTRAL, OWNERSHIP.PLAYER]);
+const RAID_KINDS = new Set(['regional', 'breakoff']);
 const MAX_HERO_HP = 10000;
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const plain = value => {
@@ -84,13 +93,16 @@ function buildCamps(raw) {
   return result;
 }
 
-// Plan 020: one entry per WORLD.settlement recording whether a broken-off roaming
-// party currently occupies it (suspending its recruiting/healing/army-cap service).
-// `legacy` is true when migrating a pre-version-3 save, which never had this field —
-// every settlement starts unoccupied, matching the fresh-save default.
+// Plan 020 introduced one entry per WORLD.settlement recording occupation.
+// Milestone 025 (v4) extends each entry with persistent ownership:
+//   owner — 'neutral' or 'player' (occupied enemy control is the occupied flag)
+//   spec  — the permanently chosen specialization; only legal on player-owned land
+// `legacy` is true when migrating a pre-version-4 save: every settlement starts
+// neutral and unchosen, matching the fresh-save default and the milestone's
+// "conservative defaults" requirement.
 function buildSettlements(raw, legacy) {
   if (raw === undefined) {
-    return legacy ? WORLD.settlements.map(s => ({ id: s.id, occupied: false })) : null;
+    return legacy ? WORLD.settlements.map(s => ({ id: s.id, occupied: false, owner: OWNERSHIP.NEUTRAL })) : null;
   }
   if (!Array.isArray(raw) || raw.length !== WORLD.settlements.length) return null;
   const seen = new Set();
@@ -100,7 +112,25 @@ function buildSettlements(raw, legacy) {
         !SETTLEMENT_IDS.has(settlement.id) || seen.has(settlement.id)) return null;
     if (typeof settlement.occupied !== 'boolean') return null;
     seen.add(settlement.id);
-    result.push({ id: settlement.id, occupied: settlement.occupied });
+    let owner, spec;
+    if (legacy) {
+      // v3 and earlier carried no ownership vocabulary.
+      owner = OWNERSHIP.NEUTRAL;
+      spec = undefined;
+      if (hasOwn(settlement, 'owner') || hasOwn(settlement, 'spec')) return null;
+    } else {
+      owner = settlement.owner;
+      if (!OWNER_IDS.has(owner)) return null;
+      if (hasOwn(settlement, 'spec')) {
+        spec = settlement.spec;
+        if (!isValidSpec(spec)) return null;
+        // A specialization is a property of captured land only.
+        if (owner !== OWNERSHIP.PLAYER) return null;
+      }
+    }
+    const next = { id: settlement.id, occupied: settlement.occupied, owner };
+    if (spec !== undefined) next.spec = spec;
+    result.push(next);
   }
   if (seen.size !== SETTLEMENT_IDS.size) return null;
   return result;
@@ -147,22 +177,44 @@ function buildParties(raw, migrateLegacyHomes) {
       if (typeof party.occupying !== 'string' || !SETTLEMENT_IDS.has(party.occupying)) return undefined;
       next.occupying = party.occupying;
     }
+    // Milestone 025: a party riding to raid a settlement persists that intent so a
+    // reload cannot silently cancel (or duplicate) an inbound raid.
+    if (hasOwn(party, 'raid')) {
+      if (typeof party.raid !== 'string' || !SETTLEMENT_IDS.has(party.raid)) return undefined;
+      next.raid = party.raid;
+    }
+    if (hasOwn(party, 'raidKind')) {
+      if (typeof party.raidKind !== 'string' || !RAID_KINDS.has(party.raidKind)) return undefined;
+      next.raidKind = party.raidKind;
+      // A kind without a live raid target is meaningless state.
+      if (!next.raid) return undefined;
+    }
     result.push(next);
   }
   return result;
 }
 
+// Milestone 025: the campaign-summary counters ride on stats. `battlesLost`
+// completes the won/lost pair; goldEarned/goldSpent back the economy lines;
+// captures counts settlements brought under the banner. All default to zero on
+// every migration path.
 function buildStats(raw, legacy) {
   if (raw === undefined) {
-    return legacy ? { won: 0, kills: 0, lost: 0, playT: 0 } : null;
+    return legacy ? { won: 0, kills: 0, lost: 0, playT: 0, battlesLost: 0, goldEarned: 0, goldSpent: 0, captures: 0 } : null;
   }
   if (!plain(raw)) return null;
   const won = readNumber(raw, 'won', 0, nonNegativeInteger, legacy);
   const kills = readNumber(raw, 'kills', 0, nonNegativeInteger, legacy);
   const lost = readNumber(raw, 'lost', 0, nonNegativeInteger, legacy);
   const playT = readNumber(raw, 'playT', 0, nonNegative, legacy);
-  if (won === undefined || kills === undefined || lost === undefined || playT === undefined) return null;
-  return { won, kills, lost, playT };
+  const battlesLost = readNumber(raw, 'battlesLost', 0, nonNegativeInteger, legacy);
+  const goldEarned = readNumber(raw, 'goldEarned', 0, nonNegativeInteger, legacy);
+  const goldSpent = readNumber(raw, 'goldSpent', 0, nonNegativeInteger, legacy);
+  const captures = readNumber(raw, 'captures', 0, nonNegativeInteger, legacy);
+  if (won === undefined || kills === undefined || lost === undefined || playT === undefined ||
+      battlesLost === undefined || goldEarned === undefined || goldSpent === undefined ||
+      captures === undefined) return null;
+  return { won, kills, lost, playT, battlesLost, goldEarned, goldSpent, captures };
 }
 
 function buildV1(candidate, legacy) {
@@ -239,6 +291,12 @@ export function migrateSave(candidate) {
   if (!plain(candidate)) return null;
   const version = hasOwn(candidate, 'version') ? candidate.version : 0;
   if (!integer(version) || version < 0 || version > SAVE_VERSION) return null;
+  // Version 3 saves are legacy relative to v4: their settlements gain neutral
+  // ownership, their parties drop nothing (raid fields did not exist yet and are
+  // refused on explicit v3 input via the legacy flag), and their stats gain the
+  // summary counters at zero. The conservative-defaults rule means a migrated
+  // campaign never starts mid-raid pressure: World arms its raid timer from
+  // RAID.firstDelayT whenever the loaded save carries no regional timer.
   if (version === SAVE_VERSION) return buildV1(candidate, false);
   // Both legacy shapes are normalized through the same current validator. A
   // version-1 party may predate the home field, so derive it from WORLD.camps.

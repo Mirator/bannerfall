@@ -112,3 +112,62 @@ test('bridge and settlement battle terrain remains visually stable', async ({ pa
   const canvas = await settle(page, 'battle_settlement', { steps: 1.5 });
   await expect(canvas).toHaveScreenshot('battle-bridge-settlement.png', VISUAL_OPTIONS);
 });
+
+// Milestone 025 baselines: the regional-conquest surfaces. The world territory frame
+// pins ownership banners (a Barracks holding), an occupied settlement with its
+// occupier posted at the gate, and the WEAKENED power chip; the two power frames pin
+// the other chip states at the stronghold itself; the three objective battles pin the
+// hold zone/break guards/stronghold HUD; the summary pins the campaign-end screen.
+test('territory ownership banners occupied ground and the weakened power chip remain visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_region', {
+    seed: 20260817,
+    owned: ['ashford'],
+    spec: { ashford: 'barracks' },
+    occupied: ['brindle'],
+    razed: ['c1'],
+    center: [1100, 1450],
+    steps: 0.5,
+  });
+  await expect(canvas).toHaveScreenshot('world-territory-ownership.png', VISUAL_OPTIONS);
+});
+
+test('the WEAKENED stronghold power state remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_region', {
+    seed: 20260817,
+    owned: ['ashford', 'brindle'],
+    center: [2620, 780],
+    steps: 0.5,
+  });
+  await expect(canvas).toHaveScreenshot('world-power-weakened.png', VISUAL_OPTIONS);
+});
+
+test('the EXPOSED stronghold power state remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_region', {
+    seed: 20260817,
+    owned: ['ashford', 'brindle', 'coldwell', 'keep'],
+    razed: ['c1', 'c2', 'c3'],
+    center: [2620, 780],
+    steps: 0.5,
+  });
+  await expect(canvas).toHaveScreenshot('world-power-exposed.png', VISUAL_OPTIONS);
+});
+
+test('the Hold-the-ground objective HUD and zone remain visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'battle_hold', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('battle-hold.png', VISUAL_OPTIONS);
+});
+
+test('the Break-the-position objective HUD and guards remain visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'battle_break', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('battle-break.png', VISUAL_OPTIONS);
+});
+
+test('the stronghold assault HUD with its reserve wave remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'battle_stronghold', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('battle-stronghold.png', VISUAL_OPTIONS);
+});
+
+test('the campaign summary remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'victory_summary', { steps: 1.5 });
+  await expect(canvas).toHaveScreenshot('victory-summary.png', VISUAL_OPTIONS);
+});
