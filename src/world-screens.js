@@ -3,9 +3,12 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=rbe1f74f09262';
-import { clamp, rrect } from './engine.js?v=rbe1f74f09262';
-import { SQUAD_LABELS } from './battle/constants.js?v=rbe1f74f09262';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=r47a9e4eb3305';
+import { clamp, rrect } from './engine.js?v=r47a9e4eb3305';
+import { SQUAD_LABELS } from './battle/constants.js?v=r47a9e4eb3305';
+import {
+  SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
+} from './region.js?v=r47a9e4eb3305';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
@@ -182,15 +185,20 @@ export function drawHoverPanel(ctx, cam, model) {
 // ---------------------------------------------------------------- brief
 // `descriptor` is built by World.requestBattle's callers (see world.js); it never
 // carries a live reference the confirm/cancel path would need to mutate later.
+// Milestone 025: the descriptor may carry `objective` (Hold/Break) and, for the
+// stronghold assault, a `stronghold` power summary — both are rendered as explicit
+// lines so the objective and its stakes are stated before commitment.
 export function buildBriefModel(descriptor, save) {
   const playerRoster = troopBreakdown(save.troops) || 'no troops — just you';
   const playerBodies = save.troops.length + 1;
   const playerStr = playerStrength(save.troops);
-  const scouted = descriptor.comp != null;
+  const scouted = descriptor.comp != null || !!descriptor.revealDeployment;
   const enemyRoster = scouted ? enemyBreakdown(descriptor.comp) : 'unknown — unscouted';
   const enemyBodies = scouted ? descriptor.comp.length : null;
   const enemyStr = scouted ? enemyStrength(descriptor.comp) : null;
   const odds = !scouted ? 'unknown' : oddsWord(enemyStr, playerStr);
+  const objective = descriptor.objective || null;
+  const stronghold = descriptor.stronghold || null;
   return {
     kind: 'brief',
     title: descriptor.title,
@@ -199,10 +207,35 @@ export function buildBriefModel(descriptor, save) {
     approach: descriptor.approach || 'E',
     canWithdraw: !!descriptor.canWithdraw,
     odds,
+    // Milestone 025 UX contract: state the objective, the deployment context and
+    // the consequences of withdrawal on the brief itself.
+    objective: objective ? buildObjectiveBriefLines(objective) : null,
+    stronghold: stronghold ? {
+      label: stronghold.label,
+      advantages: stronghold.advantages.slice(),
+    } : null,
     options: { confirm: true, withdraw: !!descriptor.canWithdraw },
     player: { roster: playerRoster, bodies: playerBodies, strength: playerStr },
     enemy: { roster: enemyRoster, bodies: enemyBodies, strength: enemyStr, scouted },
   };
+}
+
+function buildObjectiveBriefLines(objective) {
+  if (objective.kind === 'hold') {
+    return [
+      `${OBJECTIVE_LABELS.hold}: keep a squad inside the marked ground for ${objective.duration}s`,
+      'The clock pauses while enemies contest it — wiping them out also wins',
+      'Withdrawing abandons the ground to the raiders',
+    ];
+  }
+  if (objective.kind === 'break') {
+    return [
+      `${OBJECTIVE_LABELS.break}: destroy all ${objective.guards} defensive guards`,
+      'Destroying every guard wins even if defenders survive — so does wiping them out',
+      'Withdrawing leaves the position intact for another day',
+    ];
+  }
+  return [`${OBJECTIVE_LABELS.elimination}: destroy every raider`];
 }
 
 export function drawBriefPanel(ctx, cam, model) {
@@ -210,7 +243,12 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = 'rgba(21,22,46,0.72)';
   ctx.fillRect(0, 0, W, H);
-  const pw = Math.min(720, W - 60), ph = Math.min(420, H - 60);
+  // Milestone 025: objective/stronghold lines grow the panel instead of squeezing
+  // the roster columns.
+  const extraLines =
+    (model.objective ? model.objective.length : 0) +
+    (model.stronghold ? 1 + model.stronghold.advantages.length : 0);
+  const pw = Math.min(720, W - 60), ph = Math.min(420 + extraLines * 18, H - 60);
   const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
   ctx.fillStyle = P.ink;
   rrect(ctx, px, py, pw, ph, 14); ctx.fill();
@@ -247,7 +285,29 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.fillText(model.odds, W / 2, colY + 86);
   ctx.font = '600 13px system-ui, sans-serif';
   ctx.fillStyle = P.cream;
-  ctx.fillText(`Arena: ${model.arena || 'field'}`, W / 2, colY + 110);
+  let y = colY + 110;
+  ctx.fillText(`Arena: ${model.arena || 'field'}`, W / 2, y);
+  y += 24;
+  if (model.objective) {
+    ctx.fillStyle = P.hero;
+    for (let i = 0; i < model.objective.length; i++) {
+      ctx.fillText(model.objective[i], W / 2, y + i * 18);
+    }
+    y += model.objective.length * 18;
+  }
+  if (model.stronghold) {
+    y += 6;
+    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.fillStyle = P.enemy;
+    ctx.fillText(`STRONGHOLD POWER: ${model.stronghold.label}`, W / 2, y);
+    ctx.font = '600 13px system-ui, sans-serif';
+    ctx.fillStyle = P.cream;
+    y += 20;
+    for (const line of model.stronghold.advantages) {
+      ctx.fillText(line, W / 2, y);
+      y += 18;
+    }
+  }
 
   // Real clickable buttons, not just a text footer — updateWorldScreens() hit-tests
   // clicks against the rects returned here (drawn last frame, one frame of lag, the
@@ -280,6 +340,127 @@ function drawButton(ctx, rect, label, accent) {
   ctx.font = '800 13px system-ui, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 1);
+}
+
+// ---------------------------------------------------------------- specialization choice
+// Milestone 025 Slice B: the one-time, permanent specialization modal. Pure model
+// over (settlement, save); the four options are declared in region.js so the modal,
+// the effects and the save validation read one table.
+export function buildSpecModel(settlement, save) {
+  const existing = save.settlements.find(s => s.id === settlement.id);
+  const options = SPEC_IDS.map(id => {
+    const def = SPECIALIZATIONS[id];
+    return {
+      id,
+      name: def.name,
+      glyph: def.glyph,
+      immediate: def.immediate.text,
+      ongoing: def.ongoing,
+    };
+  });
+  return {
+    kind: 'spec',
+    settlement: { id: settlement.id, name: settlement.name },
+    alreadyChosen: !!(existing && existing.spec),
+    chosenSpec: existing && existing.spec,
+    index: 0,
+    options,
+  };
+}
+
+export function drawSpecPanel(ctx, cam, model) {
+  const W = cam.w, H = cam.h;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = 'rgba(21,22,46,0.72)';
+  ctx.fillRect(0, 0, W, H);
+  const pw = Math.min(640, W - 60), rowH = 64, headH = 108, footH = 56;
+  const ph = headH + model.options.length * (rowH + 8) + footH;
+  const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
+  ctx.fillStyle = P.ink;
+  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
+  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = P.cream;
+  ctx.font = '900 24px system-ui, sans-serif';
+  ctx.fillText(`${model.settlement.name.toUpperCase()} JOINS YOUR BANNER`, W / 2, py + 36);
+  ctx.font = '700 14px system-ui, sans-serif';
+  ctx.fillStyle = P.hero;
+  ctx.fillText('Choose what it becomes — permanent for this campaign', W / 2, py + 62);
+  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.fillStyle = '#9BA3BF';
+  ctx.fillText('↑↓ choose · ENTER commit · X decide later', W / 2, py + 86);
+
+  const rects = [];
+  model.options.forEach((opt, i) => {
+    const y = py + headH + i * (rowH + 8);
+    const selected = i === model.index;
+    ctx.fillStyle = selected ? P.cream : '#26304F';
+    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.fill();
+    ctx.strokeStyle = selected ? P.hero : '#3A4A72'; ctx.lineWidth = selected ? 3 : 1.5;
+    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = selected ? P.ink : P.cream;
+    ctx.font = '800 16px system-ui, sans-serif';
+    ctx.fillText(`${opt.glyph}  ${opt.name}`, px + 44, y + 26);
+    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.fillStyle = selected ? '#3A4A72' : '#B9C2DC';
+    ctx.fillText(`${opt.immediate}  ·  later visits: ${opt.ongoing}`, px + 44, y + 48);
+    rects.push({ x: px + 24, y, w: pw - 48, h: rowH });
+  });
+
+  const footerY = py + ph - footH / 2;
+  ctx.textAlign = 'center';
+  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.fillStyle = '#9BA3BF';
+  ctx.fillText('A captured settlement pays its benefit only while it flies your banner', W / 2, footerY);
+  ctx.textBaseline = 'alphabetic';
+  // updateWorldScreens() hit-tests clicks against these; `index` mirrors the hovered row.
+  const first = rects[0];
+  return { spec: { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects } };
+}
+
+// ---------------------------------------------------------------- campaign summary
+// Milestone 025 Slice E: the regional-conquest summary behind the stronghold
+// victory. Pure over the final save — the same campaign always summarizes the
+// same way.
+export function buildSummaryModel(save) {
+  const stats = save.stats || {};
+  const settlements = save.settlements || [];
+  const captured = settlements.filter(s => s.owner === OWNERSHIP_PLAYER).length;
+  const held = settlements.filter(s => s.owner === OWNERSHIP_PLAYER && !s.occupied).length;
+  const specs = settlements
+    .filter(s => s.spec)
+    .map(s => `${settlementName(s.id)}: ${SPECIALIZATIONS[s.spec].name}`);
+  const armyCounts = countByType(save.troops || [], Object.keys(UNIT_TYPES));
+  const army = Object.keys(UNIT_TYPES).filter(t => armyCounts[t] > 0)
+    .map(t => `${armyCounts[t]} ${SQUAD_LABELS[t].toLowerCase()}`);
+  const razed = (save.camps || []).filter(c => c.razed && c.id !== 'strong').length;
+  return {
+    kind: 'summary',
+    hard: !!save.hard,
+    time: stats.playT || 0,
+    battlesWon: stats.won || 0,
+    battlesLost: stats.battlesLost || 0,
+    captured,
+    held,
+    totalSettlements: settlements.length,
+    campsRazed: razed,
+    soldiersLost: stats.lost || 0,
+    foesSlain: stats.kills || 0,
+    goldEarned: stats.goldEarned || 0,
+    goldSpent: stats.goldSpent || 0,
+    finalGold: save.gold || 0,
+    army: army.length ? army.join(', ') : 'no standing host',
+    specs,
+  };
+}
+
+const OWNERSHIP_PLAYER = 'player';
+
+function settlementName(id) {
+  const s = WORLD.settlements.find(cand => cand.id === id);
+  return s ? s.name : id;
 }
 
 // ---------------------------------------------------------------- aftermath

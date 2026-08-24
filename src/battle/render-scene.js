@@ -1,14 +1,78 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rbe1f74f09262';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=rbe1f74f09262';
-import { stableSortPrefix } from './spatial-index.js?v=rbe1f74f09262';
-import { SQUAD_TYPES } from './constants.js?v=rbe1f74f09262';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=rbe1f74f09262';
-import { drawHud } from './hud.js?v=rbe1f74f09262';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r47a9e4eb3305';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r47a9e4eb3305';
+import { stableSortPrefix } from './spatial-index.js?v=r47a9e4eb3305';
+import { SQUAD_TYPES } from './constants.js?v=r47a9e4eb3305';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r47a9e4eb3305';
+import { drawHud } from './hud.js?v=r47a9e4eb3305';
 
 // ------------------------------------------------------------- drawing
+
+// Milestone 025 Slice C: the Hold objective's marked ground. Flat ring + soft fill,
+// drawn under every actor; state colour carries the meaning (cream = unclaimed,
+// green = held, red pulse = contested). Presentation only — reads battle.objective,
+// writes nothing.
+function drawObjectiveGround(battle, ctx) {
+  const P = battle.palette;
+  const o = battle.objective;
+  if (!o || o.kind !== 'hold') return;
+  const contested = o.contested;
+  const held = o.held;
+  ctx.save();
+  ctx.globalAlpha = 0.10 + (contested ? 0.05 * (1 + Math.sin(battle.time * 8)) : 0);
+  ctx.fillStyle = contested ? P.enemy : held ? P.hp : P.cream;
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = contested ? P.enemy : held ? P.hp : P.cream;
+  ctx.lineWidth = 4;
+  ctx.setLineDash([18, 14]);
+  ctx.lineDashOffset = -battle.time * 30;
+  ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, TAU); ctx.stroke();
+  ctx.setLineDash([]); ctx.lineDashOffset = 0;
+  // centre banner: the ground has a standard, not just a boundary
+  ctx.strokeStyle = P.ink; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x, o.y - 44); ctx.stroke();
+  ctx.fillStyle = contested ? P.enemy : P.friend;
+  ctx.beginPath();
+  ctx.moveTo(o.x, o.y - 44); ctx.lineTo(o.x + 24, o.y - 36); ctx.lineTo(o.x, o.y - 28);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+// A defensive guard: a palisade tower with an enemy pennant — a structure with
+// health, not another unit silhouette.
+export function drawGuard(battle, ctx, o) {
+  const P = battle.palette;
+  ctx.save();
+  if (o.flash > 0) { ctx.globalAlpha = 0.85; }
+  // palisade body
+  ctx.fillStyle = '#6B5233';
+  ctx.beginPath();
+  ctx.moveTo(o.x - o.r, o.y);
+  ctx.lineTo(o.x - o.r, o.y - o.r * 1.7);
+  for (let i = 0; i < 4; i++) {
+    const px = o.x - o.r + (i + 0.5) * (o.r / 2);
+    ctx.lineTo(px, o.y - o.r * 2.1);
+    ctx.lineTo(px + o.r / 4, o.y - o.r * 1.7);
+  }
+  ctx.lineTo(o.x + o.r, o.y);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = P.ink; ctx.lineWidth = 2; ctx.stroke();
+  // pennant
+  ctx.beginPath(); ctx.moveTo(o.x, o.y - o.r * 2.1); ctx.lineTo(o.x, o.y - o.r * 2.6); ctx.stroke();
+  ctx.fillStyle = P.enemy;
+  ctx.beginPath();
+  ctx.moveTo(o.x, o.y - o.r * 2.6); ctx.lineTo(o.x + 16, o.y - o.r * 2.35); ctx.lineTo(o.x, o.y - o.r * 2.1);
+  ctx.closePath(); ctx.fill();
+  if (o.flash > 0) {
+    ctx.globalAlpha = Math.min(1, o.flash * 6);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(o.x, o.y - o.r, o.r * 0.9, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+}
 export function drawScene(battle, ctx) {
   const P = battle.palette;
   battle._alertCount = 0; // per-frame alert cluster-cull registry
@@ -74,6 +138,10 @@ export function drawScene(battle, ctx) {
   }
   drawProps(battle, ctx, true);
 
+  // Milestone 025 Slice C: the Hold objective's marked ground — a dashed banner ring
+  // on the ground plane, under every unit. Contested pulses red; held glows green.
+  drawObjectiveGround(battle, ctx);
+
   // Hold banners: one per squad actually holding, drawn from that squad's own anchor.
   // This was gated on the aggregate `command === 'hold'`, which is never 'hold' under a
   // split order - so the feature's in-world affordance vanished exactly when squads were
@@ -106,6 +174,12 @@ export function drawScene(battle, ctx) {
     const entry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
     entry.y = e.y; entry.kind = 2; entry.ref = e; drawCount++;
   }
+  // Break-the-position guards sort with the pile so units can stand behind them.
+  for (const o of battle.objectiveTargets || []) {
+    if (o.dead) continue;
+    const entry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
+    entry.y = o.y; entry.kind = 4; entry.ref = o; drawCount++;
+  }
   const heroEntry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
   heroEntry.y = h.y; heroEntry.kind = 3; heroEntry.ref = h; drawCount++;
   for (let i = drawCount; i < oldDrawLength; i++) draws[i].ref = null;
@@ -115,12 +189,14 @@ export function drawScene(battle, ctx) {
   // shadows first
   for (const t of battle.troops) shadow(ctx, t.x, t.y + 2, t.d.radius, 12, P.groundShade);
   for (const e of battle.enemies) shadow(ctx, e.x, e.y + 2, e.d.radius, 12, P.groundShade);
+  for (const o of battle.objectiveTargets || []) if (!o.dead) shadow(ctx, o.x, o.y + 2, o.r, 20, P.groundShade);
   shadow(ctx, h.x, h.y + 4, 15, 16, P.groundShade);
   for (let i = 0; i < drawCount; i++) {
     const d = draws[i];
     if (d.kind === 0) drawObstacle(battle, ctx, d.ref);
     else if (d.kind === 1) drawTroop(battle, ctx, d.ref);
     else if (d.kind === 2) drawEnemy(battle, ctx, d.ref);
+    else if (d.kind === 4) drawGuard(battle, ctx, d.ref);
     else drawHero(battle, ctx);
   }
   // the commander is never buried: while hurt (and at the death moment) he draws above the pile

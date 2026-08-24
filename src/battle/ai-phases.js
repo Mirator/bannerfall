@@ -6,14 +6,14 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=rbe1f74f09262';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rbe1f74f09262';
-import { ACTIONS } from '../input-actions.js?v=rbe1f74f09262';
+import { HERO } from '../data.js?v=r47a9e4eb3305';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r47a9e4eb3305';
+import { ACTIONS } from '../input-actions.js?v=r47a9e4eb3305';
 import {
   BRACE_SPEED, BRACE_BONUS, BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
-} from './constants.js?v=rbe1f74f09262';
+} from './constants.js?v=r47a9e4eb3305';
 
 // Phase 4c: local obstacle avoidance ("tangent steering"). Casts a ray of length LOOKAHEAD
 // from (ux,uy) along the unit's desired heading (dirX,dirY, already a unit vector) toward its
@@ -257,11 +257,26 @@ export function updateHeroPhase(battle, dt, inp, h, ax) {
         if (Math.abs(da) < HERO.swingArc / 2 + 0.25) inArc.push([d, e]);
       }
     }
+    // Break-the-position: the commander's blade works on defensive guards too —
+    // otherwise a lone hero could not finish an objective the milestone promises.
+    for (const o of battle.objectiveTargets || []) {
+      if (o.dead) continue;
+      const d = Math.sqrt(dist2(h.x, h.y, o.x, o.y));
+      if (d < HERO.swingRange + o.r) {
+        let da = Math.atan2(o.y - h.y, o.x - h.x) - aimA;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (Math.abs(da) < HERO.swingArc / 2 + 0.25) inArc.push([d, o, true]);
+      }
+    }
     inArc.sort((a, b) => a[0] - b[0]);
     const targets = inArc.slice(0, HERO.swingMaxTargets);
-    for (const [, e] of targets) {
-      battle.damageEnemy(e, HERO.swingDmg, Math.cos(aimA) * 60, Math.sin(aimA) * 60, 'hero');
-      e.vx += Math.cos(aimA) * 160; e.vy += Math.sin(aimA) * 160;
+    for (const [, t, isObjective] of targets) {
+      if (isObjective) {
+        battle.damageObjective(t, HERO.swingDmg);
+      } else {
+        battle.damageEnemy(t, HERO.swingDmg, Math.cos(aimA) * 60, Math.sin(aimA) * 60, 'hero');
+        t.vx += Math.cos(aimA) * 160; t.vy += Math.sin(aimA) * 160;
+      }
     }
     if (targets.length > 0) { battle.freeze = Math.max(battle.freeze, 0.045); battle.game.camera.shake(2.5, 0.12); }
   }
@@ -302,12 +317,31 @@ export function updateTroopPhase(battle, dt, h) {
       engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, maxR, dt) : battle.nearestEnemy(t.x, t.y, maxR);
       if (!engage && heroThreat && dist2(t.x, t.y, battle.hero.x, battle.hero.y) < 260 * 260) engage = heroThreat;
       if (!engage) goal = { x: t.holdX, y: t.holdY };
-    } else { // follow
-      const maxR = t.d.ranged ? t.d.range * 0.9 : 150;
-      engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, maxR, dt) : battle.nearestEnemy(t.x, t.y, maxR);
-      if (!engage && heroThreat) engage = heroThreat;
-      if (!engage) goal = battle.slotPos(t);
-    }
+      } else { // follow
+        const maxR = t.d.ranged ? t.d.range * 0.9 : 150;
+        engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, maxR, dt) : battle.nearestEnemy(t.x, t.y, maxR);
+        if (!engage && heroThreat) engage = heroThreat;
+        if (!engage) goal = battle.slotPos(t);
+      }
+
+      // Milestone 025 Slice C: Break-the-position. A squad with no raider in reach
+      // goes to work on the nearest standing defensive guard — destroying the
+      // position is a win even while defenders survive, so the guards must be
+      // attackable by everyone.
+      if (!engage && battle.objectiveTargets && battle.objectiveTargets.length) {
+        let best = null, bd = Infinity;
+        for (const o of battle.objectiveTargets) {
+          if (o.dead) continue;
+          const dd = dist2(t.x, t.y, o.x, o.y);
+          if (dd < bd) { bd = dd; best = o; }
+        }
+        if (best) {
+          engage = {
+            x: best.x, y: best.y, vx: 0, vy: 0,
+            isObjective: true, objRef: best, d: { radius: best.r },
+          };
+        }
+      }
 
     if (engage) {
       const d = Math.sqrt(dist2(t.x, t.y, engage.x, engage.y));
@@ -362,7 +396,15 @@ export function updateTroopPhase(battle, dt, h) {
         const closingFast = stance === 'hold' && !t.d.ranged &&
           len(engage.vx, engage.vy) > BRACE_SPEED;
         const dmg = t.d.dmg * (closingFast ? BRACE_BONUS : 1);
-        if (t.d.ranged) {
+        if (engage.isObjective) {
+          // Guards are structures: arrows and blades chip them directly (a palisade
+          // has no hit-flash target for a projectile's proximity check, so ranged
+          // damage lands on the shot rather than simulating one).
+          if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
+          t.cd = t.d.cooldown;
+          t.lunge = t.d.ranged ? 0 : 1;
+          battle.damageObjective(engage.objRef, dmg);
+        } else if (t.d.ranged) {
           // Phase 5: the firing gate lives here, not inside fireArrow — checked BEFORE the
           // cooldown is consumed, so a blind archer does not silently burn a shot into a
           // hillside every time its cooldown comes up.
@@ -505,6 +547,13 @@ export function updateEnemyPhase(battle, dt, h) {
           const bdirX = blen > 0 ? bdx / blen : 1, bdirY = blen > 0 ? bdy / blen : 0;
           const heading = blindSidestepHeading(e, e.x, e.y, bdirX, bdirY, blen, dt, battle.blockers);
           if (heading) { gx = e.x + heading.x * LOOKAHEAD; gy = e.y + heading.y * LOOKAHEAD; }
+        }
+        // Milestone 025 Slice C: enemies prioritize contesting a Hold objective —
+        // while outside the marked ground their goal blends toward it, so the
+        // defender's clock genuinely pauses instead of running itself out unopposed.
+        const zo = battle.objective;
+        if (zo && zo.kind === 'hold' && Math.sqrt(dist2(e.x, e.y, zo.x, zo.y)) > zo.r * 0.9) {
+          gx = gx * 0.5 + zo.x * 0.5; gy = gy * 0.5 + zo.y * 0.5;
         }
         // Phase 4b: resolve the crossing waypoint before steering, same ordering as troops.
         const wp = battle.crossingWaypoint(e.x, e.y, gx, gy);

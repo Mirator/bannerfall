@@ -1,8 +1,13 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with their body-count
 // badge and odds pill, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, UNIT_TYPES, BALANCE, oddsWord, ODDS_WORDS } from '../data.js?v=rbe1f74f09262';
-import { TAU, dist2, rrect, shadow } from '../engine.js?v=rbe1f74f09262';
+import { PAL, WORLD, UNIT_TYPES, BALANCE, oddsWord, ODDS_WORDS } from '../data.js?v=r47a9e4eb3305';
+import { TAU, dist2, rrect, shadow } from '../engine.js?v=r47a9e4eb3305';
+import {
+  strongholdModifiers, STRONGHOLD_POWER_LABELS, OWNERSHIP, SPECIALIZATIONS,
+} from '../region.js?v=r47a9e4eb3305';
+
+const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
 
 const P = PAL.world;
 
@@ -143,13 +148,36 @@ export function drawHud(world, ctx) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillText(`⛃ ${world.save.gold}    ⚔ ${world.save.troops.length}/${world.save.armyCap}    ♥ ${world.save.heroHp}/${world.save.heroMaxHp}`, 26, 32);
 
-  // objective (honest about the gate)
-  const razed = world.save.camps.filter(c => c.razed && c.id !== 'strong').length;
-  ctx.fillStyle = P.ink;
-  rrect(ctx, W - 320, 14, 306, 36, 8); ctx.fill();
-  ctx.fillStyle = P.cream;
-  ctx.textAlign = 'right';
-  ctx.fillText(razed < 3 ? `Raze the bandit camps (${razed}/3) to unlock Wolfsjaw` : 'Storm Wolfsjaw Hold!', W - 28, 32);
+  // objective — Milestone 025: stronghold power, not a camp count. The player can
+  // assault at any time; the chip says how much weakening has been earned so far.
+  {
+    const mods = strongholdModifiers(world.save);
+    const label = STRONGHOLD_POWER_LABELS[mods.stateId];
+    ctx.fillStyle = P.ink;
+    rrect(ctx, W - 340, 14, 326, 36, 8); ctx.fill();
+    ctx.fillStyle = P.cream;
+    ctx.textAlign = 'right';
+    ctx.fillText(`Wolfsjaw: ${label}  ·  weaken it (${mods.points}/${mods.maxPoints})`, W - 28, 26);
+    ctx.font = '600 10px system-ui, sans-serif';
+    ctx.fillStyle = '#9BA3BF';
+    ctx.fillText('capture settlements · raze its camps', W - 28, 41);
+  }
+
+  // Milestone 025 Slice D: an active regional raid warns above the toast line.
+  const raidParty = world.parties.find(p => p.raid && p.raidKind === 'regional');
+  if (raidParty) {
+    const targetDef = WORLD.settlements.find(s => s.id === raidParty.raid);
+    if (targetDef) {
+      ctx.fillStyle = P.enemy;
+      const warn = `⚠ Raiders ride on ${targetDef.name}!`;
+      ctx.font = '800 14px system-ui, sans-serif';
+      const ww = ctx.measureText(warn).width + 40;
+      rrect(ctx, W / 2 - ww / 2, 112 + Math.sin(world.time * 6) * 2, ww, 30, 8); ctx.fill();
+      ctx.fillStyle = P.cream;
+      ctx.textAlign = 'center';
+      ctx.fillText(warn, W / 2, 128);
+    }
+  }
 
   // context prompt
   const s = world.nearSettlement();
@@ -159,10 +187,17 @@ export function drawHud(world, ctx) {
     lines = [`${s.name} — OCCUPIED`, 'A raiding party has seized it — its service is suspended', 'Defeat them here to drive them out'];
   } else if (s) {
     const sc = world.costAt(s, 'spear'), ac = world.costAt(s, 'archer');
-    const healTxt = s.freeHeal ? 'F Rest & heal FREE' : `F Rest & heal ${BALANCE.healCost}g`;
-    lines = s.kind === 'town'
+    const healTxt = s.freeHeal ? 'F Rest & heal FREE' : `F Rest & heal ${world.healCostAt(s)}g`;
+    const rec = world.save.settlements.find(x => x.id === s.id);
+    const owned = rec && rec.owner === OWNERSHIP.PLAYER;
+    const specLine = owned && rec.spec ? `${rec.spec === 'watchtower' ? '' : ''}${specName(rec.spec)}` : null;
+    const claimLine = !owned && !rec?.spec ? 'G Claim this settlement for your banner' : null;
+    const base = s.kind === 'town'
       ? [`${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · R Knight ${UNIT_TYPES.knight.cost}g`, `${healTxt} · T +2 army cap ${world.armyCapCost()}g`]
       : [`Village of ${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · ${healTxt}`];
+    if (owned && rec.spec) base.push(`${s.name} is yours — ${specLine}`);
+    else if (!owned) base.push(claimLine);
+    lines = base;
   } else if (camp) {
     const razedC = world.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     const est = world.garrisonStrength(camp), mine = world.myStrength();

@@ -12,14 +12,18 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE } from '../data.js?v=rbe1f74f09262';
-import { dist2 } from '../engine.js?v=rbe1f74f09262';
-import { ACTIONS } from '../input-actions.js?v=rbe1f74f09262';
-import { buildBriefModel } from '../world-screens.js?v=rbe1f74f09262';
-import { sampleBattlefield } from './battlefield-brief.js?v=rbe1f74f09262';
-import { FIELD } from '../battle/constants.js?v=rbe1f74f09262';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r47a9e4eb3305';
+import { dist2, clamp } from '../engine.js?v=r47a9e4eb3305';
+import { ACTIONS } from '../input-actions.js?v=r47a9e4eb3305';
+import { buildBriefModel } from '../world-screens.js?v=r47a9e4eb3305';
+import { sampleBattlefield } from './battlefield-brief.js?v=r47a9e4eb3305';
+import { FIELD } from '../battle/constants.js?v=r47a9e4eb3305';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r47a9e4eb3305';
 
-export function startBattle(world, comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief = false) {
+// Sim-seconds into the assault when an Entrenched hold's reserve arrives.
+const STRONGHOLD_WAVE_AT = 25;
+
+export function startBattle(world, comp, title, onWinExtra, arena, ambush, partyMeta, subtitle, brief = false, extras = null) {
   const save = world.save;
   // Plan 021 step 9: the roster ENTERING the fight, captured before anything about it
   // can change — result.survivors alone can't say how many of each type were lost.
@@ -52,15 +56,28 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
     field: sampleBattlefield(world, approach, battleSeed, FIELD.W, FIELD.H),
     deploy: world.pendingDeploy,
     approach,
+    // Milestone 025 Slice C/E: the objective descriptor and any stronghold modifier
+    // payload assembled by confirmBrief(). Plain serializable data — the battle side
+    // builds its runtime state from it and nothing here is ever persisted.
+    objective: extras ? extras.objective || null : null,
+    waves: extras ? extras.waves || null : null,
+    stronghold: extras ? extras.stronghold || null : null,
+    revealDeployment: extras ? !!extras.revealDeployment : false,
     // (pending* are per-battle one-shots)
     heroHp: save.heroHp,
     heroMaxHp: save.heroMaxHp,
     onEnd: (result) => {
       world.pendingDeploy = undefined; world.pendingApproach = undefined;
       save.stats = save.stats || { won: 0, kills: 0, lost: 0, playT: 0 };
+      for (const k of ['battlesLost', 'goldEarned', 'goldSpent', 'captures']) save.stats[k] = save.stats[k] || 0;
       save.stats.kills += result.kills || 0;
       save.stats.lost += result.lost || 0;
-      if (result.victory) save.stats.won++;
+      if (result.victory) {
+        save.stats.won++;
+        save.stats.goldEarned += result.loot || 0;
+      } else if (!result.retreated) {
+        save.stats.battlesLost++;
+      }
       // whittle down the enemy force by exactly who died (by type, not by array
       // position) — used below both for camp-garrison attrition and for the
       // roaming party you disengaged from. Reused per branch since each only
@@ -90,7 +107,7 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
           return;
         }
         save.parties = save.parties || [];
-        save.parties.push({
+        const restored = {
           camp: partyMeta.camp,
           x: partyMeta.x,
           y: partyMeta.y,
@@ -101,7 +118,14 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
           // cooldown it would instantly re-clash the same frame grace expires
           clashT: BALANCE.battleGrace,
           ...(partyMeta.occupying ? { occupying: partyMeta.occupying } : {}),
-        });
+        };
+        // Milestone 025: an interrupted raid resumes where it left off — the party
+        // keeps its target (and its regional kind) after a retreat or a defeat.
+        if (partyMeta.raid) {
+          restored.raid = partyMeta.raid;
+          restored.raidKind = partyMeta.raidKind || 'breakoff';
+        }
+        save.parties.push(restored);
       };
       // camp garrisons no longer resurrect their dead on a failed or abandoned raid —
       // what you killed stays dead, so attrition against a camp is real
@@ -209,6 +233,7 @@ export function cancelBrief(world) {
 export function confirmBrief(world) {
   const d = world.pending.descriptor;
   let comp = d.comp, onWinExtra = d.onWinExtra;
+  let extras = null;
   if (d.party) {
     // Hold the party OBJECT, resolve indexOf at confirm — nothing else can touch
     // `world.parties` while the brief blocks every other world phase, but bail cleanly
@@ -216,14 +241,39 @@ export function confirmBrief(world) {
     const idx = world.parties.indexOf(d.party);
     if (idx < 0) { world.screen = null; world.pending = null; return; }
     world.parties.splice(idx, 1);
+    extras = { objective: d.objective || null };
   } else if (d.campId) {
     const camp = WORLD.camps.find(c => c.id === d.campId);
     const st = world.save.camps.find(c => c.id === d.campId);
     // Decision 6: the garrison roll for an unscouted camp happens HERE, at confirm —
     // never at request time, or backing out would permanently reveal it for free.
     if (!st.garrison) st.garrison = world.rollGarrison(camp);
-    comp = st.garrison; // the live alias startBattle()'s onEnd already expects
+    comp = st.garrison.slice(); // a snapshot: the modifiers below must not rewrite camp state
     onWinExtra = world.campVictoryExtra(camp, st);
+    extras = { objective: d.objective || null };
+    if (camp.stronghold) {
+      const mods = d.stronghold ? d.stronghold.mods : strongholdModifiers(world.save);
+      // Exposed thins the STARTING garrison (example mapping: "reduce the starting
+      // garrison to the beatable floor"). Deterministic: keep the first N entries in
+      // the rolled order, brutes first so the thinning reads as losing mass, not teeth.
+      if (mods.garrisonMul < 1) {
+        const keep = Math.max(2, Math.round(comp.length * mods.garrisonMul));
+        comp = [...comp.filter(t => t === 'brute'), ...comp.filter(t => t !== 'brute')].slice(0, keep);
+      }
+      // Entrenched reserves: one reinforcement wave, rolled now on the campaign's own
+      // simRng so the whole assault stays seed-deterministic.
+      const waves = [];
+      for (let i = 0; i < (mods.waves || 0); i++) {
+        const mine = world.myStrength();
+        waves.push({
+          at: STRONGHOLD_WAVE_AT,
+          comp: rollComposition(clamp(Math.round(mine * 0.8), 4, 16), world.simRng, BALANCE.compRolls.garrison),
+        });
+      }
+      extras.waves = waves;
+      extras.stronghold = d.stronghold || null;
+      extras.revealDeployment = !!mods.revealDeployment;
+    }
   }
   // Splice/garrison-roll above must finish before startBattle() calls persistParties()
   // and persistRun() (AGENTS.md: finish all map-side mutations, then persist once,
@@ -233,7 +283,7 @@ export function confirmBrief(world) {
   world.pendingDeploy = d.deploy;
   world.screen = null;
   world.pending = null;
-  world.startBattle(comp, d.title, onWinExtra, d.arena, d.ambush, d.partyMeta, d.subtitle, true);
+  world.startBattle(comp, d.title, onWinExtra, d.arena, d.ambush, d.partyMeta, d.subtitle, true, extras);
 }
 
 // Named modal phase (Plan 021 decision 7/step 6): first phase in update(), and it must
@@ -262,8 +312,32 @@ export function updateWorldScreens(world, inp) {
   if (world.screen.kind === 'aftermath') {
     if (inp.pressedAction(ACTIONS.CONFIRM) || clickedRect(btn.confirm)) {
       world.screen = null;
+      // Milestone 025 Slice B: a specialization choice queued behind this aftermath
+      // opens on the same tick the aftermath clears, so the capture flow never shows
+      // two modals at once and never loses the prompt.
+      if (world.pendingSpecChoice) world.openSpecChoice(world.pendingSpecChoice);
       return true;
     }
+    return true;
+  }
+  if (world.screen.kind === 'spec') {
+    // Permanent choice: navigate with the menu actions, commit with CONFIRM.
+    // Dismissing (X) keeps the settlement owned but unchosen — G at its gates
+    // reopens the prompt later.
+    const options = world.screen.options;
+    if (inp.pressedAction(ACTIONS.MENU_UP)) {
+      world.screen.index = (world.screen.index + options.length - 1) % options.length;
+      world.game.invalidate();
+      return true;
+    }
+    if (inp.pressedAction(ACTIONS.MENU_DOWN)) {
+      world.screen.index = (world.screen.index + 1) % options.length;
+      world.game.invalidate();
+      return true;
+    }
+    if (clickedRect(btn.spec)) { world.chooseSpec(options[btn.spec.index].id); return true; }
+    if (inp.pressedAction(ACTIONS.CONFIRM)) { world.chooseSpec(options[world.screen.index].id); return true; }
+    if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.dismissSpecChoice(); return true; }
     return true;
   }
   return false;

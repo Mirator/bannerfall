@@ -166,7 +166,12 @@ before the fix, not a balance change).
 Canvas states: a seeded world overview, a road/river/bridge landmark, a
 pre-battle brief for a fleeing party and one for a camp assault, a victory and
 a defeat aftermath (Plan 021), a small road battle, a large night camp
-battle, and a bridge ambush. Each scenario is
+battle, and a bridge ambush. Milestone 025 adds the regional-conquest
+surfaces: a mid-conquest world frame (a Barracks holding's banner, an occupied
+settlement with its occupier, the WEAKENED power chip), the WEAKENED and
+EXPOSED power chips at the stronghold itself, the three objective battles
+(`battle_hold`, `battle_break`, `battle_stronghold` — hold zone, break guards,
+stronghold HUD with its reserve wave), and the campaign summary. Each scenario is
 created through the existing `window.game.scenario()` API, advanced with the
 synchronous fixed-step `window.game.step()`, then frozen before capture so rAF
 and watchdog timing cannot affect the image. The test replaces only the page's
@@ -322,6 +327,58 @@ settlement, or troop/enemy IDs, and keep real-player persistence fixtures in
 isolated contexts using `bf_save` and raw `window.__g`; calls through
 `window.game` belong to the `bf_save_test` slot.
 
+## Milestone 025: the regional conquest loop
+
+Three suites own the regional model, one per layer, and all three must stay
+aligned with `src/region.js` — the single data-driven home for ownership
+vocabulary, specializations, the stronghold power ladder, objective tuning and
+the raid cadence.
+
+`tests/e2e/region.spec.js` imports `src/region.js` directly in Node (the module
+is pure over `(save, definitions)` — no RNG, no DOM) and pins the model itself:
+the authored settlement/camp/stronghold shape, the ENTRENCHED/WEAKENED/EXPOSED
+ladder with occupied holdings stopping their count, the modifier mapping (wave
+removal at two captures, the two-guard floor after camp razing, watchtower
+deployment reveal, Exposed garrison thinning), the brief advantage lines being
+derived rather than hand-maintained, the four specializations and their
+occupation suspension, the one-place objective mapping, the structural
+beatable-route guarantee (capturing every settlement alone always crosses
+Exposed), and the raid cadence constants.
+
+`tests/e2e/battle-objectives.spec.js` drives the REAL battle tick pipeline over
+seeded `window.__g.startBattle` fixtures and owns the objective terminal
+contract: hold-zone placement (in-bounds, obstacle-clear, deterministic), the
+hold clock running only while a squad holds and no enemy contests, timeout and
+elimination victories each resolving through `resolveBattleResult()` exactly
+once, defeat and the held escape-edge withdrawal resolving as non-victories,
+break-guard placement and determinism, destroying every guard winning with
+defenders still standing, elimination winning with guards standing, one ending
+when both conditions land in the same tick, Entrenched reserve waves arriving
+on schedule with coherent kill accounting, and the `state()` objective panel
+surface. Fixture enemies are re-pinned (position AND hp) at every batch
+boundary — an archer left shooting at a static fixture can otherwise deplete it
+into an accidental elimination victory — and the last guard's death hit-stop
+consumes one tick, so result assertions step past it.
+
+`tests/e2e/regional-campaign.spec.js` drives the campaign loop through
+production paths (named input actions, full `World.update` ticks,
+`requestBattle`/`confirmBrief`, real `endBattle`) on the isolated test slot:
+claiming neutral ground (checkpoint, permanent spec choice, capture grace), each
+specialization's documented effect and its occupation suspension, the
+occupy/reclaim cycle (service suspended then restored, no re-counted capture, no
+second spec choice), regional raids (dispatch at held ground, single-flight,
+freezing with the world), the Hold-the-ground settlement defense with its
+post-victory grace, the three power states materially changing the final
+stronghold battle (guards, wave, garrison thinning), and the campaign summary
+counters behind the final victory.
+
+Harness rules for the campaign suite: the live rAF scheduler is parked right
+after the scenario swap (an uncontrolled tick would scout camps, move parties
+and fire the autosave mid-fixture) and every simulation step is an explicit
+production tick; settlement/camp coordinates come from the Node-side production
+data and are passed into the page, because module imports do not exist on
+`window`.
+
 ## Legacy check inventory
 
 The 25 deterministic records cover:
@@ -456,6 +513,10 @@ errors, weaken assertions, or raise performance budgets to make CI green.
 | Retreat restores the engaged party minus actual dead enemy types | browser E2E | pass |
 | Hard-mode defeat retains exactly one fallback squire | browser E2E | pass |
 | Final stronghold victory enters the victory scene and clears the run save | browser E2E | pass |
+| v3 -> v4 migration, malformed v4 rejection, reload idempotency | browser E2E | pass (`tests/e2e/save-schema.spec.js`) |
+| Regional model (power ladder, modifiers, specializations, objective mapping) | Node-level E2E | pass (`tests/e2e/region.spec.js`) |
+| Objective placement and every terminal battle path | browser E2E | pass (`tests/e2e/battle-objectives.spec.js`) |
+| Capture/occupation/reclaim, specialization effects, raids, defenses, power states, summary | browser E2E | pass (`tests/e2e/regional-campaign.spec.js`) |
 | AUDIT-02 autosave captures live hero and roaming-party positions | browser E2E | pass (explicit save, timed autosave, reload/Continue) |
 | AUDIT-05 battle entry persists a coherent transaction | browser E2E | pass (active-battle checkpoint, schema, removed party, reload/Continue) |
 | AUDIT-03 defeat restores the surviving roaming party | browser E2E | pass (survivors return to the encounter location; fully wiped parties stay removed) |

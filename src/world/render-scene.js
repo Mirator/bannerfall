@@ -1,12 +1,17 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=rbe1f74f09262';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=rbe1f74f09262';
+import { PAL, WORLD } from '../data.js?v=r47a9e4eb3305';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r47a9e4eb3305';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
-} from '../world-screens.js?v=rbe1f74f09262';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=rbe1f74f09262';
+  drawSpecPanel,
+} from '../world-screens.js?v=r47a9e4eb3305';
+import {
+  settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
+  strongholdStateId, STRONGHOLD_POWER_LABELS,
+} from '../region.js?v=r47a9e4eb3305';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=r47a9e4eb3305';
 
 const P = PAL.world;
 
@@ -140,6 +145,7 @@ export function drawScene(world, ctx) {
   if (world.screen) {
     if (world.screen.kind === 'brief') world.screenButtons = drawBriefPanel(ctx, cam, world.screen);
     else if (world.screen.kind === 'aftermath') world.screenButtons = drawAftermathPanel(ctx, cam, world.screen);
+    else if (world.screen.kind === 'spec') world.screenButtons = drawSpecPanel(ctx, cam, world.screen);
   } else {
     world.screenButtons = null;
   }
@@ -288,6 +294,40 @@ export function drawSettlement(world, ctx, s) {
   rrect(ctx, s.x - nw / 2, s.y + 34, nw, 20, 6); ctx.stroke();
   ctx.fillStyle = P.ink;
   ctx.fillText(s.name, s.x, s.y + 45);
+  // the specialization glyph rides on the name chip — one compact status icon
+  {
+    const rec = settlementRecord(world.save, s.id);
+    if (rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied && rec.spec) {
+      const glyph = SPECIALIZATIONS[rec.spec].glyph;
+      ctx.font = '800 12px system-ui, sans-serif';
+      ctx.fillStyle = P.hero;
+      ctx.fillText(glyph, s.x + nw / 2 - 9, s.y + 46);
+    }
+  }
+
+  // Milestone 025 Slice A: ownership reads from the map without any text — the
+  // settlement's banner flies gold for the player, crimson while occupied, and
+  // neutral cream otherwise; a player-held town with a specialization adds its
+  // glyph to the name chip.
+  const state = settlementState(world.save, s.id);
+  const bannerColor = state === 'player' ? P.hero : state === 'occupied' ? P.enemy : P.cream;
+  const poleX = s.kind === 'town' ? s.x + 58 : s.x + 44;
+  const poleTop = s.y - (s.kind === 'town' ? 96 : 52);
+  ctx.strokeStyle = P.ink; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(poleX, s.y + 8); ctx.lineTo(poleX, poleTop); ctx.stroke();
+  {
+    const wave = Math.sin(world.time * 5) * 2;
+    ctx.fillStyle = bannerColor;
+    ctx.beginPath();
+    ctx.moveTo(poleX, poleTop);
+    ctx.lineTo(poleX + 22, poleTop + 7 + wave * 0.3);
+    ctx.lineTo(poleX, poleTop + 14);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = P.ink; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(poleX, poleTop); ctx.lineTo(poleX + 22, poleTop + 7 + wave * 0.3);
+    ctx.lineTo(poleX, poleTop + 14); ctx.closePath(); ctx.stroke();
+  }
 
   // Plan 020 design decision 4: occupied and threatened settlements carry their own
   // map markers, on top of the break-off toast — legibility must not depend on having
@@ -348,6 +388,18 @@ export function drawCamp(world, ctx, c, razed) {
     ctx.fillStyle = P.ink;
     ctx.font = '800 15px system-ui, sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(c.name, c.x, c.y + 58);
+    // Milestone 025 Slice A: the hold's power state is a map-readable word chip,
+    // not a hidden number — its colour deepens as the hold weakens toward Exposed.
+    const powerId = strongholdStateId(world.save);
+    const label = STRONGHOLD_POWER_LABELS[powerId];
+    ctx.font = '800 12px system-ui, sans-serif';
+    const lw2 = ctx.measureText(label).width + 16;
+    ctx.fillStyle = powerId === 'exposed' ? P.hero : P.enemy;
+    rrect(ctx, c.x - lw2 / 2, c.y + 66, lw2, 18, 6); ctx.fill();
+    ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
+    rrect(ctx, c.x - lw2 / 2, c.y + 66, lw2, 18, 6); ctx.stroke();
+    ctx.fillStyle = powerId === 'exposed' ? P.ink : P.cream;
+    ctx.fillText(label, c.x, c.y + 78);
   } else {
     tent(c.x - 16, c.y + 6, 14); tent(c.x + 14, c.y + 10, 12);
     // campfire

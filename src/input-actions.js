@@ -3,6 +3,10 @@ export const ACTIONS = Object.freeze({
   ATTACK: 'attack', DASH: 'dash', COMMAND_FOLLOW: 'commandFollow', COMMAND_CHARGE: 'commandCharge', COMMAND_HOLD: 'commandHold',
   SQUAD_CYCLE: 'squadCycle',
   RECRUIT_SPEAR: 'recruitSpear', WORLD_PRIMARY: 'worldPrimary', RECRUIT_KNIGHT: 'recruitKnight', HEAL: 'heal', EXPAND_ARMY: 'expandArmy',
+  // Milestone 025: claim neutral ground at a settlement's gates (G). Not WORLD_PRIMARY
+  // — KeyE already recruits archers inside the same radius, and a claim must never be
+  // one mis-tap away from a purchase.
+  CLAIM: 'claim',
   CONFIRM: 'confirm', MENU_UP: 'menuUp', MENU_DOWN: 'menuDown', MENU_BACK: 'menuBack',
   CONTINUE_RUN: 'continueRun', NEW_HARD_RUN: 'newHardRun', PAUSE: 'pause', MUTE: 'mute', ABANDON_RUN: 'abandonRun',
   // Plan 021: cancel a pre-battle brief. Not WORLD_PRIMARY (the same held KeyE that
@@ -19,7 +23,7 @@ export const DEFAULT_BINDINGS = Object.freeze({
   // Tab is already in the engine's preventDefault list, so it cannot pull focus off the canvas.
   [ACTIONS.SQUAD_CYCLE]: ['Tab'],
   [ACTIONS.RECRUIT_SPEAR]: ['KeyQ'], [ACTIONS.WORLD_PRIMARY]: ['KeyE'], [ACTIONS.RECRUIT_KNIGHT]: ['KeyR'],
-  [ACTIONS.HEAL]: ['KeyF'], [ACTIONS.EXPAND_ARMY]: ['KeyT'],
+  [ACTIONS.HEAL]: ['KeyF'], [ACTIONS.EXPAND_ARMY]: ['KeyT'], [ACTIONS.CLAIM]: ['KeyG'],
   [ACTIONS.CONFIRM]: ['Enter'], [ACTIONS.MENU_UP]: ['KeyW', 'ArrowUp'], [ACTIONS.MENU_DOWN]: ['KeyS', 'ArrowDown'],
   [ACTIONS.MENU_BACK]: ['Escape'], [ACTIONS.CONTINUE_RUN]: ['KeyC'], [ACTIONS.NEW_HARD_RUN]: ['KeyH'],
   [ACTIONS.PAUSE]: ['Escape', 'KeyP'], [ACTIONS.MUTE]: ['KeyM'], [ACTIONS.ABANDON_RUN]: ['KeyR'],

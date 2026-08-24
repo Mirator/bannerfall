@@ -1,9 +1,10 @@
 // What a hit does and how a fight ends: damage application on both sides, arrow spawning,
 // and the win/loss/retreat resolution. Separated from the AI phases that decide to swing
 // and from the tick loop that orders them.
-import { BALANCE } from '../data.js?v=rbe1f74f09262';
-import { len } from '../engine.js?v=rbe1f74f09262';
-import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=rbe1f74f09262';
+import { BALANCE } from '../data.js?v=r47a9e4eb3305';
+import { len } from '../engine.js?v=r47a9e4eb3305';
+import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r47a9e4eb3305';
+import { objectiveVictory } from './objectives.js?v=r47a9e4eb3305';
 
 export function damageEnemy(battle, e, dmg, kx, ky, source) {
   const P = battle.palette;
@@ -115,6 +116,10 @@ export function endBattle(battle, victory, retreated) {
 }
 
 export function resolveBattleResult(battle, dt, h, ax) {
+  // Milestone 025 Slice C: objective victories resolve HERE — the single terminal
+  // decision point owns every ending. Hold completes its timer; Break has felled
+  // every guard. Elimination (below) remains a valid parallel win for both.
+  if (!battle.onEndFired && objectiveVictory(battle)) battle.endBattle(true);
   if (battle.enemies.length === 0) battle.endBattle(true);
   if (h.hp <= 0) battle.endBattle(false); // standing check — never rely only on the damage path
   // Retreat is a held INPUT decision; knockback, dashes, and drift never fill the bar.

@@ -40,6 +40,7 @@ conditions, and update its status row when done.
 | 022 | Split the two scene god-files into src/battle/ and src/world/ | Medium | L | 001-021 | DONE |
 | 023 | Make the world map alive only while the hero rides | P0 | M | 001-022 | DONE |
 | 024 | Rework the battlefield | P0 | XL | 001-023 | DONE |
+| 025 | The first region — one complete regional conquest loop | P0 | XL | 001-024 | DONE |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).

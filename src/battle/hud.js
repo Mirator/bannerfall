@@ -1,10 +1,10 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deploy countdown, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, enemyStrength, playerStrength } from '../data.js?v=rbe1f74f09262';
-import { TAU, clamp, rrect } from '../engine.js?v=rbe1f74f09262';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rbe1f74f09262';
-import { stanceIcon } from './render-units.js?v=rbe1f74f09262';
+import { HERO, enemyStrength, playerStrength } from '../data.js?v=r47a9e4eb3305';
+import { TAU, clamp, rrect } from '../engine.js?v=r47a9e4eb3305';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=r47a9e4eb3305';
+import { stanceIcon } from './render-units.js?v=r47a9e4eb3305';
 
 // Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
 // viewport shows about a third of the field, and squad balloons already collapse below
@@ -180,6 +180,55 @@ function drawOffscreenChevrons(battle, ctx, W, Hh) {
   ctx.globalAlpha = 1;
 }
 
+// Milestone 025 Slice C: the compact objective panel — current progress for Hold
+// and Break fights, in one chip the eye already visits for the army count. Hidden
+// for classic elimination fights, which have nothing to report.
+function drawObjectivePanel(battle, ctx, W) {
+  const P = battle.palette;
+  const o = battle.objective;
+  if (!o) return;
+  const px = W - 314, py = 14, pw = 300;
+  ctx.fillStyle = P.ink;
+  rrect(ctx, px, py, pw, o.kind === 'hold' ? 58 : 58, 8); ctx.fill();
+  ctx.fillStyle = P.cream;
+  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  if (o.kind === 'hold') {
+    const left = Math.max(0, o.duration - o.progress);
+    ctx.fillText(`OBJECTIVE · HOLD THE GROUND`, px + 14, py + 16);
+    ctx.font = '700 12px system-ui, sans-serif';
+    if (o.contested) ctx.fillStyle = P.enemy;
+    else if (!o.held) ctx.fillStyle = '#9BA3BF';
+    else ctx.fillStyle = P.hp;
+    ctx.fillText(o.contested ? 'CONTESTED — clock paused' : o.held ? 'Holding — keep them off' : 'No squad inside!', px + 14, py + 32);
+    ctx.fillStyle = P.hpBack;
+    rrect(ctx, px + 14, py + 42, pw - 28, 8, 4); ctx.fill();
+    ctx.fillStyle = o.contested ? P.enemy : P.hp;
+    rrect(ctx, px + 14, py + 42, (pw - 28) * Math.min(1, o.progress / o.duration), 8, 4); ctx.fill();
+    ctx.fillStyle = P.cream;
+    ctx.font = '800 12px system-ui, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${Math.ceil(left)}s`, px + pw - 14, py + 32);
+  } else {
+    const alive = battle.objectiveTargets.filter(t => !t.dead).length;
+    ctx.fillText(`OBJECTIVE · BREAK THE POSITION`, px + 14, py + 16);
+    ctx.font = '700 12px system-ui, sans-serif';
+    ctx.fillStyle = alive ? P.cream : P.hp;
+    ctx.fillText(alive ? `${alive} guard${alive === 1 ? '' : 's'} standing` : 'The position is broken', px + 14, py + 32);
+    // one pip per guard, filled by remaining health
+    battle.objectiveTargets.forEach((t, i) => {
+      const gx2 = px + 14 + i * ((pw - 28) / battle.objectiveTargets.length);
+      const gw2 = (pw - 28) / battle.objectiveTargets.length - 6;
+      ctx.fillStyle = P.hpBack;
+      rrect(ctx, gx2, py + 42, gw2, 8, 4); ctx.fill();
+      if (!t.dead) {
+        ctx.fillStyle = P.hero;
+        rrect(ctx, gx2, py + 42, gw2 * Math.max(0, t.hp / t.maxHp), 8, 4); ctx.fill();
+      }
+    });
+  }
+}
+
 export function drawHud(battle, ctx) {
   const P = battle.palette;
   const cam = battle.game.camera, h = battle.hero;
@@ -199,6 +248,9 @@ export function drawHud(battle, ctx) {
   // of per-frame dots/arrows) and there is no state where hiding it helps the player.
   drawMinimap(battle, ctx, W, Hh);
   drawOffscreenChevrons(battle, ctx, W, Hh);
+
+  // Milestone 025 Slice C: compact objective progress (hold timer / guard health).
+  drawObjectivePanel(battle, ctx, W);
 
   // bottom center: hero hp + dash + one row per squad.
   // Three rows instead of one chip strip: the player must be able to see, at a glance,
