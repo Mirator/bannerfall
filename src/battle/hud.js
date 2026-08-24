@@ -1,10 +1,10 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deploy countdown, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, enemyStrength, playerStrength } from '../data.js?v=r8fa9ac718319';
-import { TAU, clamp, rrect } from '../engine.js?v=r8fa9ac718319';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=r8fa9ac718319';
-import { stanceIcon } from './render-units.js?v=r8fa9ac718319';
+import { HERO, enemyStrength, playerStrength } from '../data.js?v=rdb594a1bb6f7';
+import { TAU, clamp, rrect } from '../engine.js?v=rdb594a1bb6f7';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rdb594a1bb6f7';
+import { stanceIcon } from './render-units.js?v=rdb594a1bb6f7';
 
 // Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
 // viewport shows about a third of the field, and squad balloons already collapse below
@@ -191,12 +191,12 @@ function drawObjectivePanel(battle, ctx, W) {
   ctx.fillStyle = P.ink;
   rrect(ctx, px, py, pw, o.kind === 'hold' ? 58 : 58, 8); ctx.fill();
   ctx.fillStyle = P.cream;
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 13px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';
   if (o.kind === 'hold') {
     const left = Math.max(0, o.duration - o.progress);
     ctx.fillText(`OBJECTIVE · HOLD THE GROUND`, px + 14, py + 16);
-    ctx.font = '700 12px system-ui, sans-serif';
+    ctx.font = '700 12px Inter, system-ui, sans-serif';
     if (o.contested) ctx.fillStyle = P.enemy;
     else if (!o.held) ctx.fillStyle = '#9BA3BF';
     else ctx.fillStyle = P.hp;
@@ -206,13 +206,13 @@ function drawObjectivePanel(battle, ctx, W) {
     ctx.fillStyle = o.contested ? P.enemy : P.hp;
     rrect(ctx, px + 14, py + 42, (pw - 28) * Math.min(1, o.progress / o.duration), 8, 4); ctx.fill();
     ctx.fillStyle = P.cream;
-    ctx.font = '800 12px system-ui, sans-serif';
+    ctx.font = '800 12px Inter, system-ui, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.ceil(left)}s`, px + pw - 14, py + 32);
   } else {
     const alive = battle.objectiveTargets.filter(t => !t.dead).length;
     ctx.fillText(`OBJECTIVE · BREAK THE POSITION`, px + 14, py + 16);
-    ctx.font = '700 12px system-ui, sans-serif';
+    ctx.font = '700 12px Inter, system-ui, sans-serif';
     ctx.fillStyle = alive ? P.cream : P.hp;
     ctx.fillText(alive ? `${alive} guard${alive === 1 ? '' : 's'} standing` : 'The position is broken', px + 14, py + 32);
     // one pip per guard, filled by remaining health
@@ -239,7 +239,7 @@ export function drawHud(battle, ctx) {
   ctx.fillStyle = P.ink;
   rrect(ctx, 14, 14, 232, 34, 8); ctx.fill();
   ctx.fillStyle = P.cream;
-  ctx.font = '700 15px system-ui, sans-serif';
+  ctx.font = '700 15px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(`Warband ${battle.troops.length}   ·   Slain ${battle.kills}/${battle.totalEnemies}`, 26, 31);
 
@@ -287,7 +287,7 @@ export function drawHud(battle, ctx) {
     ctx.fillStyle = P.hero;
     rrect(ctx, bx + 10, rowsY + 2, 3, rowH * squadRows.length - 6, 1.5); ctx.fill();
   }
-  ctx.font = '700 12px system-ui, sans-serif';
+  ctx.font = '700 12px Inter, system-ui, sans-serif';
   squadRows.forEach((type, i) => {
     const ry = rowsY + i * rowH;
     const count = battle.troops.reduce((n, t) => n + (t.type === type ? 1 : 0), 0);
@@ -315,7 +315,7 @@ export function drawHud(battle, ctx) {
     }
   });
   // key hints — Tab is only offered once there is more than one squad to pick between
-  ctx.font = '600 11px system-ui, sans-serif';
+  ctx.font = '600 11px Inter, system-ui, sans-serif';
   ctx.fillStyle = 'rgba(239,230,206,0.62)';
   ctx.textAlign = 'center';
   if (canPickSquads) ctx.fillText('TAB pick squad  ·  1 follow  2 charge  3 hold', bx + bw / 2, by + bh - 9);
@@ -329,7 +329,7 @@ export function drawHud(battle, ctx) {
     ctx.fillStyle = P.ink;
     rrect(ctx, 14, Hh / 2 - 26, 200, 52, 8); ctx.fill();
     ctx.fillStyle = P.cream;
-    ctx.font = '800 14px system-ui, sans-serif';
+    ctx.font = '800 14px Inter, system-ui, sans-serif';
     ctx.textAlign = 'left';
     if (battle.retreatT > 0) {
       ctx.fillText(`Retreating — keep holding ${arrow}…`, 24, Hh / 2 - 7);
@@ -339,7 +339,7 @@ export function drawHud(battle, ctx) {
       rrect(ctx, 24, Hh / 2 + 6, 160 * Math.min(1, battle.retreatT / 1.3), 8, 4); ctx.fill();
     } else {
       ctx.fillText(`${arrow} hold ${arrow} at the ${battle.retreatDir} edge`, 24, Hh / 2 - 7);
-      ctx.font = '600 12px system-ui, sans-serif';
+      ctx.font = '600 12px Inter, system-ui, sans-serif';
       ctx.fillText('to RETREAT (keeps survivors)', 24, Hh / 2 + 12);
     }
     ctx.globalAlpha = 1;
@@ -353,17 +353,17 @@ export function drawHud(battle, ctx) {
     // panel, so it spilled ~85px off both ends onto the battlefield in every battle.
     const headline = `They advance in ${Math.ceil(battle.deployT)}`;
     const detail = 'position your men — 1 follow · 3 hold · 2 or a swing attacks NOW';
-    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
     const headlineW = ctx.measureText(headline).width;
-    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.font = '700 13px Inter, system-ui, sans-serif';
     const detailW = ctx.measureText(detail).width;
     const dw = Math.min(W - 40, Math.max(320, Math.max(headlineW, detailW) + 44));
     rrect(ctx, W / 2 - dw / 2, 64, dw, 62, 10); ctx.fill();
     ctx.fillStyle = P.hero;
     ctx.textAlign = 'center';
-    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
     ctx.fillText(headline, W / 2, 82);
-    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.font = '700 13px Inter, system-ui, sans-serif';
     ctx.fillText(detail, W / 2, 100);
     ctx.fillStyle = P.hpBack;
     rrect(ctx, W / 2 - dw / 2 + 16, 112, dw - 32, 6, 3); ctx.fill();
@@ -377,7 +377,7 @@ export function drawHud(battle, ctx) {
     const k = battle.commandFlash.t / 0.9;
     ctx.globalAlpha = Math.min(1, k * 2);
     ctx.fillStyle = P.cream;
-    ctx.font = `900 ${Math.round(46 + (1 - k) * 6)}px system-ui, sans-serif`;
+    ctx.font = `900 ${Math.round(46 + (1 - k) * 6)}px Inter, system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.fillText(battle.commandFlash.text, W / 2, Hh * 0.32);
     ctx.globalAlpha = 1;
@@ -394,20 +394,20 @@ export function drawHud(battle, ctx) {
     const showCount = !battle.setup.brief;
     ctx.fillRect(0, Hh * 0.36, W, battle.setup.subtitle ? (showCount ? 104 : 82) : (showCount ? 86 : 64));
     ctx.fillStyle = P.cream;
-    ctx.font = '900 34px system-ui, sans-serif';
+    ctx.font = '900 34px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(battle.setup.title || 'SKIRMISH', W / 2, Hh * 0.36 + 34);
     if (battle.setup.subtitle) {
-      ctx.font = '700 15px system-ui, sans-serif';
+      ctx.font = '700 15px Inter, system-ui, sans-serif';
       ctx.fillStyle = P.hero;
       ctx.fillText(battle.setup.subtitle, W / 2, Hh * 0.36 + 60);
       if (showCount) {
         ctx.fillStyle = P.cream;
-        ctx.font = '600 14px system-ui, sans-serif';
+        ctx.font = '600 14px Inter, system-ui, sans-serif';
         ctx.fillText(`${battle.troops.length + 1} vs ${battle.enemies.length}`, W / 2, Hh * 0.36 + 84);
       }
     } else if (showCount) {
-      ctx.font = '600 15px system-ui, sans-serif';
+      ctx.font = '600 15px Inter, system-ui, sans-serif';
       ctx.fillText(`${battle.troops.length + 1} vs ${battle.enemies.length}`, W / 2, Hh * 0.36 + 62);
     }
     ctx.globalAlpha = 1;
@@ -418,11 +418,11 @@ export function drawHud(battle, ctx) {
     ctx.fillStyle = P.ink;
     ctx.fillRect(0, Hh * 0.36, W, battle.victory || battle.retreated ? 96 : 112);
     ctx.fillStyle = battle.victory ? P.hp : battle.retreated ? P.cream : P.enemy;
-    ctx.font = '900 40px system-ui, sans-serif';
+    ctx.font = '900 40px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(battle.victory ? 'VICTORY' : battle.retreated ? 'WITHDRAWN' : 'DEFEAT', W / 2, Hh * 0.36 + 38);
     ctx.fillStyle = P.cream;
-    ctx.font = '600 15px system-ui, sans-serif';
+    ctx.font = '600 15px Inter, system-ui, sans-serif';
     const lost = battle.startTroops - battle.troops.length;
     if (battle.victory) {
       ctx.fillText(`+${battle.loot} gold  ·  ${battle.kills} slain  ·  ${lost > 0 ? lost + ' of your men fell' : 'no losses'}`, W / 2, Hh * 0.36 + 68);
@@ -432,7 +432,7 @@ export function drawHud(battle, ctx) {
       ctx.fillText(`Slain by ${battle.killedBy || 'the enemy'} — your warband scatters, poorer and fewer`, W / 2, Hh * 0.36 + 68);
       // diagnose the loss so the player knows what to change next time
       ctx.fillStyle = P.hero;
-      ctx.font = '700 14px system-ui, sans-serif';
+      ctx.font = '700 14px Inter, system-ui, sans-serif';
       // The hero's own survival is what decides an even fight, so say that rather than
       // pointing at HOLD: measured across camp raids, HOLD is not the stronger order, and
       // advice that sends the player to the weaker option teaches the wrong lesson.

@@ -295,10 +295,17 @@ change production visuals solely to make a screenshot pass. Baselines are
 platform-neutral and intentionally tolerate only the documented small raster
 difference (`threshold: 0.20`, `maxDiffPixelRatio: 0.015`). Review actual,
 expected, and diff PNGs before using `--update-snapshots`; never update a
-baseline to conceal an unexplained regression. Baselines are captured ONLY in
-CI's exact environment (ubuntu-latest, pinned Chromium): `system-ui`
-rasterizes differently per OS, so a locally recaptured baseline can never pass
-CI. When a change legitimately alters visuals, dispatch the
+baseline to conceal an unexplained regression. Baselines are portable since the
+UI font was bundled: `assets/fonts/inter-latin-var.woff2` is named ahead of
+`system-ui` in every canvas font string, so glyph metrics no longer depend on
+the host and the same PNGs pass on Windows and on Linux. `npm run test:visual`
+is therefore a real local gate; `npm run test:visual:linux` runs the same suite
+in a container that matches CI's font resolution when a difference needs to be
+attributed. Anything drawn outside the bundled latin subset — the HUD's
+symbol glyphs — still comes from the host, so keep such glyphs few and small.
+Recapture through `--update-snapshots`, review the PNGs, and never through
+`--update-snapshots=all`.
+When a change legitimately alters visuals, dispatch the
 `Visual baselines` workflow (`.github/workflows/visual-baselines.yml`), review
 the artifact, and commit only the intentionally changed or new PNGs. See
 `tests/README.md` for the covered world/battle states and the baseline

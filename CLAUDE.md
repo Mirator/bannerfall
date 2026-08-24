@@ -24,6 +24,7 @@ npm test                    # REQUIRED full gate before and after any change
 npm run test:qa             # legacy named-record suite
 npm run test:perf           # after scheduler/render/battle-loop/party-nav work
 npm run test:visual         # canvas baselines
+npm run test:visual:linux   # same suite in CI's font environment (needs Docker)
 npm run test:tooling        # dependency-free config contract check
 npm run release:cache       # rewrite cache tokens after ANY src/ edit
 npm run test:release        # verify the token graph (CI runs this, no --update)

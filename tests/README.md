@@ -440,14 +440,52 @@ of those failures looked like a flaky visual test rather than a font mismatch. N
 else differed: the ribbon, mountains, castle, road and column were pixel-identical, and
 the title ribbon is sized from `measureText`, so even the art shifted with the metrics.
 
-So: **capture baselines on Linux**, the platform CI runs. A snapshot recaptured on macOS
-or Windows will fail CI at roughly 3% on any screen with a sentence of text on it, and
-`--update-snapshots` on the wrong host silently re-baselines to a rendering CI can never
-reproduce. If a text-heavy screen ever needs a baseline that is genuinely portable, the
-fix is to stop drawing through `system-ui` — bundle a font and name it in the canvas font
-strings — not to widen the cap. Never widen the cap to get green: at 1.5% it is what
-makes a missing landmark or unit group fail, and the 3% font mismatch was the proof that
-the cap is set tightly enough to matter.
+That is why baselines were captured on Linux for as long as the canvas drew through
+`system-ui`. Never widen the cap instead: at 1.5% it is what makes a missing landmark or
+unit group fail, and the 3% font mismatch was the proof that the cap is set tightly
+enough to matter.
+
+### The font is bundled now
+
+The fix that section called for has been applied: `assets/fonts/inter-latin-var.woff2`
+(Inter, SIL OFL 1.1, latin subset, variable 400-900) is declared in `index.html` and every
+canvas font string reads `Inter, system-ui, sans-serif`. Metrics no longer depend on the
+host, and the same baselines pass on Windows and in a Linux container.
+
+Two things that follow from it:
+
+Canvas text does not wait for a webfont. `fillText` and `measureText` fall back silently
+until the face loads, and the menu ribbon is sized from `measureText`, so `bootstrap()`
+awaits `loadUiFonts()` before the first frame and `settle()` in the visual spec waits on
+`document.fonts.check` before capturing. Without those two waits a capture races the
+font and lands on the fallback.
+
+The bundled subset is latin. The HUD also draws symbols outside it — the crossed swords,
+heart, objective diamond, hammer, eye — and those still come from whatever the host
+supplies. They are a few small glyphs, far under the cap, so the baselines stay portable;
+if a screen ever fails on symbol drift, replace the glyph with drawn geometry rather than
+widening the cap or bundling an emoji font.
+
+### Running the visual suite locally
+
+`npm run test:visual:linux` runs the suite inside CI's rendering environment and
+agrees with CI: twenty of twenty pass on a Windows host whose own
+`npm run test:visual` fails three. It needs Docker running; the first call
+builds a ~3.5GB image from `scripts/visual-linux.Dockerfile`, later calls reuse
+it and take about twenty seconds. Extra arguments are forwarded to Playwright
+(`npm run test:visual:linux -- -g "campaign summary"`).
+
+The container needs one addition to match CI. The pinned Playwright image ships
+no Latin default sans, so `fc-match system-ui` there answers WenQuanYi Zen Hei,
+and it fails exactly the three text-heavy baselines a Windows host fails.
+Installing `fonts-dejavu-core` — which is what ubuntu-latest resolves
+`system-ui` to — makes all twenty pass unmodified.
+
+That narrows the finding above: the baselines are not Linux-specific, they are
+DejaVu-specific, and any host resolving `system-ui` to DejaVu Sans reproduces
+them. Capture still goes through the `Visual baselines` workflow. The container
+matches CI on every baseline committed today, but CI is the environment the
+PNGs have to satisfy, so it stays the one that writes them.
 
 ## Two battle-input rules the hero records depend on
 

@@ -1,12 +1,12 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with one body-count
 // badge, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, WORLD, UNIT_TYPES, oddsWord } from '../data.js?v=r8fa9ac718319';
-import { TAU, rrect, shadow } from '../engine.js?v=r8fa9ac718319';
+import { PAL, WORLD, UNIT_TYPES, oddsWord } from '../data.js?v=rdb594a1bb6f7';
+import { TAU, rrect, shadow } from '../engine.js?v=rdb594a1bb6f7';
 import {
   strongholdModifiers, STRONGHOLD_POWER_LABELS, OWNERSHIP, SPECIALIZATIONS,
-} from '../region.js?v=r8fa9ac718319';
-import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r8fa9ac718319';
+} from '../region.js?v=rdb594a1bb6f7';
+import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=rdb594a1bb6f7';
 
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
 
@@ -35,7 +35,7 @@ export function drawParty(world, ctx, p) {
   ctx.fillStyle = outmatched ? P.enemy : P.ink;
   ctx.beginPath(); ctx.arc(p.x + 16, p.y - 26, WORLD_ART.scale.unit.partyBadgeR, 0, TAU); ctx.fill();
   ctx.fillStyle = P.cream;
-  ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.font = '800 11px Inter, system-ui, sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(String(bodies), p.x + 16, p.y - 25);
 }
 
@@ -98,7 +98,7 @@ export function drawHero(world, ctx) {
   ctx.fillStyle = P.ink;
   ctx.beginPath(); ctx.arc(h.x + 18, h.y - 30, WORLD_ART.scale.unit.badgeR, 0, TAU); ctx.fill();
   ctx.fillStyle = P.hero;
-  ctx.font = '800 11px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.font = '800 11px Inter, system-ui, sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(String(world.save.troops.length + 1), h.x + 18, h.y - 29);
 }
 
@@ -111,7 +111,7 @@ export function drawHud(world, ctx) {
   ctx.fillStyle = P.ink;
   rrect(ctx, resource.x, resource.y, resource.w, resource.h, WORLD_ART.hud.radius); ctx.fill();
   ctx.fillStyle = P.cream;
-  ctx.font = '700 15px system-ui, sans-serif';
+  ctx.font = '700 15px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillText(`⛃ ${world.save.gold}    ⚔ ${world.save.troops.length}/${world.save.armyCap}    ♥ ${world.save.heroHp}/${world.save.heroMaxHp}`, resource.x + 12, resource.y + resource.h / 2);
 
@@ -124,12 +124,12 @@ export function drawHud(world, ctx) {
     rrect(ctx, objective.x, objective.y, objective.w, objective.h, WORLD_ART.hud.radius); ctx.fill();
     ctx.fillStyle = P.cream;
     ctx.textAlign = 'right';
-    ctx.font = '800 14px system-ui, sans-serif';
+    ctx.font = '800 14px Inter, system-ui, sans-serif';
     ctx.fillText(`Wolfsjaw: ${label}`, objective.x + objective.w - 14, objective.y + 14);
     ctx.fillStyle = P.hero;
-    ctx.font = '800 12px system-ui, sans-serif';
+    ctx.font = '800 12px Inter, system-ui, sans-serif';
     ctx.fillText(`◇  Weaken it (${mods.points}/${mods.maxPoints})`, objective.x + objective.w - 14, objective.y + 32);
-    ctx.font = '600 10px system-ui, sans-serif';
+    ctx.font = '600 10px Inter, system-ui, sans-serif';
     ctx.fillStyle = '#B8C2D8';
     ctx.fillText('Capture settlements · raze camps', objective.x + objective.w - 14, objective.y + 47);
   }
@@ -141,7 +141,7 @@ export function drawHud(world, ctx) {
     if (targetDef) {
       ctx.fillStyle = P.enemy;
       const warn = `⚠ Raiders ride on ${targetDef.name}!`;
-      ctx.font = '800 14px system-ui, sans-serif';
+      ctx.font = '800 14px Inter, system-ui, sans-serif';
       const ww = ctx.measureText(warn).width + 40;
       rrect(ctx, W / 2 - ww / 2, layout.topSafe.h + 4 + Math.sin(world.time * 6) * 2, ww, 30, 8); ctx.fill();
       ctx.fillStyle = P.cream;
@@ -188,7 +188,7 @@ export function drawHud(world, ctx) {
     rrect(ctx, bx, by, bw, lines.length * 22 + 16, 10); ctx.fill();
     ctx.fillStyle = P.cream; ctx.textAlign = 'center';
     lines.forEach((l, i) => {
-      ctx.font = i === 0 ? '800 15px system-ui, sans-serif' : '600 13px system-ui, sans-serif';
+      ctx.font = i === 0 ? '800 15px Inter, system-ui, sans-serif' : '600 13px Inter, system-ui, sans-serif';
       ctx.fillText(l, W / 2, by + 20 + i * 22);
     });
   }
@@ -197,7 +197,7 @@ export function drawHud(world, ctx) {
   if (world.msgT > 0 && world.msg) {
     ctx.globalAlpha = Math.min(1, world.msgT * 2);
     ctx.fillStyle = P.ink;
-    ctx.font = '700 14px system-ui, sans-serif';
+    ctx.font = '700 14px Inter, system-ui, sans-serif';
     const tw = Math.min(W - WORLD_ART.hud.margin * 2, ctx.measureText(world.msg).width + 50);
     rrect(ctx, W / 2 - tw / 2, 70, tw, 34, 8); ctx.fill();
     ctx.fillStyle = P.cream;

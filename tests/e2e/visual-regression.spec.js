@@ -14,6 +14,9 @@ const VISUAL_OPTIONS = {
 
 async function settle(page, scenario, options = {}) {
   await page.goto('/');
+  // The bundled face is what makes these baselines portable, and canvas text falls back
+  // silently while it is still loading. Capture only once it is actually available.
+  await page.waitForFunction(() => document.fonts.check('800 16px Inter'));
   await page.evaluate(({ scenarioName, scenarioOptions }) => {
     localStorage.clear();
     window.game.scenario(scenarioName, scenarioOptions);

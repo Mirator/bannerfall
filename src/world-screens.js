@@ -3,13 +3,13 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=r8fa9ac718319';
-import { clamp, rrect } from './engine.js?v=r8fa9ac718319';
-import { SQUAD_LABELS } from './battle/constants.js?v=r8fa9ac718319';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=rdb594a1bb6f7';
+import { clamp, rrect } from './engine.js?v=rdb594a1bb6f7';
+import { SQUAD_LABELS } from './battle/constants.js?v=rdb594a1bb6f7';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=r8fa9ac718319';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r8fa9ac718319';
+} from './region.js?v=rdb594a1bb6f7';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=rdb594a1bb6f7';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
@@ -163,9 +163,9 @@ export function drawHoverPanel(ctx, cam, model) {
   if (!model) return;
   const anchor = worldToScreen(cam, model.x, model.y);
   const lines = [model.title, ...model.lines];
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 13px Inter, system-ui, sans-serif';
   let w = ctx.measureText(lines[0]).width;
-  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
   for (let i = 1; i < lines.length; i++) w = Math.max(w, ctx.measureText(lines[i]).width);
   const pw = w + 28, ph = lines.length * 18 + 14;
   let px = anchor.x - pw / 2, py = anchor.y - ph - 34;
@@ -177,9 +177,9 @@ export function drawHoverPanel(ctx, cam, model) {
   rrect(ctx, px, py, pw, ph, 8); ctx.stroke();
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = P.cream;
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 13px Inter, system-ui, sans-serif';
   ctx.fillText(lines[0], px + 14, py + 20);
-  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
   for (let i = 1; i < lines.length; i++) ctx.fillText(lines[i], px + 14, py + 20 + i * 18);
 }
 
@@ -257,10 +257,10 @@ export function drawBriefPanel(ctx, cam, model) {
   rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
   ctx.textAlign = 'center';
   ctx.fillStyle = P.cream;
-  ctx.font = '900 26px system-ui, sans-serif';
+  ctx.font = '900 26px Inter, system-ui, sans-serif';
   ctx.fillText(model.title || 'BATTLE', W / 2, py + 40);
   if (model.subtitle) {
-    ctx.font = '700 14px system-ui, sans-serif';
+    ctx.font = '700 14px Inter, system-ui, sans-serif';
     ctx.fillStyle = P.hero;
     ctx.fillText(model.subtitle, W / 2, py + 64);
   }
@@ -268,11 +268,11 @@ export function drawBriefPanel(ctx, cam, model) {
   const colW = pw / 2 - 40;
   const leftX = px + pw / 4, rightX = px + pw * 3 / 4;
   ctx.textAlign = 'left';
-  ctx.font = '800 15px system-ui, sans-serif';
+  ctx.font = '800 15px Inter, system-ui, sans-serif';
   ctx.fillStyle = P.cream;
   ctx.fillText('YOUR WARBAND', leftX - colW / 2, colY);
   ctx.fillText('THE ENEMY', rightX - colW / 2, colY);
-  ctx.font = '600 13px system-ui, sans-serif';
+  ctx.font = '600 13px Inter, system-ui, sans-serif';
   ctx.fillText(model.player.roster, leftX - colW / 2, colY + 26);
   ctx.fillText(`${model.player.bodies} bodies · fighting weight ${model.player.strength}`, leftX - colW / 2, colY + 46);
   ctx.fillText(model.enemy.roster, rightX - colW / 2, colY + 26);
@@ -281,10 +281,10 @@ export function drawBriefPanel(ctx, cam, model) {
     rightX - colW / 2, colY + 46,
   );
   ctx.textAlign = 'center';
-  ctx.font = '800 16px system-ui, sans-serif';
+  ctx.font = '800 16px Inter, system-ui, sans-serif';
   ctx.fillStyle = model.odds === ODDS_WORDS.outmatched ? P.enemy : P.cream;
   ctx.fillText(model.odds, W / 2, colY + 86);
-  ctx.font = '600 13px system-ui, sans-serif';
+  ctx.font = '600 13px Inter, system-ui, sans-serif';
   ctx.fillStyle = P.cream;
   let y = colY + 110;
   ctx.fillText(`Arena: ${model.arena || 'field'}`, W / 2, y);
@@ -298,10 +298,10 @@ export function drawBriefPanel(ctx, cam, model) {
   }
   if (model.stronghold) {
     y += 6;
-    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
     ctx.fillStyle = P.enemy;
     ctx.fillText(`STRONGHOLD POWER: ${model.stronghold.label}`, W / 2, y);
-    ctx.font = '600 13px system-ui, sans-serif';
+    ctx.font = '600 13px Inter, system-ui, sans-serif';
     ctx.fillStyle = P.cream;
     y += 20;
     for (const line of model.stronghold.advantages) {
@@ -314,7 +314,7 @@ export function drawBriefPanel(ctx, cam, model) {
   // clicks against the rects returned here (drawn last frame, one frame of lag, the
   // same idiom src/main.js's menuHitRegions already uses).
   const footerY = py + ph - 30, btnH = 30;
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 13px Inter, system-ui, sans-serif';
   const confirmLabel = 'ENTER — Confirm', withdrawLabel = 'X — Withdraw';
   const confirmW = ctx.measureText(confirmLabel).width + 28;
   let confirmRect, withdrawRect = null;
@@ -338,7 +338,7 @@ function drawButton(ctx, rect, label, accent) {
   ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
   rrect(ctx, rect.x, rect.y, rect.w, rect.h, 8); ctx.stroke();
   ctx.fillStyle = P.ink;
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 13px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2 + 1);
 }
@@ -383,12 +383,12 @@ export function drawSpecPanel(ctx, cam, model) {
   rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
   ctx.textAlign = 'center';
   ctx.fillStyle = P.cream;
-  ctx.font = '900 24px system-ui, sans-serif';
+  ctx.font = '900 24px Inter, system-ui, sans-serif';
   ctx.fillText(`${model.settlement.name.toUpperCase()} JOINS YOUR BANNER`, W / 2, py + 36);
-  ctx.font = '700 14px system-ui, sans-serif';
+  ctx.font = '700 14px Inter, system-ui, sans-serif';
   ctx.fillStyle = P.hero;
   ctx.fillText('Choose what it becomes — permanent for this campaign', W / 2, py + 62);
-  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
   ctx.fillStyle = '#9BA3BF';
   ctx.fillText('↑↓ choose · ENTER commit · X decide later', W / 2, py + 86);
 
@@ -402,9 +402,9 @@ export function drawSpecPanel(ctx, cam, model) {
     rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.stroke();
     ctx.textAlign = 'left';
     ctx.fillStyle = selected ? P.ink : P.cream;
-    ctx.font = '800 16px system-ui, sans-serif';
+    ctx.font = '800 16px Inter, system-ui, sans-serif';
     ctx.fillText(`${opt.glyph}  ${opt.name}`, px + 44, y + 26);
-    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.font = '600 12px Inter, system-ui, sans-serif';
     ctx.fillStyle = selected ? '#3A4A72' : '#B9C2DC';
     ctx.fillText(`${opt.immediate}  ·  later visits: ${opt.ongoing}`, px + 44, y + 48);
     rects.push({ x: px + 24, y, w: pw - 48, h: rowH });
@@ -412,7 +412,7 @@ export function drawSpecPanel(ctx, cam, model) {
 
   const footerY = py + ph - footH / 2;
   ctx.textAlign = 'center';
-  ctx.font = '600 12px system-ui, sans-serif';
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
   ctx.fillStyle = '#9BA3BF';
   ctx.fillText('A captured settlement pays its benefit only while it flies your banner', W / 2, footerY);
   ctx.textBaseline = 'alphabetic';
@@ -499,18 +499,18 @@ export function drawAftermathPanel(ctx, cam, model) {
   ctx.textAlign = 'center';
   const headline = model.victory ? 'VICTORY' : model.retreated ? 'WITHDRAWN' : 'DEFEAT';
   ctx.fillStyle = model.victory ? P.good : model.retreated ? P.cream : P.enemy;
-  ctx.font = '900 30px system-ui, sans-serif';
+  ctx.font = '900 30px Inter, system-ui, sans-serif';
   ctx.fillText(headline, W / 2, py + 44);
 
   ctx.textAlign = 'left';
-  ctx.font = '800 14px system-ui, sans-serif';
+  ctx.font = '800 14px Inter, system-ui, sans-serif';
   ctx.fillStyle = P.cream;
   const colW = pw / 2 - 40;
   const leftX = px + 40, rightX = px + pw / 2 + 20;
   let y = py + 84;
   ctx.fillText('YOUR LOSSES', leftX, y);
   ctx.fillText('ENEMY LOSSES', rightX, y);
-  ctx.font = '600 13px system-ui, sans-serif';
+  ctx.font = '600 13px Inter, system-ui, sans-serif';
   const lossLines = (losses) => losses.length ? losses.map(l => `${l.count} ${l.label}`) : ['none'];
   const playerLossLines = lossLines(model.playerLosses || []);
   const enemyLossLines = lossLines(model.enemyLosses || []);
@@ -520,13 +520,13 @@ export function drawAftermathPanel(ctx, cam, model) {
     if (enemyLossLines[i]) ctx.fillText(enemyLossLines[i], rightX, y + 22 + i * 18);
   }
   y += 22 + rows * 18 + 20;
-  ctx.font = '700 14px system-ui, sans-serif';
+  ctx.font = '700 14px Inter, system-ui, sans-serif';
   ctx.fillStyle = P.hero;
   ctx.fillText(`Loot: +${model.loot || 0} gold`, leftX, y);
   ctx.fillText(`Hero HP: ${model.heroHp}/${model.heroMaxHp}`, rightX, y);
   y += 30;
   if (model.consequence) {
-    ctx.font = '600 13px system-ui, sans-serif';
+    ctx.font = '600 13px Inter, system-ui, sans-serif';
     ctx.fillStyle = P.cream;
     ctx.textAlign = 'center';
     // The consequence toast can run long (razed-camp remnant notes); wrap it instead of
@@ -544,7 +544,7 @@ export function drawAftermathPanel(ctx, cam, model) {
   }
   ctx.textAlign = 'center';
   const continueLabel = 'ENTER — Continue';
-  ctx.font = '800 13px system-ui, sans-serif';
+  ctx.font = '800 13px Inter, system-ui, sans-serif';
   const btnW = ctx.measureText(continueLabel).width + 28, btnH = 30, footerY = py + ph - 24;
   const confirmRect = { x: W / 2 - btnW / 2, y: footerY - btnH / 2, w: btnW, h: btnH };
   drawButton(ctx, confirmRect, continueLabel, true);

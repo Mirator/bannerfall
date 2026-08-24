@@ -1,15 +1,15 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=r8fa9ac718319';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r8fa9ac718319';
-import { Battle } from './battle.js?v=r8fa9ac718319';
-import { World } from './world.js?v=r8fa9ac718319';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r8fa9ac718319';
-import { FIELD } from './battle/constants.js?v=r8fa9ac718319';
-import { ACTIONS } from './input-actions.js?v=r8fa9ac718319';
-import { createWebPlatform } from './platform/web-platform.js?v=r8fa9ac718319';
-import { SaveRepository } from './persistence/save-repository.js?v=r8fa9ac718319';
-import { buildSummaryModel } from './world-screens.js?v=r8fa9ac718319';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=r8fa9ac718319';
+import { PAL, WORLD } from './data.js?v=rdb594a1bb6f7';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rdb594a1bb6f7';
+import { Battle } from './battle.js?v=rdb594a1bb6f7';
+import { World } from './world.js?v=rdb594a1bb6f7';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=rdb594a1bb6f7';
+import { FIELD } from './battle/constants.js?v=rdb594a1bb6f7';
+import { ACTIONS } from './input-actions.js?v=rdb594a1bb6f7';
+import { createWebPlatform } from './platform/web-platform.js?v=rdb594a1bb6f7';
+import { SaveRepository } from './persistence/save-repository.js?v=rdb594a1bb6f7';
+import { buildSummaryModel } from './world-screens.js?v=rdb594a1bb6f7';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=rdb594a1bb6f7';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -304,7 +304,7 @@ class Game {
       ctx.fillStyle = 'rgba(30,42,74,0.85)';
       rrect(ctx, canvas.width - 96, canvas.height - 40, 82, 26, 6); ctx.fill();
       ctx.fillStyle = PAL.world.cream;
-      ctx.font = '700 12px system-ui, sans-serif';
+      ctx.font = '700 12px Inter, system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('🔇 muted', canvas.width - 55, canvas.height - 27);
     }
@@ -318,11 +318,11 @@ class Game {
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = PAL.world.cream;
-    ctx.font = '900 54px system-ui, sans-serif';
+    ctx.font = '900 54px Inter, system-ui, sans-serif';
     ctx.fillText('PAUSED', W / 2, H * 0.4);
-    ctx.font = '600 16px system-ui, sans-serif';
+    ctx.font = '600 16px Inter, system-ui, sans-serif';
     ctx.fillText('ESC / P — resume    ·    M — mute    ·    R — abandon run (menu)', W / 2, H * 0.4 + 54);
-    ctx.font = '600 13px system-ui, sans-serif';
+    ctx.font = '600 13px Inter, system-ui, sans-serif';
     ctx.fillStyle = '#9BA3BF';
     ctx.fillText('Your campaign auto-saves on the map — closing the tab is safe', W / 2, H * 0.4 + 84);
   }
@@ -430,7 +430,7 @@ class Game {
     // Compact banner lockup leaves the world vignette and navigation equal room.
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const fs2 = Math.min(82, W * (layout.compact ? 0.075 : 0.062));
-    ctx.font = `900 ${fs2}px system-ui, sans-serif`;
+    ctx.font = `900 ${fs2}px Inter, system-ui, sans-serif`;
     const tw2 = ctx.measureText('BANNERFALL').width;
     const rx = layout.centerX - tw2 / 2 - 25, ry2 = layout.titleY - fs2 * 0.54, rw = tw2 + 50, rh = fs2 * 1.08;
     ctx.fillStyle = P.enemy;
@@ -444,7 +444,7 @@ class Game {
     ctx.fillText('BANNERFALL', layout.centerX, layout.titleY);
     ctx.strokeStyle = P.cream; ctx.lineWidth = 1.25;
     ctx.strokeText('BANNERFALL', layout.centerX, layout.titleY);
-    ctx.font = `600 ${layout.compact ? 14 : 15}px system-ui, sans-serif`;
+    ctx.font = `600 ${layout.compact ? 14 : 15}px Inter, system-ui, sans-serif`;
     ctx.fillStyle = P.ink;
     ctx.fillText('Raise a warband. Raze the camps. Take Wolfsjaw Hold.', layout.centerX, layout.titleY + fs2 * 0.88);
     const headings = {
@@ -456,9 +456,9 @@ class Game {
     const heading = headings[this.menuPanel];
     if (heading) {
       ctx.fillStyle = P.ink;
-      ctx.font = '900 19px system-ui, sans-serif';
+      ctx.font = '900 19px Inter, system-ui, sans-serif';
       ctx.fillText(heading[0], layout.centerX, H * 0.335);
-      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.font = '600 13px Inter, system-ui, sans-serif';
       ctx.fillText(heading[1], layout.centerX, H * 0.372);
       if (this.menuPanel === 'credits') {
         ctx.fillText('Flat-shaded campaign maps, banners, and tiny warbands.', layout.centerX, H * 0.402);
@@ -479,18 +479,18 @@ class Game {
       rrect(ctx, x, y, pw, rowH, 8); ctx.stroke();
       ctx.textAlign = 'left';
       ctx.fillStyle = selected ? P.ink : P.cream;
-      ctx.font = '800 15px system-ui, sans-serif';
+      ctx.font = '800 15px Inter, system-ui, sans-serif';
       ctx.fillText(`${selected ? '▸  ' : '   '}${item.label}`, x + 18, y + rowH / 2 + 1);
       if (item.meta) {
         ctx.textAlign = 'right';
-        ctx.font = '600 11px system-ui, sans-serif';
+        ctx.font = '600 11px Inter, system-ui, sans-serif';
         ctx.fillText(item.meta, x + pw - 16, y + rowH / 2 + 1);
       }
       this.menuHitRegions.push({ id: item.id, x, y, w: pw, h: rowH });
     });
     ctx.textAlign = 'center';
     ctx.fillStyle = P.ink;
-    ctx.font = '700 12px system-ui, sans-serif';
+    ctx.font = '700 12px Inter, system-ui, sans-serif';
     ctx.fillText(`${this.menuPanel === 'root' ? '↑↓ / WASD  Navigate' : '↑↓  Navigate'}    ·    ENTER  Select${this.menuPanel === 'root' ? '' : '    ·    ESC  Back'}    ·    M  Mute`, layout.centerX, H - 24);
   }
 
@@ -511,11 +511,11 @@ class Game {
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = P.hero;
-    ctx.font = `900 ${Math.min(64, W * 0.06)}px system-ui, sans-serif`;
+    ctx.font = `900 ${Math.min(64, W * 0.06)}px Inter, system-ui, sans-serif`;
     ctx.fillText('WOLFSJAW HAS FALLEN', W / 2, H * 0.14);
     if (this.summary && this.summary.hard) {
       ctx.fillStyle = P.accent;
-      ctx.font = '900 18px system-ui, sans-serif';
+      ctx.font = '900 18px Inter, system-ui, sans-serif';
       ctx.fillText('— A HARD CAMPAIGN —', W / 2, H * 0.14 + Math.min(52, W * 0.045));
     }
 
@@ -526,7 +526,7 @@ class Game {
     const lx = W / 2 - colW / 2 + 30, rx = W / 2 + colW / 2 - 30;
     let y = H * 0.24;
     ctx.textAlign = 'left';
-    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
     ctx.fillStyle = P.cream;
     ctx.fillText('THE CAMPAIGN', lx, y);
     ctx.textAlign = 'right';
@@ -546,7 +546,7 @@ class Game {
       `Treasury   ${s.finalGold}`,
       `Final army   ${s.army}`,
     ];
-    ctx.font = '600 15px system-ui, sans-serif';
+    ctx.font = '600 15px Inter, system-ui, sans-serif';
     for (let i = 0; i < rowL.length; i++) {
       ctx.textAlign = 'left'; ctx.fillStyle = P.cream;
       ctx.fillText(rowL[i], lx, y + i * 24);
@@ -556,16 +556,16 @@ class Game {
     y += rowL.length * 24 + 10;
     if (s.specs.length) {
       ctx.textAlign = 'center';
-      ctx.font = '800 14px system-ui, sans-serif';
+      ctx.font = '800 14px Inter, system-ui, sans-serif';
       ctx.fillStyle = P.hero;
       ctx.fillText('THE BANNER OF YOUR KINGDOM', W / 2, y);
-      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.font = '600 13px Inter, system-ui, sans-serif';
       ctx.fillStyle = P.cream;
       ctx.fillText(s.specs.join('   ·   '), W / 2, y + 22);
       y += 48;
     } else {
       ctx.textAlign = 'center';
-      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.font = '600 13px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#9BA3BF';
       ctx.fillText('No settlement flew a specialized banner.', W / 2, y + 8);
       y += 34;
@@ -573,7 +573,7 @@ class Game {
     if (this.victoryT > 1.5 && Math.sin(this.victoryT * 4) > -0.3) {
       ctx.textAlign = 'center';
       ctx.fillStyle = P.hero;
-      ctx.font = '800 20px system-ui, sans-serif';
+      ctx.font = '800 20px Inter, system-ui, sans-serif';
       ctx.fillText('Press ENTER for a new campaign', W / 2, H * 0.90);
     }
   }
@@ -1013,6 +1013,24 @@ window.render_game_to_text = () => JSON.stringify(window.game.state());
 window.advanceTime = (milliseconds = 0) => window.game.step(Math.max(0, milliseconds) / 1000);
 }
 
+// Every canvas font string names Inter first, and the weights the scenes actually draw
+// with are 600/700/800/900. They all resolve to the one bundled variable file.
+const UI_FONT_WEIGHTS = [600, 700, 800, 900];
+
+// Canvas text does not wait for a webfont the way DOM text does: fillText and measureText
+// silently fall back until the face is loaded, and the menu's title ribbon is sized from
+// measureText, so a first frame drawn against the fallback is both wrong and a different
+// layout. Load the face before that frame. A failure is not fatal — the font strings still
+// name system-ui behind Inter, so the game renders with the host's metrics instead.
+async function loadUiFonts() {
+  if (!document.fonts || typeof document.fonts.load !== 'function') return;
+  try {
+    await Promise.all(UI_FONT_WEIGHTS.map(weight => document.fonts.load(`${weight} 16px Inter`)));
+  } catch (error) {
+    console.warn('Bannerfall: bundled font failed to load, falling back to system-ui', error);
+  }
+}
+
 async function bootstrap() {
   platform = createWebPlatform();
   saves = new SaveRepository(platform);
@@ -1029,6 +1047,7 @@ async function bootstrap() {
     saves.flush().catch(error => game.reportSaveFailure(error));
   });
   exposeTestApi();
+  await loadUiFonts();
   game.draw();
 }
 
