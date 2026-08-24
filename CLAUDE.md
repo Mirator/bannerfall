@@ -21,6 +21,7 @@ npx playwright install chromium
 python scripts/serve.py     # local no-cache server on 127.0.0.1:8474
 
 npm test                    # REQUIRED full gate before and after any change
+npm run test:balance        # the @sweep balance measurement, its own CI check
 npm run test:qa             # legacy named-record suite
 npm run test:perf           # after scheduler/render/battle-loop/party-nav work
 npm run test:visual         # canvas baselines
@@ -95,7 +96,10 @@ replacing a delegator with a direct module call silently disables coverage.
 - `deliberate orders beat giving no order at all` in
   `tests/e2e/stance-balance.spec.js` is the one active `test.fail` annotation: it
   records the measured finding that squad orders do not beat pressing nothing.
-  Remove it only when commanding actually wins, never to tidy the suite. Use
+  Remove it only when commanding actually wins, never to tidy the suite. It is
+  tagged `@sweep` and excluded from the `chromium` project, so `npm test` does
+  not run it; it runs as its own `Balance sweep` check and via
+  `npm run test:balance`. Use
   `test.fail` with a plan or finding reference for expected failures — never
   `skip` or `fixme`.
 

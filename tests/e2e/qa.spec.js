@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { collectRuntimeErrors } from './test-helpers.js';
+import { collectRuntimeErrors, drainRuntimeErrors } from './test-helpers.js';
 
 const EXPECTED_QA_NAMES = [
   'menu_to_world_on_enter',
@@ -44,7 +44,7 @@ test('legacy browser QA suite passes all current records', async ({ page }) => {
   expect(result.passed, failures.join('\n')).toBe(EXPECTED_QA_NAMES.length);
   expect(result.failed, failures.join('\n')).toBe(0);
   expect(result.results.map(record => record.name)).toEqual(EXPECTED_QA_NAMES);
-  await page.waitForTimeout(50);
+  await drainRuntimeErrors(page);
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);
 });
 
@@ -85,6 +85,6 @@ test('QA preserves a real player save and uses the test slot', async ({ page }) 
   expect(slots.real.troops).toEqual(beforeQa.troops);
   expect(slots.real.stats.playT).toBeGreaterThanOrEqual(beforeQa.stats.playT);
   expect(slots.test).toBeTruthy();
-  await page.waitForTimeout(50);
+  await drainRuntimeErrors(page);
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);
 });

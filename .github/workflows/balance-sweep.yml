@@ -1,4 +1,11 @@
-name: Browser QA
+name: Balance sweep
+
+# The 360-raid stance sweep in tests/e2e/stance-balance.spec.js is a recorded measurement,
+# not a regression guard: it carries `test.fail()` because commanding does not currently
+# beat not commanding, so it cannot go red on a code change — only report a different
+# margin. It costs minutes, so it runs here, beside Browser QA rather than inside it, and
+# the PR gate returns without waiting on it. Read its result when a change touches stance
+# behaviour, squad orders or battle balance.
 
 on:
   push:
@@ -7,16 +14,17 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# A second push to a branch makes the first run's verdict irrelevant. Cancel it rather
-# than paying for both and waiting behind the stale one.
 concurrency:
-  group: qa-${{ github.workflow }}-${{ github.ref }}
+  group: balance-sweep-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  qa:
+  sweep:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -29,16 +37,12 @@ jobs:
         run: npm ci
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Verify test configuration
-        run: npm run test:tooling
-      - name: Verify release cache tokens
-        run: npm run test:release
-      - name: Run browser QA
-        run: npm test
+      - name: Run the balance sweep
+        run: npm run test:balance
       - name: Upload Playwright report on failure
         if: ${{ failure() && !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: balance-sweep-report
           path: playwright-report/
           if-no-files-found: ignore

@@ -202,7 +202,11 @@ test.describe('stance balance', () => {
   // was vacuous: the wolf and raider fixtures alone guarantee it, so it passed with the
   // whole feature reverted. Both are replaced by the honest measurement below.
 
-  test('deliberate orders beat giving no order at all', async ({ page }) => {
+  // @sweep: 360 raids, minutes of wall clock, and a recorded finding rather than a
+  // regression guard — it cannot go red on a code change, only report a different margin.
+  // It runs as its own check (.github/workflows/balance-sweep.yml) so the PR gate does not
+  // wait on it; `npm run test:balance` runs it locally. The annotation below stays.
+  test('deliberate orders beat giving no order at all', { tag: '@sweep' }, async ({ page }) => {
     // EXPECTED FAILURE — Plan 019's premise is not met, measured on the fight the campaign
     // actually serves: organic camp raids with real garrison rolls, hero parked and idle.
     // The warband is a competent auto-battler, so orders are decoration on a fight that

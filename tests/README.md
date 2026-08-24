@@ -63,7 +63,12 @@ intentionally fixed (`<10000` world and `<9000` battle `beginPath` calls over
 
 ## Stance and squad balance
 
-`tests/e2e/stance-balance.spec.js` is the balance harness for Plan 019. It runs fixed
+`tests/e2e/stance-balance.spec.js` is the balance harness for Plan 019. Four of its five
+tests run in the PR gate. The fifth, the 360-raid policy sweep, is tagged `@sweep`, runs
+in the `balance` project only, and reaches CI through the separate `Balance sweep`
+workflow — it is a recorded measurement carrying `test.fail()`, so it cannot go red on a
+code change, and it costs minutes the gate should not spend. Run it with
+`npm run test:balance`. It runs fixed
 troop/enemy fixtures once per stance with the hero completely idle, so each number
 isolates what the ORDER did rather than what the player did. It asserts that measurements
 replay identically, that the wolf and raider fixtures keep their intended right answer

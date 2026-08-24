@@ -378,3 +378,20 @@ wireframe, with an independent subagent quality review after every implementatio
 - Residual: the HUD's symbol glyphs (crossed swords, heart, objective diamond, hammer, eye)
   are outside the latin subset and still resolve per host. They are small enough to stay
   under the cap.
+
+## CI split and the last wall-clock waits (2026-08-24)
+
+- The 360-raid stance sweep is the most expensive test in the repository and carries
+  `test.fail()`, so it records a margin and cannot go red on a code change. Tagged it
+  `@sweep` and split the config into two projects: `chromium` (152 tests, what `npm test`
+  and Browser QA run) and `balance` (the sweep alone, `npm run test:balance`). It reaches
+  CI through a separate `Balance sweep` workflow that runs beside Browser QA on the same
+  events, so the gate's verdict no longer waits on it. The annotation is unchanged.
+- Added a `concurrency` group with `cancel-in-progress` to Browser QA. A second push to a
+  branch made the first run's verdict irrelevant; it was still being paid for and still
+  had to be waited out.
+- Replaced the suite's only two wall-clock sleeps, `waitForTimeout(50)` in `qa.spec.js`,
+  with `drainRuntimeErrors()`. The sleep was not merely slow, it was unsound in the
+  direction that matters: a sleep shorter than protocol delivery latency reports an empty
+  error list and passes with the error still in flight. A round trip through the page
+  delivers everything the page emitted before it.

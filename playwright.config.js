@@ -25,9 +25,20 @@ export default defineConfig({
     headless: true,
     trace: 'retain-on-failure',
   },
+  // Two projects over the same specs, split by tag. The `@sweep` balance measurement is
+  // 360 raids and minutes of wall clock, and it is a recorded finding rather than a
+  // regression guard, so it runs as its own check instead of holding up the PR gate.
+  // `npm test` selects chromium; `npm run test:balance` selects balance. A bare
+  // `npx playwright test` still runs both.
   projects: [
     {
       name: 'chromium',
+      grepInvert: /@sweep/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'balance',
+      grep: /@sweep/,
       use: { ...devices['Desktop Chrome'] },
     },
   ],
