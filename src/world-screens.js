@@ -3,15 +3,17 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=r06a7e18cad00';
-import { clamp, rrect } from './engine.js?v=r06a7e18cad00';
-import { SQUAD_LABELS } from './battle/constants.js?v=r06a7e18cad00';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=r3d4da160c3c7';
+import { clamp, rrect } from './engine.js?v=r3d4da160c3c7';
+import { SQUAD_LABELS } from './battle/constants.js?v=r3d4da160c3c7';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=r06a7e18cad00';
+} from './region.js?v=r3d4da160c3c7';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r3d4da160c3c7';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
+const WORLD_LANDMARKS = [...WORLD.settlements, ...WORLD.camps];
 
 // Prose labels, derived from the type tables rather than hand-copied: adding a unit or
 // enemy type can no longer silently drop it from a breakdown or casualty list. Singular
@@ -82,7 +84,8 @@ function partyIntent(p) {
 // just shows no composition, per the "what you scouted is what you fight" rule).
 export function hoverTargetAt(world, wx, wy) {
   let best = null, bestD2 = Infinity;
-  const heroR = 46, heroD2 = (wx - world.hero.x) ** 2 + (wy - world.hero.y) ** 2;
+  const heroMarker = heroPresentationPosition(world, WORLD_LANDMARKS);
+  const heroR = 46, heroD2 = (wx - heroMarker.x) ** 2 + (wy - heroMarker.y) ** 2;
   if (heroD2 <= heroR * heroR) { best = { kind: 'hero' }; bestD2 = heroD2; }
   for (const p of world.parties) {
     if (!world.visible(p.x, p.y, 100)) continue;
@@ -102,7 +105,7 @@ export function hoverTargetAt(world, wx, wy) {
     const troops = world.save.troops;
     const strength = playerStrength(troops);
     return {
-      kind: 'hero', x: world.hero.x, y: world.hero.y,
+      kind: 'hero', x: heroMarker.x, y: heroMarker.y,
       title: 'Your warband', bodies: troops.length + 1, strength,
       lines: [
         troops.length ? troopBreakdown(troops) : 'no troops — just you',
@@ -149,9 +152,7 @@ export function hoverTargetAt(world, wx, wy) {
 // Suppress hover while the pointer sits over a HUD rect: the top gold/army and
 // objective chips, the toast, and the bottom context-prompt panel.
 export function isOverHud(mx, my, camW, camH) {
-  if (my < 112) return true;
-  if (my > camH - 112) return true;
-  return false;
+  return pointInWorldHud(mx, my, camW, camH);
 }
 
 function worldToScreen(cam, x, y) {

@@ -1,5 +1,68 @@
 Original prompt: Make an gameplay audit and suggest 5 things how the gameplay could be improved. Both polishing current features and new features
 
+## Organic terrain follow-up (2026-08-24)
+
+- [x] Reworked canonical roads as gentle cubic S-curves with narrower muted-beige trunks
+  and wider cached settlement approaches; destinations render over their endpoints.
+- [x] Reworked rivers into softly banked variable-width sections with more lateral meander
+  and a small shallow island, retaining canonical render/collision geometry.
+- [x] Replaced 45 ground speckles with three large elevation planes; map scenery now shows
+  shrubs only when they reinforce forests/ridges/rock patches, rocks render as outcrops,
+  and three broad farmland plots establish a recognizable agricultural district.
+- [x] Gameplay captures inspected at `shots/map-upgrade/organic-terrain-final/shot-0.png`
+  and `shots/map-upgrade/organic-terrain-bridge.png`; canonical road/bridge integration is visible.
+- [x] Terrain geometry contract passed; performance gate passed 8/8; release token
+  `r4640771f4310` verified and `git diff --check` clean.
+
+## Campaign-map graphics upgrade (2026-08-24)
+
+User request: make the campaign map visually comparable to the attached warm low-poly
+wireframe, with an independent subagent quality review after every implementation loop.
+
+- [x] Captured the pre-change map at rest and in motion under
+  `shots/map-upgrade/before-world` and `shots/map-upgrade/before-moving`.
+- [x] Loop 1 implementation: faceted ground, broader saturated rivers, solid cream road
+  ribbons, visual-only mountain/tree clusters, larger settlements/camps, brighter village
+  walls and blue roofs, and a hierarchical objective card.
+- [ ] Run the required Playwright action loop, inspect the result, and fix regressions.
+- [ ] Obtain loop-1 subagent visual-quality review against the reference.
+
+### Loop 1 review
+
+- [x] Independent review: not yet on par. Largest gaps were landmark detail/scale,
+  terrain density, dimensionality, river/road finish, and landmark-vs-hero hierarchy.
+- [x] Loop 2 implementation: richer multi-building villages and keep details, larger POIs,
+  dark destination plates, crimson camp plates, larger faceted rocks, and a clean river
+  facet without road-like current dashes.
+- [ ] Capture and inspect loop 2, then obtain the required independent review.
+
+### Loop 2 review
+
+- [x] Independent review: another loop warranted; composition/density, landmark fidelity,
+  and unified material depth remained the dominant gaps.
+- [x] Loop 3 implementation: slim map bounds, single-ribbon roads with terrain shadow,
+  larger ridge silhouettes, five-pine decorative scrub stands, stronger landmark shadows,
+  settlement-specific roof palettes, doors/windows, and a chapel tower.
+- [ ] Capture and inspect loop 3, run final quality review and full verification.
+
+### Loop 3 review and verification
+
+- [x] Independent review: comparable overall art direction and acceptable for delivery;
+  no visual defect was considered blocking.
+- [x] Full gate exposed one real regression: the five-pine scrub stands measured 12,640
+  `beginPath` calls against the hard <12,000 modal-world budget.
+- [x] Consolidated each stand to three larger pines to retain visual mass with fewer paths.
+- [x] The first correction measured 12,080 (80 over budget); removed one redundant
+  flanking peak per ridge to restore headroom without flattening the main silhouette.
+- [x] Final performance gate: 8/8 passed; required gameplay client capture visually inspected
+  at `shots/map-upgrade/final2/shot-0.png`, state JSON reports a live world with no modal.
+- [x] Final optimization review: PASS; the path-budget correction caused no material visual
+  degradation and retained the loop-3 reference parity.
+- [x] All 126 non-visual-baseline Playwright tests passed after the final source change.
+- [ ] Production world visual baselines intentionally need recapture through the repository's
+  `Visual baselines` CI workflow; do not generate them on Windows. The local menu/victory
+  text-only baseline drift is the already-documented Windows `system-ui` mismatch.
+
 ## Current task
 
 - [x] Measured the phase-4 gameplay audit against the running build (`critiques/phase4/gameplay-audit.md`).
@@ -216,3 +279,72 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
 - Final: `npm test` 146/146 on CI (143/146 locally — the three local failures are
   the documented Windows font ghosting on text-heavy baselines), `test:perf` 8/8,
   `test:tooling` 14/14, release token `r47a9e4eb3305` verified.
+
+## World map visual cohesion pass (2026-08-24)
+
+- Added `src/world/visual-style.js` as the dependency-free presentation contract for
+  world palette, asset scales, shadow roles, route/water widths, landmark clearance,
+  cluster sizes, regional identity, and HUD-safe rectangles.
+- Replaced overlapping screen-spanning terrain facets with three contiguous authored
+  8–12-point elevation countries. Added cached riparian ground, forest floors,
+  farmland, dead camp ground, variable-width river sections, road approaches, and
+  presentation-only landmark framing without changing collider cores or saved IDs.
+- World scenery now carries non-persisted `family`, `clusterId`, and `regionId`
+  metadata. Isolated shrubs are suppressed; rendered forests, foothills and rocks are
+  composed at cluster level and culled through one cluster bound.
+- Simplified map markers to one hero ring/body badge and one danger-colored enemy body
+  badge. Centralized the resource/objective HUD geometry and reduced the objective
+  panel to a compact three-line 56px card.
+- Added `world-visual-contract.spec.js`, extended `terrain-geometry.spec.js`, and added
+  `scripts/capture-world-cohesion.mjs` for the 11-frame landmark/state/aspect matrix.
+- Screenshot loops: `shots/map-cohesion/slice1`, `slice2`, and `slice3`; final named
+  frames in `shots/map-cohesion/final`. All capture passes reported no page or console
+  errors. The 1600x900 matrix exposed and drove removal of diagonal region overlaps.
+- Focused results so far: visual/geometry 8/8, battlefield compatibility 16/16,
+  performance 8/8. The first performance run found over-expanded tree clusters
+  (13,460 beginPath calls); cluster-level companion rendering reduced it below the
+  unchanged structural budget on the second run.
+## World-map cohesion final correction loop (2026-08-24)
+
+- Fixed the connected-ellipse `Path2D` fill defect that produced large terrain wedges.
+- Added the canonical Highmere → eastern bridge → Wolfsjaw road while retaining the existing gameplay endpoints and crossings.
+- Carried sampled river widths through world collision, battlefield briefs, battle collision, reeds, and battle rendering.
+- Preserved the legacy deterministic collider/battlefield scenery cores (`mtn/tree/rock/shrub = 47/104/26/49`).
+- Suppressed isolated shrubs and reduced map-visible rock patches without removing canonical battlefield inputs.
+- Added a smoothly docked hero presentation token at interaction coordinates so landmarks and player state remain separately readable.
+- Added a restrained screen-edge veil so large non-interactive silhouettes crop as intentional framing.
+- Fresh 11-frame capture matrix completed with no page or console errors.
+- Corrected review round: gameplay readability approved all Definition of Done items; architecture/performance approved with only low-priority test debt. Art-direction medium findings were corrected and require a fresh three-reviewer pass.
+- Fixed toast sizing state leakage by assigning the standardized font before measurement.
+- Shared `heroPresentationPosition()` between rendering and hover hit-testing; the docked visible token now owns the hover affordance while simulation coordinates remain unchanged.
+- Cached the four camera-edge gradients per viewport size.
+- Final gates: focused visual/geometry/battlefield/hover 31/31, performance 8/8, tooling 14/14, release graph `r725c36fae042`, and full suite 143 functional passes. The 10 expected stale visual baselines remain for the required pinned-Linux workflow; no local baselines were updated.
+- Final capture matrix: 11 frames, moving/frozen/occupied/raid states across 960×540, 1280×720, and 1600×900, with no page or console errors.
+- Final independent verification: art direction, gameplay readability, and architecture/performance all mark every Definition of Done item passing; no high- or medium-severity findings remain.
+## Road geography two-loop pass (2026-08-24)
+
+- User requested at least two implementation loops with an independent critic between them.
+- Loop 1: replaced generic endpoint cubics with authored Catmull-Rom routes, aligned road
+  tangents to all three bridges, introduced minor/secondary/major width classes, and muted
+  road color/shadow. Focused geometry and performance gates passed.
+- Loop 1 critic found four medium issues: Highmere hub-and-spoke composition, HUD/edge
+  cutoffs, visually compressed width classes, and Ashford's false camp connection.
+- Loop 2: merged Brindle/Coldwell at a shared Highmere junction, routed the eastern road
+  outside the rendered foothill envelope, swept Ashford lanes around field edges, cached
+  tapered 72-unit road sections, added road-only HUD/edge fading, and reduced shoulder weight.
+- Added geometry assertions for road classes, <10° bridge approach angles, and >90-unit
+  clearance from authored foothill centers. Focused geometry and performance gates pass;
+  final loop-2 screenshots have no console/page errors.
+- Final loop-2 critic: PASS, no high/medium findings; all four loop-1 medium issues resolved.
+- Final verification: battlefield/map focused 24/24, tooling 14/14, performance 8/8,
+  release graph `rc4efe354644c` verified, full suite
+  143 functional passes. Ten intentionally stale visual baselines remain for pinned-Linux CI.
+
+## River geography pass (2026-08-24)
+
+- Reauthored both canonical river splines with fewer, longer asymmetric bends while preserving every bridge anchor.
+- Added arc-length width profiles (75–140%) with 150-unit bridge transitions and asymmetric left/right banks used by rendering and collision.
+- Replaced stacked stroked ribbons with cached filled bank/water polygons, one interrupted low-contrast flow band, outside-bend depth, selected bank-hugging sand, one calm shallow, and one eastern island.
+- Narrowed water at crossings and sized bridge decks from the sampled river width; added abutment shadows and restrained foam contacts.
+- Updated battlefield sampling to carry the pointwise canonical widths and updated geometry contracts.
+- Visual loop 1 exposed panel-like sediment and a still-pipeline silhouette; critic marked both high impact. Loop 2 converted sediment to bank lines, reduced riparian/deep contrast, and strengthened authored lateral bends. Final Ashford and Coldwell frames show a clear geographic bend and aligned bridge crossing.
