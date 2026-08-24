@@ -16,7 +16,7 @@
 //
 // Determinism/boundary notes: this module reads only simulation state (positions,
 // terrain arrays), consumes NO RNG, and never reads camera/HUD/render state.
-import { clamp } from '../engine.js?v=r3d4da160c3c7';
+import { clamp } from '../engine.js?v=r8fa9ac718319';
 
 // Build the runtime objective from the plain descriptor, or null for the classic
 // elimination fight. Called from the Battle constructor AFTER buildTerrain so the

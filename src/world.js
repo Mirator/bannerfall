@@ -1,20 +1,20 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r3d4da160c3c7';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r3d4da160c3c7';
-import { SAVE_VERSION } from './save.js?v=r3d4da160c3c7';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r8fa9ac718319';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r8fa9ac718319';
+import { SAVE_VERSION } from './save.js?v=r8fa9ac718319';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=r3d4da160c3c7';
-import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r3d4da160c3c7';
-import { drawScene } from './world/render-scene.js?v=r3d4da160c3c7';
+} from './region.js?v=r8fa9ac718319';
+import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r8fa9ac718319';
+import { drawScene } from './world/render-scene.js?v=r8fa9ac718319';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r3d4da160c3c7';
+} from './world/battle-transition.js?v=r8fa9ac718319';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -25,13 +25,13 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=r3d4da160c3c7';
+} from './world/settlement-interactions.js?v=r8fa9ac718319';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r3d4da160c3c7';
-import { WORLD_ART } from './world/visual-style.js?v=r3d4da160c3c7';
+} from './world/terrain.js?v=r8fa9ac718319';
+import { WORLD_ART } from './world/visual-style.js?v=r8fa9ac718319';
 
 const P = PAL.world;
 
@@ -1101,8 +1101,11 @@ export class World {
   clampCamera() {
     const cam = this.game.camera;
     const vw = cam.w / cam.zoom / 2, vh = cam.h / cam.zoom / 2;
-    cam.x = clamp(cam.x, vw - 25, this.W - vw + 25);
-    cam.y = clamp(cam.y, vh - 25, this.H - vh + 25);
+    // On a viewport wider (or taller) than the map the two limits cross over, and a plain
+    // clamp then pins the view to one edge and shows the out-of-bounds strip on the other.
+    // Centre on the map instead so the overspill is split evenly.
+    cam.x = vw - 25 > this.W - vw + 25 ? this.W / 2 : clamp(cam.x, vw - 25, this.W - vw + 25);
+    cam.y = vh - 25 > this.H - vh + 25 ? this.H / 2 : clamp(cam.y, vh - 25, this.H - vh + 25);
   }
 
   // ---------------------------------------------------------------- delegating seams
