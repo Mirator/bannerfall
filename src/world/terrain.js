@@ -7,8 +7,8 @@
 // The cheap per-tick predicates that read this geometry (blockedAt, onRoad, riverBlockedAt,
 // inSafeZone, visible, moveBlocked, riverDistanceAt) stay on World: they run for every unit
 // every frame, and they are one-liners that would cost more in delegation than they weigh.
-import { WORLD } from '../data.js?v=r47a9e4eb3305';
-import { TAU, dist2, distToSegment, makeRng } from '../engine.js?v=r47a9e4eb3305';
+import { WORLD } from '../data.js?v=r06a7e18cad00';
+import { TAU, dist2, distToSegment, makeRng } from '../engine.js?v=r06a7e18cad00';
 
 // Build the only terrain representation used by draw(), collision and movement bonuses.
 // A maximum chord length keeps the polyline's geometric error well below the 28px road
