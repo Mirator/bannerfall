@@ -15,6 +15,16 @@ export function collectRuntimeErrors(page) {
   return errors;
 }
 
+// `pageerror` and `console` reach the test over the same connection as every other
+// protocol message, in the order the page produced them, so a round trip through the page
+// delivers everything emitted before it. Call this before asserting the collected list is
+// empty. A wall-clock sleep in that spot is not just slower, it is unsound: a sleep shorter
+// than delivery latency reports an empty list and the assertion passes with the error still
+// in flight.
+export async function drainRuntimeErrors(page) {
+  await page.evaluate(() => undefined);
+}
+
 export function assertNoRuntimeErrors(runtimeErrors) {
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);
 }

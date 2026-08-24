@@ -464,6 +464,13 @@ signals the test debt is ready to retire; never weaken the assertion or add a sk
 to make the gate green. Expected failures are always `test.fail` with a plan or
 finding reference — never `skip` or `fixme`.
 
+That sweep is also the most expensive test in the repository, so it is tagged
+`@sweep` and split out of the `chromium` project the PR gate runs. `npm test`
+no longer runs it; `Balance sweep` (`.github/workflows/balance-sweep.yml`) and
+`npm run test:balance` do, and both keep the `test.fail` annotation. Splitting
+it out is not permission to stop reading it: check that run whenever a change
+touches stance behaviour, squad orders or battle balance.
+
 ## Battlefield terrain (Plan 024)
 
 The battlefield is 2500x1760 (`FIELD` in `src/battle/constants.js`), 4x the pre-024 area, and

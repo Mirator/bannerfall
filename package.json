@@ -6,7 +6,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "playwright test",
+    "test": "playwright test --project=chromium",
+    "test:balance": "playwright test --project=balance",
     "test:qa": "playwright test tests/e2e/qa.spec.js",
     "test:perf": "playwright test tests/e2e/performance.spec.js",
     "test:visual": "playwright test tests/e2e/visual-regression.spec.js",
