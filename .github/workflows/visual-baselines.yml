@@ -1,0 +1,38 @@
+name: Visual baselines
+
+# One-shot helper for the documented baseline rule (tests/README.md): Canvas
+# screenshots are byte-compared and system-ui rasterizes differently per OS, so
+# baselines are only ever captured in CI's exact environment (ubuntu-latest,
+# pinned Chromium). Run this when a change legitimately alters production
+# visuals, download the artifact, and commit ONLY the intentionally changed or
+# newly added PNGs — never a wholesale replacement of the directory.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Capture visual baselines
+        run: npx playwright test tests/e2e/visual-regression.spec.js --update-snapshots
+      - name: Upload captured baselines
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: tests/e2e/__screenshots__/
