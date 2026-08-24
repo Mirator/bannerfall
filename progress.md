@@ -348,3 +348,33 @@ wireframe, with an independent subagent quality review after every implementatio
 - Narrowed water at crossings and sized bridge decks from the sampled river width; added abutment shadows and restrained foam contacts.
 - Updated battlefield sampling to carry the pointwise canonical widths and updated geometry contracts.
 - Visual loop 1 exposed panel-like sediment and a still-pipeline silhouette; critic marked both high impact. Loop 2 converted sediment to bank lines, reduced riparian/deep contrast, and strengthened authored lateral bends. Final Ashford and Coldwell frames show a clear geographic bend and aligned bridge crossing.
+
+## World camera clamp at scene entry, and a local visual gate (2026-08-24)
+
+- `startWorld()` centred the camera on the hero without clamping, and the map-edge clamp
+  only runs on the camera-follow path, which is frozen until the hero rides. On a display
+  wider than 1240px the opening frame showed ground west of the map border — 660px of it
+  at 2560px wide — and the first moving tick clamped and moved the camera 635px in one
+  frame. Clamped once at scene entry; measured at 1600x900 the camera now starts at 775
+  and the first three movement ticks move it by 0.
+- `clampCamera()` also centres on the map when the viewport exceeds it. Above that size the
+  two limits cross over and `clamp(v, lo, hi)` with `lo > hi` returns `lo`, pinning the view
+  to one edge and showing the out-of-bounds strip on the other.
+- The three text-heavy visual baselines that fail on a Windows host also fail in the pinned
+  Playwright image: `fc-match system-ui` there answers WenQuanYi Zen Hei, which ships no
+  Latin default sans. Installing `fonts-dejavu-core` makes all twenty pass unmodified, so
+  the baselines are DejaVu-specific rather than Linux-specific.
+- `npm run test:visual:linux` runs the suite in that container.
+- Bundled the UI font rather than living with the split. `assets/fonts/inter-latin-var.woff2`
+  (Inter, SIL OFL 1.1, latin subset, variable 400-900, 47KB) is declared in `index.html`,
+  and all 85 canvas font strings now read `Inter, system-ui, sans-serif`. `bootstrap()`
+  awaits the face before the first frame and the visual spec waits on `document.fonts.check`
+  before capturing, because canvas text falls back silently while a webfont loads and the
+  menu ribbon is sized from `measureText`.
+- Three baselines were recaptured in the container: the menu vignette, the camp-withdraw
+  brief and the campaign summary. The other seventeen still match within the unchanged 1.5%
+  cap and were left alone. The recaptured set then passed 20/20 on Windows, which is the
+  portability the bundle was for.
+- Residual: the HUD's symbol glyphs (crossed swords, heart, objective diamond, hammer, eye)
+  are outside the latin subset and still resolve per host. They are small enough to stay
+  under the cap.

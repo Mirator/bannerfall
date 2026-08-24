@@ -1,18 +1,18 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=r8fa9ac718319';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r8fa9ac718319';
+import { PAL, WORLD } from '../data.js?v=rdb594a1bb6f7';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=rdb594a1bb6f7';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
   drawSpecPanel,
-} from '../world-screens.js?v=r8fa9ac718319';
+} from '../world-screens.js?v=rdb594a1bb6f7';
 import {
   settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
   strongholdStateId, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r8fa9ac718319';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=r8fa9ac718319';
-import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r8fa9ac718319';
+} from '../region.js?v=rdb594a1bb6f7';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=rdb594a1bb6f7';
+import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=rdb594a1bb6f7';
 
 const P = PAL.world;
 
@@ -440,7 +440,7 @@ export function drawSettlement(world, ctx, s) {
     ctx.restore();
   }
   // Dark destination plates match the HUD hierarchy and stay readable over pale roads.
-  ctx.font = '800 14px system-ui, sans-serif';
+  ctx.font = '800 14px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
   const nw = ctx.measureText(s.name).width + 18;
   ctx.fillStyle = P.ink;
@@ -452,7 +452,7 @@ export function drawSettlement(world, ctx, s) {
     const rec = settlementRecord(world.save, s.id);
     if (rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied && rec.spec) {
       const glyph = SPECIALIZATIONS[rec.spec].glyph;
-      ctx.font = '800 12px system-ui, sans-serif';
+      ctx.font = '800 12px Inter, system-ui, sans-serif';
       ctx.fillStyle = P.hero;
       ctx.fillText(glyph, s.x + nw / 2 - 9, s.y + 46);
     }
@@ -489,7 +489,7 @@ export function drawSettlement(world, ctx, s) {
   const threatened = !occupied && world.parties.some(p => p.raid === s.id);
   if (occupied) {
     const label = 'OCCUPIED';
-    ctx.font = '800 12px system-ui, sans-serif';
+    ctx.font = '800 12px Inter, system-ui, sans-serif';
     const lw = ctx.measureText(label).width + 16;
     ctx.fillStyle = P.enemy;
     rrect(ctx, s.x - lw / 2, s.y + 58, lw, 18, 6); ctx.fill();
@@ -570,7 +570,7 @@ export function drawCamp(world, ctx, c, razed) {
     tent(c.x - 26, c.y + 26, 15); tent(c.x + 26, c.y + 28, 17);
     ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.moveTo(c.x, c.y - 52); ctx.lineTo(c.x, c.y - 80); ctx.lineTo(c.x + 20, c.y - 73); ctx.lineTo(c.x, c.y - 66); ctx.closePath(); ctx.fill();
-    ctx.font = '800 15px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.font = '800 15px Inter, system-ui, sans-serif'; ctx.textAlign = 'center';
     const holdW = ctx.measureText(c.name).width + 22;
     ctx.fillStyle = P.ink;
     rrect(ctx, c.x - holdW / 2, c.y + 43, holdW, 22, 6); ctx.fill();
@@ -580,7 +580,7 @@ export function drawCamp(world, ctx, c, razed) {
     // not a hidden number — its colour deepens as the hold weakens toward Exposed.
     const powerId = strongholdStateId(world.save);
     const label = STRONGHOLD_POWER_LABELS[powerId];
-    ctx.font = '800 12px system-ui, sans-serif';
+    ctx.font = '800 12px Inter, system-ui, sans-serif';
     const lw2 = ctx.measureText(label).width + 16;
     ctx.fillStyle = powerId === 'exposed' ? P.hero : P.enemy;
     rrect(ctx, c.x - lw2 / 2, c.y + 66, lw2, 18, 6); ctx.fill();
@@ -598,7 +598,7 @@ export function drawCamp(world, ctx, c, razed) {
     ctx.fillStyle = P.enemy;
     // same cream chip convention as settlement names — clamped inside the map so the
     // label can never be clipped by the viewport edge
-    ctx.font = '800 13px system-ui, sans-serif';
+    ctx.font = '800 13px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center';
     const cw2 = ctx.measureText('Bandit camp').width + 16;
     const ly2 = Math.min(c.y + 24, world.H - 30);

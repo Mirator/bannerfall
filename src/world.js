@@ -1,20 +1,20 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r8fa9ac718319';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r8fa9ac718319';
-import { SAVE_VERSION } from './save.js?v=r8fa9ac718319';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=rdb594a1bb6f7';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rdb594a1bb6f7';
+import { SAVE_VERSION } from './save.js?v=rdb594a1bb6f7';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=r8fa9ac718319';
-import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r8fa9ac718319';
-import { drawScene } from './world/render-scene.js?v=r8fa9ac718319';
+} from './region.js?v=rdb594a1bb6f7';
+import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=rdb594a1bb6f7';
+import { drawScene } from './world/render-scene.js?v=rdb594a1bb6f7';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r8fa9ac718319';
+} from './world/battle-transition.js?v=rdb594a1bb6f7';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -25,13 +25,13 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=r8fa9ac718319';
+} from './world/settlement-interactions.js?v=rdb594a1bb6f7';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r8fa9ac718319';
-import { WORLD_ART } from './world/visual-style.js?v=r8fa9ac718319';
+} from './world/terrain.js?v=rdb594a1bb6f7';
+import { WORLD_ART } from './world/visual-style.js?v=rdb594a1bb6f7';
 
 const P = PAL.world;
 

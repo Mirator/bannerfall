@@ -10,6 +10,7 @@
     "test:qa": "playwright test tests/e2e/qa.spec.js",
     "test:perf": "playwright test tests/e2e/performance.spec.js",
     "test:visual": "playwright test tests/e2e/visual-regression.spec.js",
+    "test:visual:linux": "node scripts/run-visual-linux.mjs",
     "test:tooling": "node --test tests/tooling/config-contract.test.js tests/tooling/platform-contract.test.js tests/tooling/label-contract.test.js",
     "release:cache": "node scripts/check-release-cache.mjs --update",
     "test:release": "node scripts/check-release-cache.mjs",

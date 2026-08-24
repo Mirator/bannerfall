@@ -2,7 +2,7 @@
 // on the field. Presentation only — every function takes the Battle instance, reads it,
 // and draws. Nothing here mutates simulation state (see AGENTS.md: presentation may read
 // simulation, never the reverse).
-import { TAU, rrect, shade } from '../engine.js?v=r8fa9ac718319';
+import { TAU, rrect, shade } from '../engine.js?v=rdb594a1bb6f7';
 
 // Stance glyphs, shared by every squad row: an arrow to follow, crossed swords to
 // charge, a heater shield to hold. Drawn at native scale so they read at 1x.
@@ -289,7 +289,7 @@ export function drawEnemy(battle, ctx, e) {
     ctx.fillStyle = P.enemyDark;
     ctx.beginPath(); ctx.arc(e.x, yy, 8, 0, TAU); ctx.fill();
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '900 14px system-ui, sans-serif';
+    ctx.font = '900 14px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(wolf ? '!!' : '!', e.x, yy + 0.5);
   }

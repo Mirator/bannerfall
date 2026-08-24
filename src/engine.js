@@ -1,5 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r8fa9ac718319';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rdb594a1bb6f7';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -236,7 +236,7 @@ export class Particles {
       } else if (p.kind === 'text') {
         ctx.globalAlpha = Math.min(1, k * 1.6);
         ctx.fillStyle = p.color;
-        ctx.font = `800 ${p.size}px system-ui, sans-serif`;
+        ctx.font = `800 ${p.size}px Inter, system-ui, sans-serif`;
         ctx.textAlign = 'center';
         ctx.fillText(p.str, p.x, p.y);
       }
@@ -481,7 +481,7 @@ export function balloon(ctx, x, y, kind, ink, paper, s = 1, count = 0) {
   if (count > 1) {
     ctx.translate(8, 0);
     ctx.fillStyle = paper;
-    ctx.font = '800 11px system-ui, sans-serif';
+    ctx.font = '800 11px Inter, system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(String(count), 11, 0.5);
   }
