@@ -70,6 +70,9 @@ Which focused coverage a change owes, beyond the required `npm test` gate:
 | any persisted field, migration or validation | `npx playwright test tests/e2e/save-schema.spec.js` |
 | persistence, battle result, save, party AI, strongholds | `npx playwright test tests/e2e/campaign-persistence.spec.js` |
 | stance constants in `src/battle/constants.js` | `npx playwright test tests/e2e/stance-balance.spec.js` |
+| the regional model in `src/region.js` | `npx playwright test tests/e2e/region.spec.js` |
+| battle objectives (`src/battle/objectives.js`, terminal paths) | `npx playwright test tests/e2e/battle-objectives.spec.js` |
+| capture/claim, specialization, raids, defenses, stronghold power | `npx playwright test tests/e2e/regional-campaign.spec.js` |
 | production visuals | `npm run test:visual` |
 | Playwright or CI configuration | `npm run test:tooling` |
 
@@ -215,6 +218,17 @@ stays out of the save. Stance trade-offs live in named constants in
 tune those, not scattered literals, and re-run `tests/e2e/stance-balance.spec.js`. The
 phases that read them are in `src/battle/ai-phases.js`.
 
+Battle objectives (Milestone 025): a battle may carry a descriptor-built runtime
+objective — `hold` (a zone the player's troops must stand in, paused while an enemy
+contests it) or `break` (2-3 destructible guards; the count for a stronghold comes
+from the stronghold modifiers, so razed camps really remove guards). Elimination is
+always a parallel win. Objective state lives in `src/battle/objectives.js`;
+`updateObjectivePhase()` sits between stalemate and result so
+`resolveBattleResult()` — the single terminal decision point — judges every ending,
+and `endBattle()`'s own state guard makes redundant condition checks no-ops. Tune
+durations, guard counts and target HP in `OBJECTIVES` in `src/region.js`, not in
+the battle code, and re-run `tests/e2e/battle-objectives.spec.js`.
+
 ## Simulation must not read presentation
 
 `Camera.toWorld()` is a simulation input: it feeds hero aim, hero facing, and therefore
@@ -281,8 +295,14 @@ change production visuals solely to make a screenshot pass. Baselines are
 platform-neutral and intentionally tolerate only the documented small raster
 difference (`threshold: 0.20`, `maxDiffPixelRatio: 0.015`). Review actual,
 expected, and diff PNGs before using `--update-snapshots`; never update a
-baseline to conceal an unexplained regression. See `tests/README.md` for the
-five covered world/battle states and the baseline workflow.
+baseline to conceal an unexplained regression. Baselines are captured ONLY in
+CI's exact environment (ubuntu-latest, pinned Chromium): `system-ui`
+rasterizes differently per OS, so a locally recaptured baseline can never pass
+CI. When a change legitimately alters visuals, dispatch the
+`Visual baselines` workflow (`.github/workflows/visual-baselines.yml`), review
+the artifact, and commit only the intentionally changed or new PNGs. See
+`tests/README.md` for the covered world/battle states and the baseline
+workflow.
 
 ## Save schema and persistence
 
@@ -306,13 +326,15 @@ a reload/Continue assertion.
 
 Any save-field change must deliberately increment or migrate the schema in
 `src/save.js`, update both fresh-save defaults and validation, and add legacy,
-current, and malformed fixtures. The current save schema is version 3;
-unversioned (v0), version-1, and version-2 saves migrate deterministically,
-including deriving a missing legacy roaming-party `home` from its canonical
-camp and defaulting `save.settlements` to every settlement unoccupied. Current
-version parties must have a finite valid `home`, and accepted saves must be
-safe for immediate world/battle construction. Preserve `bf_save`/`bf_save_test`
-isolation.
+current, and malformed fixtures. The current save schema is version 4;
+unversioned (v0), version-1, version-2, and version-3 saves migrate
+deterministically, including deriving a missing legacy roaming-party `home`
+from its canonical camp and defaulting `save.settlements` to every settlement
+unoccupied and neutral (v0-v2) or carrying its v3 owner forward (v3). Current
+version parties must have a finite valid `home`, settlement records must carry
+their `owner` (and `spec` once chosen — the choice is permanent for the run),
+and accepted saves must be safe for immediate world/battle construction.
+Preserve `bf_save`/`bf_save_test` isolation.
 Run `npx playwright test tests/e2e/save-schema.spec.js` and
 `npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
 the required `npm test` gate.
@@ -388,6 +410,39 @@ non-stronghold camps are razed, so the curve rises across a run instead of
 tracking the player forever. An explicit `band` argument still overrides the
 draw (used by QA to probe the `[2,24]` strength clamp directly); never assert
 a tier-distribution property from a single seed — sweep several.
+
+Regional conquest (Milestone 025): the campaign's spine is now one region with
+a named stronghold (Wolfsjaw). `src/region.js` is the single data-driven home
+for the ownership vocabulary (`neutral`/`player` + `occupied`), the four
+settlement specializations, the stronghold power ladder
+(ENTRENCHED/WEAKENED/EXPOSED from held settlements + razed linked camps), the
+objective tuning, and the raid cadence constants — it is pure over
+`(save, definitions)`, imports nothing but `data.js`, and the world, battle and
+UI layers all read it. Do not restate its tables as scattered literals
+elsewhere; the brief's advantage prose is DERIVED from the modifier bundle, and
+the stronghold objective's guard count must be the modded count so the prose
+and the fight can never disagree.
+
+All ownership mutations go through `World.winSettlement()` (battle capture or
+reclaim) or `World.claimSettlement()` (peaceful `G` claim of neutral ground) so
+the checkpoint, the `stats.captures` counter and the spec-choice queue cannot
+drift between call sites. A captured settlement's specialization choice is
+one-time and permanent for the run; an occupied holding SUSPENDS its benefit
+(`isSpecActive`) but keeps the choice readable, and winning it back restores
+service without re-counting a capture or re-opening the choice.
+
+Regional raids (Slice D): the stronghold dispatches one raid at a time
+(`updateRegionalPressure`, single-flight) at a player-held settlement, with
+grace after captures (`RAID.graceAfterCaptureT`) and after a successful
+defense (`RAID.graceAfterDefenseT`). The phase runs only on live ticks, so
+standing still freezes raids with everything else — the Plan 023 freeze rule
+extends here, including that a frozen tick consumes no RNG draws. A raid that
+reaches held ground while the hero is within `RAID.defenseR` opens a
+Hold-the-ground defense brief; otherwise it occupies, with the Plan 020
+occupation semantics. An interrupted raid resumes after a retreat or defeat
+(its `raid`/`raidKind` ride in `partyMeta`). The win condition is storming the
+stronghold itself; the campaign summary behind that victory is built purely
+from the final save (`buildSummaryModel`).
 
 ## Expected failures and test debt
 

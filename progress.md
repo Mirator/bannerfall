@@ -182,3 +182,37 @@ Original prompt: Make an gameplay audit and suggest 5 things how the gameplay co
   the evidence it is tight enough to matter. `tests/README.md` now says baselines are
   Linux-captured and why, and names the durable fix (bundle a font instead of drawing
   through `system-ui`) for whoever wants a genuinely portable text baseline.
+
+## Plan 025 implementation (the first region)
+
+- Branch: `milestone-025-regional-conquest`, merged as PR #4 after a fully green
+  147-test CI run. Plan: `plans/025-regional-conquest.md`.
+- Shipped the regional conquest loop: `src/region.js` (pure model — ownership,
+  four specializations, the ENTRENCHED/WEAKENED/EXPOSED power ladder, objective
+  tuning, raid cadence), save schema v4 (settlement `owner`/`spec`, four summary
+  stat counters, deterministic v3 migration), claim/capture through
+  `winSettlement`/`claimSettlement`, occupation that suspends service until a
+  Hold-the-ground retake restores it, single-flight regional raids with
+  capture/defense grace and the Plan 023 freeze extended to them, battle
+  objectives (`src/battle/objectives.js`) resolved exactly once through
+  `resolveBattleResult()`, and the campaign summary behind the Wolfsjaw victory.
+- Measured finding fixed during review: the stronghold brief's prose said
+  "2 defensive guards remain" after camps fell but the fight still built 3 — the
+  objective now carries the modded guard count, so prose and fight cannot diverge
+  (pinned by `region.spec.js` and `battle-objectives.spec.js`).
+- New coverage: `region.spec.js` (10 Node-level model tests),
+  `battle-objectives.spec.js` (12 terminal-path tests),
+  `regional-campaign.spec.js` (8 production-path campaign tests); save-schema and
+  campaign-persistence updated to v4; seven new visual baselines plus a
+  regenerated camp-brief baseline.
+- Baseline rule made operational: baselines are captured ONLY in CI's exact
+  environment (a Windows recapture fails CI at ~3% on text-heavy screens; a
+  Docker Linux capture also drifted from the GH runner's font set). Added
+  `.github/workflows/visual-baselines.yml` (PR #5) — dispatch, review the
+  artifact, commit only intended PNGs. The 1.5% cap was not touched; the new
+  stronghold power chip is ~1.3% of the frame, so any tolerance high enough to
+  absorb cross-platform font noise would hide exactly the surfaces the milestone
+  added.
+- Final: `npm test` 146/146 on CI (143/146 locally — the three local failures are
+  the documented Windows font ghosting on text-heavy baselines), `test:perf` 8/8,
+  `test:tooling` 14/14, release token `r47a9e4eb3305` verified.

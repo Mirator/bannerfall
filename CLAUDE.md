@@ -39,8 +39,9 @@ otherwise.
 | --- | --- |
 | `src/engine.js`, `src/main.js` | fixed-timestep loop, scene switching, input |
 | `src/world.js`, `src/world/` | campaign map: tick pipeline, party AI, terrain, rendering |
-| `src/battle.js`, `src/battle/` | fight scene: ordered phases, combat, separation, HUD |
-| `src/save.js` | versioned save schema and migration boundary (currently v3) |
+| `src/battle.js`, `src/battle/` | fight scene: ordered phases, combat, separation, objectives, HUD |
+| `src/region.js` | regional conquest model (ownership, specializations, stronghold power, raid cadence) — pure data, single source |
+| `src/save.js` | versioned save schema and migration boundary (currently v4) |
 | `src/platform/`, `src/persistence/` | capability + storage adapters (Steam-ready boundary) |
 | `src/input-actions.js` | named action layer; gameplay never reads raw key codes |
 | `src/data.js` | balance and unit tuning |
@@ -86,6 +87,8 @@ replacing a delegator with a direct module call silently disables coverage.
   Plan 023). A stopped hero is untouchable by a party that has not yet closed to
   clash range. That is the mechanic; `world-freeze.spec.js` guards it. Fixtures
   that need a parked hero to still simulate use `window.game.keepAwake(true)`.
+  The same freeze stops regional raids and the watchtower scouting phase —
+  they run only on live ticks and consume no RNG while frozen.
 - A world-scene modal genuinely pauses the campaign, and `stats.playT` is gated
   on both the modal and the frozen clock so neither can inflate reported time.
 - `deliberate orders beat giving no order at all` in
