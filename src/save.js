@@ -1,6 +1,6 @@
 // Campaign save schema — the pure boundary between persisted text and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=rdb594a1bb6f7';
-import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=rdb594a1bb6f7';
+import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=rf4fdc54d1099';
+import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=rf4fdc54d1099';
 
 // Version 2 made party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
@@ -141,7 +141,7 @@ function canonicalCampHome(campId) {
   return camp ? { x: camp.x, y: camp.y } : null;
 }
 
-function buildParties(raw, migrateLegacyHomes) {
+function buildParties(raw, legacy) {
   if (raw === null) return null;
   if (!Array.isArray(raw)) return undefined;
   const result = [];
@@ -154,7 +154,7 @@ function buildParties(raw, migrateLegacyHomes) {
     if (hasOwn(party, 'home')) {
       if (!validPoint(party.home)) return undefined;
       next.home = { x: party.home.x, y: party.home.y };
-    } else if (migrateLegacyHomes) {
+    } else if (legacy) {
       const home = canonicalCampHome(party.camp);
       if (!home) return undefined;
       next.home = home;
@@ -178,16 +178,22 @@ function buildParties(raw, migrateLegacyHomes) {
       next.occupying = party.occupying;
     }
     // Milestone 025: a party riding to raid a settlement persists that intent so a
-    // reload cannot silently cancel (or duplicate) an inbound raid.
-    if (hasOwn(party, 'raid')) {
-      if (typeof party.raid !== 'string' || !SETTLEMENT_IDS.has(party.raid)) return undefined;
-      next.raid = party.raid;
-    }
-    if (hasOwn(party, 'raidKind')) {
-      if (typeof party.raidKind !== 'string' || !RAID_KINDS.has(party.raidKind)) return undefined;
-      next.raidKind = party.raidKind;
-      // A kind without a live raid target is meaningless state.
-      if (!next.raid) return undefined;
+    // reload cannot silently cancel (or duplicate) an inbound raid. Raid state did
+    // not exist before v4, so — matching buildSettlements' owner/spec rule — a
+    // legacy shape carrying either field is refused rather than silently migrated.
+    if (legacy) {
+      if (hasOwn(party, 'raid') || hasOwn(party, 'raidKind')) return undefined;
+    } else {
+      if (hasOwn(party, 'raid')) {
+        if (typeof party.raid !== 'string' || !SETTLEMENT_IDS.has(party.raid)) return undefined;
+        next.raid = party.raid;
+      }
+      if (hasOwn(party, 'raidKind')) {
+        if (typeof party.raidKind !== 'string' || !RAID_KINDS.has(party.raidKind)) return undefined;
+        next.raidKind = party.raidKind;
+        // A kind without a live raid target is meaningless state.
+        if (!next.raid) return undefined;
+      }
     }
     result.push(next);
   }

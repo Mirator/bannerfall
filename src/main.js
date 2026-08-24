@@ -1,15 +1,15 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=rdb594a1bb6f7';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rdb594a1bb6f7';
-import { Battle } from './battle.js?v=rdb594a1bb6f7';
-import { World } from './world.js?v=rdb594a1bb6f7';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=rdb594a1bb6f7';
-import { FIELD } from './battle/constants.js?v=rdb594a1bb6f7';
-import { ACTIONS } from './input-actions.js?v=rdb594a1bb6f7';
-import { createWebPlatform } from './platform/web-platform.js?v=rdb594a1bb6f7';
-import { SaveRepository } from './persistence/save-repository.js?v=rdb594a1bb6f7';
-import { buildSummaryModel } from './world-screens.js?v=rdb594a1bb6f7';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from './region.js?v=rdb594a1bb6f7';
+import { PAL, WORLD } from './data.js?v=rf4fdc54d1099';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rf4fdc54d1099';
+import { Battle } from './battle.js?v=rf4fdc54d1099';
+import { World } from './world.js?v=rf4fdc54d1099';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=rf4fdc54d1099';
+import { FIELD } from './battle/constants.js?v=rf4fdc54d1099';
+import { ACTIONS } from './input-actions.js?v=rf4fdc54d1099';
+import { createWebPlatform } from './platform/web-platform.js?v=rf4fdc54d1099';
+import { SaveRepository } from './persistence/save-repository.js?v=rf4fdc54d1099';
+import { buildSummaryModel } from './world-screens.js?v=rf4fdc54d1099';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=rf4fdc54d1099';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -541,7 +541,7 @@ class Game {
     ];
     const rowR = [
       `Settlements captured   ${s.captured}/${s.totalSettlements} (held ${s.held})`,
-      `Camps razed   ${s.campsRazed}/3`,
+      `Camps razed   ${s.campsRazed}/${REGION.linkedCamps.length}`,
       `Gold earned   ${s.goldEarned}  ·  spent   ${s.goldSpent}`,
       `Treasury   ${s.finalGold}`,
       `Final army   ${s.army}`,
@@ -617,6 +617,10 @@ requestAnimationFrame(frame);
 setInterval(() => {
   // headless watchdog: if rAF hasn't ticked in 300ms, drive the same accumulator
   // frame() uses, so sim time stays coupled to real time instead of a fixed 20Hz
+  // bootstrap() has not populated game/platform yet — same guard as frame(), and for
+  // the same reason: do nothing to acc/last/lastTick, so the first real tick after
+  // bootstrap sees them exactly as frame()'s own Math.min(0.1, ...) clamp expects.
+  if (!game || !platform) return;
   const now = performance.now();
   if (now - lastTick > 300) {
     acc += Math.min(0.1, (now - last) / 1000);
@@ -629,7 +633,11 @@ setInterval(() => {
     } catch (err) {
       console.error('Bannerfall: recovered from an error in the watchdog loop', err);
       acc = 0;
-      game.enterMenu();
+      // enterMenu() touches game.scene/menu state — guard it too, so a failure inside
+      // recovery cannot escape this callback the way the un-guarded dereference did.
+      try { game.enterMenu(); } catch (err2) {
+        console.error('Bannerfall: recovery itself failed in the watchdog loop', err2);
+      }
     }
   }
 }, 50);

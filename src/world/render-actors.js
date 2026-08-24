@@ -1,12 +1,12 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with one body-count
 // badge, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, WORLD, UNIT_TYPES, oddsWord } from '../data.js?v=rdb594a1bb6f7';
-import { TAU, rrect, shadow } from '../engine.js?v=rdb594a1bb6f7';
+import { PAL, WORLD, UNIT_TYPES, oddsWord } from '../data.js?v=rf4fdc54d1099';
+import { TAU, rrect, shadow } from '../engine.js?v=rf4fdc54d1099';
 import {
   strongholdModifiers, STRONGHOLD_POWER_LABELS, OWNERSHIP, SPECIALIZATIONS,
-} from '../region.js?v=rdb594a1bb6f7';
-import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=rdb594a1bb6f7';
+} from '../region.js?v=rf4fdc54d1099';
+import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=rf4fdc54d1099';
 
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
 

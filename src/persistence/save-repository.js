@@ -1,5 +1,5 @@
-import { parseSave } from '../save.js?v=rdb594a1bb6f7';
-import { PLATFORM_SLOTS } from '../platform/platform-contract.js?v=rdb594a1bb6f7';
+import { parseSave } from '../save.js?v=rf4fdc54d1099';
+import { PLATFORM_SLOTS } from '../platform/platform-contract.js?v=rf4fdc54d1099';
 
 const SETTINGS_DEFAULTS = Object.freeze({ muted: false });
 
@@ -44,9 +44,17 @@ export class SaveRepository {
   }
 
   #campaignSlot(testMode) { return testMode ? PLATFORM_SLOTS.TEST_CAMPAIGN : PLATFORM_SLOTS.CAMPAIGN; }
+  // lastError tracks the outcome of the most recently SETTLED queued operation, not a
+  // permanent latch: a later operation that succeeds clears it, so one transient failure
+  // does not pin flush() to reject forever once the queue has moved past it. Nothing
+  // inside flush() consumes or clears this field, so concurrent flush() calls all observe
+  // the same value and cannot race each other into losing a still-current error.
   #enqueue(slot, operation) {
     const run = this.queue.then(operation, operation);
-    this.queue = run.catch(error => { this.lastError = error; });
+    this.queue = run.then(
+      () => { this.lastError = null; },
+      error => { this.lastError = error; },
+    );
     return run;
   }
 

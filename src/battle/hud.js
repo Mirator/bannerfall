@@ -1,10 +1,10 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deploy countdown, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, enemyStrength, playerStrength } from '../data.js?v=rdb594a1bb6f7';
-import { TAU, clamp, rrect } from '../engine.js?v=rdb594a1bb6f7';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rdb594a1bb6f7';
-import { stanceIcon } from './render-units.js?v=rdb594a1bb6f7';
+import { HERO, enemyStrength, playerStrength } from '../data.js?v=rf4fdc54d1099';
+import { TAU, clamp, rrect } from '../engine.js?v=rf4fdc54d1099';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rf4fdc54d1099';
+import { stanceIcon } from './render-units.js?v=rf4fdc54d1099';
 
 // Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
 // viewport shows about a third of the field, and squad balloons already collapse below
@@ -15,6 +15,9 @@ import { stanceIcon } from './render-units.js?v=rdb594a1bb6f7';
 const MM_W = 180, MM_H = 127, MM_MARGIN = 14;
 const CHEVRON_CAP = 12;
 const CHEVRON_MARGIN = 26;
+// Milestone 025 Slice C panel geometry, shared with the chevron reservation below so the
+// two never drift apart — see drawObjectivePanel and drawOffscreenChevrons.
+const OBJ_PANEL_W = 300, OBJ_PANEL_H = 58, OBJ_PANEL_Y = 14, OBJ_PANEL_MARGIN = 14;
 
 // Bakes the field outline, river/road polylines and wood/hill silhouettes into a small
 // offscreen canvas exactly once (cached on the battle instance, same pattern as
@@ -129,6 +132,13 @@ function drawOffscreenChevrons(battle, ctx, W, Hh) {
     { x: W - MM_W - MM_MARGIN - 8, y: Hh - MM_H - MM_MARGIN - 8, w: MM_W + 16, h: MM_H + 16 },
     { x: W / 2 - 190, y: Hh - 150, w: 380, h: 150 },
   ];
+  // The top-right objective chip (hold timer / guard pips) only exists for briefed
+  // Hold/Break fights — battle.objective is null for classic elimination and the three
+  // briefless template baselines, so this reservation must stay conditional or it would
+  // shift chevron placement in fights that never draw the panel.
+  if (battle.objective) {
+    reserved.push({ x: W - OBJ_PANEL_W - OBJ_PANEL_MARGIN - 8, y: OBJ_PANEL_Y - 8, w: OBJ_PANEL_W + 16, h: OBJ_PANEL_H + 16 });
+  }
   const inReserved = (x, y) => reserved.some(r => x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h);
   const clampChevron = (x, y) => {
     let cxp = clamp(x, CHEVRON_MARGIN, W - CHEVRON_MARGIN);
@@ -187,9 +197,9 @@ function drawObjectivePanel(battle, ctx, W) {
   const P = battle.palette;
   const o = battle.objective;
   if (!o) return;
-  const px = W - 314, py = 14, pw = 300;
+  const px = W - OBJ_PANEL_W - OBJ_PANEL_MARGIN, py = OBJ_PANEL_Y, pw = OBJ_PANEL_W;
   ctx.fillStyle = P.ink;
-  rrect(ctx, px, py, pw, o.kind === 'hold' ? 58 : 58, 8); ctx.fill();
+  rrect(ctx, px, py, pw, OBJ_PANEL_H, 8); ctx.fill();
   ctx.fillStyle = P.cream;
   ctx.font = '800 13px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';

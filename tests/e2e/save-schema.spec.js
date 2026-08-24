@@ -210,6 +210,65 @@ test('a version-3 save migrates ownership, raid intent, and summary counters to 
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('a version-3 save with a party carrying raid is rejected', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1116);
+  const v3 = await currentSave(page);
+  v3.version = 3;
+  // a genuine v3 shape predates ownership, raid intent and the summary counters
+  v3.settlements = v3.settlements.map(({ id, occupied }) => ({ id, occupied }));
+  delete v3.stats.battlesLost;
+  delete v3.stats.goldEarned;
+  delete v3.stats.goldSpent;
+  delete v3.stats.captures;
+  // raid state did not exist before v4; a legacy party carrying it must be refused,
+  // not silently accepted the way a hand-edited or tampered save could smuggle it through.
+  v3.parties = [{ camp: 'c1', x: 100, y: 100, comp: ['bandit'], raid: 'brindle' }];
+  const result = await rejectRealSave(page, v3);
+  expect(result).toEqual({ loaded: null, stored: null });
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('a version-3 save with a party carrying raidKind is rejected', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1117);
+  const v3 = await currentSave(page);
+  v3.version = 3;
+  v3.settlements = v3.settlements.map(({ id, occupied }) => ({ id, occupied }));
+  delete v3.stats.battlesLost;
+  delete v3.stats.goldEarned;
+  delete v3.stats.goldSpent;
+  delete v3.stats.captures;
+  // raidKind alone (no raid target) is still v4-only state and must be refused on
+  // a legacy party, the same as a bare raid target.
+  v3.parties = [{ camp: 'c1', x: 100, y: 100, comp: ['bandit'], raidKind: 'regional' }];
+  const result = await rejectRealSave(page, v3);
+  expect(result).toEqual({ loaded: null, stored: null });
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('a current-version save with a party carrying raid and raidKind still parses and round-trips', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1118);
+  const save = await currentSave(page);
+  save.version = 4;
+  save.parties = [{
+    camp: 'c1', x: 100, y: 100, comp: ['bandit'], home: { x: 1050, y: 1500 },
+    waryT: 0, clashT: 0, raid: 'brindle', raidKind: 'regional',
+  }];
+  await reloadWithRealSave(page, save);
+  const parsedBeforeContinue = await page.evaluate(() => window.__g.loadRun());
+  expect(parsedBeforeContinue.parties).toEqual(save.parties);
+  await page.keyboard.press('c');
+  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
+  const restored = await page.evaluate(() => window.__g.scene.save.parties);
+  expect(restored).toEqual(save.parties);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('complete version-4 save round-trips nested state without losing fields', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openPlayerGame(page, runtimeErrors);

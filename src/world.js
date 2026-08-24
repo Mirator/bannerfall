@@ -1,20 +1,20 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=rdb594a1bb6f7';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rdb594a1bb6f7';
-import { SAVE_VERSION } from './save.js?v=rdb594a1bb6f7';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=rf4fdc54d1099';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rf4fdc54d1099';
+import { SAVE_VERSION } from './save.js?v=rf4fdc54d1099';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=rdb594a1bb6f7';
-import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=rdb594a1bb6f7';
-import { drawScene } from './world/render-scene.js?v=rdb594a1bb6f7';
+} from './region.js?v=rf4fdc54d1099';
+import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=rf4fdc54d1099';
+import { drawScene } from './world/render-scene.js?v=rf4fdc54d1099';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rdb594a1bb6f7';
+} from './world/battle-transition.js?v=rf4fdc54d1099';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -25,13 +25,13 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=rdb594a1bb6f7';
+} from './world/settlement-interactions.js?v=rf4fdc54d1099';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rdb594a1bb6f7';
-import { WORLD_ART } from './world/visual-style.js?v=rdb594a1bb6f7';
+} from './world/terrain.js?v=rf4fdc54d1099';
+import { WORLD_ART } from './world/visual-style.js?v=rf4fdc54d1099';
 
 const P = PAL.world;
 
@@ -105,9 +105,13 @@ export class World {
 
     // Milestone 025 Slice B/E: a queued one-time specialization choice rides on the
     // Game like pendingAftermath — never on `save`, so no schema version is spent and
-    // a refresh at exactly the wrong moment simply loses the prompt (the ownership it
-    // belongs to is already checkpointed). Consumed below, or when an aftermath that
-    // beat it here is dismissed.
+    // a refresh at exactly the wrong moment simply loses the prompt (the settlement's
+    // ownership is already checkpointed, so the choice itself is never lost for good —
+    // G at its gates reopens it, see updateSettlementInteractions). queueSpecChoice()
+    // writes game.pendingSpecChoice at the moment a choice is queued, which is what
+    // lets a choice raised by a battle's onWinExtra (won on the World instance that
+    // startWorld() is about to discard) survive into the World built right after.
+    // Consumed below, or when an aftermath that beat it here is dismissed.
     this.pendingSpecChoice = (!this.save.won && game.pendingSpecChoice) || null;
     game.pendingSpecChoice = null;
 
@@ -924,15 +928,26 @@ export class World {
   }
 
   queueSpecChoice(id) {
-    const current = this.pendingSpecChoice;
     this.pendingSpecChoice = id;
+    // Mirrored onto the Game so this choice is not lost if the current World is about
+    // to be discarded (a battle's onWinExtra runs on the old World right before
+    // startWorld(save) replaces it — see the constructor). A second queued choice
+    // simply overwrites this pointer; it does not drop the first one's data, because
+    // the settlement's owner/spec fields (the actual "is this pending" state) already
+    // live on `save.settlements` and G at its gates re-derives from there regardless
+    // of what this pointer currently holds.
+    this.game.pendingSpecChoice = id;
     if (!this.screen) this.openSpecChoice(id);
-    void current;
   }
 
   openSpecChoice(id) {
     const settlement = WORLD.settlements.find(s => s.id === id);
     if (!settlement) { this.pendingSpecChoice = null; return; }
+    // The opened modal and the id chooseSpec() will commit are one and the same. The
+    // G-at-the-gates reopen names a settlement of its own — which is not necessarily
+    // whatever queueSpecChoice() pointed at last — so naming it here is what keeps the
+    // commit from landing on a stale id, or on null after an intervening choice.
+    this.pendingSpecChoice = id;
     this.screen = buildSpecModel(settlement, this.save);
   }
 
@@ -942,6 +957,9 @@ export class World {
   chooseSpec(specId) {
     const id = this.pendingSpecChoice;
     this.pendingSpecChoice = null;
+    // Clear the Game-level pointer too, or a stale id could resurface this
+    // already-decided settlement's modal the next time a World is constructed.
+    if (this.game.pendingSpecChoice === id) this.game.pendingSpecChoice = null;
     this.screen = null;
     const st = id && settlementRecord(this.save, id);
     if (!st || !isValidSpec(specId)) return;
