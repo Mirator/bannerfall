@@ -6,14 +6,14 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=rf4fdc54d1099';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rf4fdc54d1099';
-import { ACTIONS } from '../input-actions.js?v=rf4fdc54d1099';
+import { HERO } from '../data.js?v=r4c28c87ff1ea';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r4c28c87ff1ea';
+import { ACTIONS } from '../input-actions.js?v=r4c28c87ff1ea';
 import {
   BRACE_SPEED, BRACE_BONUS, BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
-} from './constants.js?v=rf4fdc54d1099';
+} from './constants.js?v=r4c28c87ff1ea';
 
 // Phase 4c: local obstacle avoidance ("tangent steering"). Casts a ray of length LOOKAHEAD
 // from (ux,uy) along the unit's desired heading (dirX,dirY, already a unit vector) toward its

@@ -1,18 +1,37 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=rf4fdc54d1099';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rf4fdc54d1099';
-import { Battle } from './battle.js?v=rf4fdc54d1099';
-import { World } from './world.js?v=rf4fdc54d1099';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=rf4fdc54d1099';
-import { FIELD } from './battle/constants.js?v=rf4fdc54d1099';
-import { ACTIONS } from './input-actions.js?v=rf4fdc54d1099';
-import { createWebPlatform } from './platform/web-platform.js?v=rf4fdc54d1099';
-import { SaveRepository } from './persistence/save-repository.js?v=rf4fdc54d1099';
-import { buildSummaryModel } from './world-screens.js?v=rf4fdc54d1099';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=rf4fdc54d1099';
+import { PAL, WORLD } from './data.js?v=r4c28c87ff1ea';
+import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r4c28c87ff1ea';
+import { Battle } from './battle.js?v=r4c28c87ff1ea';
+import { World } from './world.js?v=r4c28c87ff1ea';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r4c28c87ff1ea';
+import { FIELD } from './battle/constants.js?v=r4c28c87ff1ea';
+import { ACTIONS } from './input-actions.js?v=r4c28c87ff1ea';
+import { createWebPlatform } from './platform/web-platform.js?v=r4c28c87ff1ea';
+import { SaveRepository } from './persistence/save-repository.js?v=r4c28c87ff1ea';
+import { buildSummaryModel } from './world-screens.js?v=r4c28c87ff1ea';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r4c28c87ff1ea';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+
+// Solid haze tone for distant scenery — blending colors and filling opaque avoids the
+// seams that globalAlpha leaves where a mountain's overlapping facets double-composite.
+// Accepts '#rrggbb' or this function's own 'rgb(r,g,b)' output, so results can chain
+// (e.g. blending two already-blended tones) without silently producing NaN -> black.
+function colorChannels(c) {
+  if (c[0] === '#') {
+    const p = parseInt(c.slice(1), 16);
+    return [(p >> 16) & 255, (p >> 8) & 255, p & 255];
+  }
+  return c.match(/\d+/g).map(Number);
+}
+function mixColor(a, b, t) {
+  const [ar, ag, ab] = colorChannels(a), [br, bg, bb] = colorChannels(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r},${g},${bl})`;
+}
 
 function resize() {
   canvas.width = window.innerWidth || 1280;
@@ -340,17 +359,83 @@ class Game {
     };
   }
 
+  drawMenuDiamond(cx, cy, s, color, tickW = 0) {
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = color;
+    ctx.fillRect(-s / 2, -s / 2, s, s);
+    ctx.restore();
+    if (tickW > 0) {
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(cx - s * 1.3, cy); ctx.lineTo(cx - s * 0.8, cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx + s * 0.8, cy); ctx.lineTo(cx + s * 1.3, cy); ctx.stroke();
+    }
+  }
+
   drawMenuCloud(cx, cy, s) {
+    const lobes = [[0, 0, s], [s * 0.9, -s * 0.25, s * 0.75], [-s * 0.9, -s * 0.15, s * 0.7], [s * 0.45, -s * 0.6, s * 0.6], [-s * 0.4, -s * 0.55, s * 0.55], [s * 0.15, -s * 0.35, s * 0.5]];
+    // Underside shade first, offset down — a two-tone cloud reads as a soft volume
+    // instead of a flat cutout.
+    ctx.fillStyle = '#E3C79A';
+    for (const [ox, oy, r] of lobes) {
+      ctx.beginPath(); ctx.arc(cx + ox, cy + oy + s * 0.14, r, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.fillStyle = '#FFF6E3';
-    for (const [ox, oy, r] of [[0, 0, s], [s * 0.9, -s * 0.25, s * 0.75], [-s * 0.9, -s * 0.15, s * 0.7], [s * 0.45, -s * 0.6, s * 0.6], [-s * 0.4, -s * 0.55, s * 0.55]]) {
+    for (const [ox, oy, r] of lobes) {
       ctx.beginPath(); ctx.arc(cx + ox, cy + oy, r, 0, Math.PI * 2); ctx.fill();
     }
   }
 
+  // Dark backing behind the menu column so its text keeps contrast regardless of what
+  // the sunset gradient underneath is doing at that x position.
+  drawMenuVignette(W, H, P, panelRight) {
+    const vignette = ctx.createLinearGradient(0, 0, panelRight, 0);
+    vignette.addColorStop(0, 'rgba(30,42,74,0.62)');
+    vignette.addColorStop(0.75, 'rgba(30,42,74,0.30)');
+    vignette.addColorStop(1, 'rgba(30,42,74,0)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, panelRight, H);
+  }
+
   drawMenuScenery(W, H, P, compact) {
-    ctx.fillStyle = P.ground;
+    // Sunset gradient: dark navy behind the menu column, warming toward the
+    // vista on the right — same three palette tokens as the flat fill before,
+    // just read as a spectrum instead of a single stop.
+    // Extra intermediate stops: the original 4-stop version crammed nearly the whole
+    // navy-to-orange color change into the first third, which reads as a banded step
+    // rather than a continuous painted wash even though it's mathematically smooth.
+    const sky = ctx.createLinearGradient(0, 0, W, H * 0.55);
+    sky.addColorStop(0, P.ink);
+    sky.addColorStop(0.18, mixColor(P.ink, P.groundShade, 0.4));
+    sky.addColorStop(0.34, P.groundShade);
+    sky.addColorStop(0.48, mixColor(P.groundShade, P.ground, 0.5));
+    sky.addColorStop(0.62, P.ground);
+    sky.addColorStop(1, P.ground);
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = P.groundShade;
+
+    // Sun: one soft radial glow (not concentric hard-edged rings) sitting fully
+    // inside frame — a gradient reads as atmosphere, stacked flat circles read as rings.
+    // Shifted left of the castle and tightened — the sun should sit behind the ridge
+    // as a light source, not out-glow the castle as the frame's brightest focal point.
+    const sunX = W * 0.70, sunY = H * 0.33, sunR = Math.min(H * 0.22, sunY - 4);
+    // One continuous gradient, not two overlapping circles — two separate radial fills
+    // leave a visible step where the inner disc's edge meets the outer glow's alpha.
+    // The solid zone is now half the total radius — enough of it survives the peak's
+    // occlusion to still read as an actual circle, not just an unbounded soft blur.
+    const sun = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR);
+    sun.addColorStop(0, 'rgba(242,227,193,1)');
+    sun.addColorStop(0.5, 'rgba(242,227,193,1)');
+    sun.addColorStop(0.68, 'rgba(242,227,193,0.5)');
+    sun.addColorStop(0.85, 'rgba(242,227,193,0.2)');
+    sun.addColorStop(1, 'rgba(242,227,193,0)');
+    ctx.fillStyle = sun;
+    ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2); ctx.fill();
+
+    // Richer and darker than the flat P.groundShade token — the near hill needs a real
+    // value break from the sky above it, not just the mountain silhouette to carry the
+    // horizon read.
+    ctx.fillStyle = mixColor(P.groundShade, P.ink, 0.3);
     ctx.beginPath();
     ctx.moveTo(compact ? 0 : W * 0.46, H * 0.76);
     ctx.lineTo(W, H * 0.48); ctx.lineTo(W, H); ctx.lineTo(compact ? 0 : W * 0.35, H); ctx.closePath(); ctx.fill();
@@ -360,12 +445,89 @@ class Game {
     const driftB = (this.menuT * 4.5) % cloudSpan;
     this.drawMenuCloud((W * 0.58 + driftA) % cloudSpan - 100, H * 0.16, 30);
     this.drawMenuCloud((W * 0.88 + driftB) % cloudSpan - 80, H * 0.08, 42);
-    this.drawMenuCloud(W * 0.06, H * 1.02, 62);
 
     const horizon = H * 0.47;
-    for (const [fx, fs] of [[0.50, 62], [0.61, 94], [0.72, 68], [0.82, 112], [0.94, 78]]) {
-      mountain(ctx, W * fx, horizon - fs * 0.32, fs, P.ink, P.cream);
+    // Far ridge: hazy and pale for atmospheric perspective behind the near range. Plain
+    // triangles, not the full mountain() rock formation — its separate outcrop facet reads
+    // as a detached shard at this size, where real distance would soften it to one shape.
+    // Cool grey-blue haze (ink toward cream, not toward the warm ground) so the distant
+    // ridge reads as atmospheric distance against the warm mid-range in front of it.
+    // Blend toward white, not cream — cream is red-heavy and pulls the far ridge warm,
+    // defeating the point of a *cool* haze contrasting the warm near range.
+    const hazeInk = mixColor(P.ink, '#FFFFFF', 0.6), hazeCream = mixColor('#FFFFFF', P.ink, 0.05);
+    for (const [fx, fs] of [[0.48, 55], [0.58, 82], [0.68, 66], [0.78, 102], [0.93, 62]]) {
+      const mx = W * fx, my = horizon - fs * 0.78;
+      ctx.fillStyle = hazeInk;
+      ctx.beginPath();
+      ctx.moveTo(mx - fs, my + fs * 0.4); ctx.lineTo(mx - fs * 0.15, my - fs); ctx.lineTo(mx + fs * 1.05, my + fs * 0.42);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = hazeCream;
+      ctx.beginPath();
+      ctx.moveTo(mx - fs * 0.15, my - fs); ctx.lineTo(mx - fs * 0.42, my - fs * 0.34); ctx.lineTo(mx + fs * 0.05, my - fs * 0.42);
+      ctx.closePath(); ctx.fill();
     }
+    // Mid ridge: halfway in both height and hue between the cool far haze and the warm
+    // near range — two flat tones jumping straight from blue-grey to brown reads as
+    // two posterized layers instead of continuous atmospheric perspective.
+    const midHaze = mixColor(hazeInk, mixColor(P.ink, P.groundShade, 0.32), 0.5);
+    for (const [fx, fs] of [[0.51, 50], [0.63, 58], [0.86, 68]]) {
+      const mx = W * fx, my = horizon - fs * 0.62;
+      ctx.fillStyle = midHaze;
+      ctx.beginPath();
+      ctx.moveTo(mx - fs, my + fs * 0.4); ctx.lineTo(mx - fs * 0.15, my - fs); ctx.lineTo(mx + fs * 1.05, my + fs * 0.42);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = mixColor(midHaze, P.cream, 0.7);
+      ctx.beginPath();
+      ctx.moveTo(mx - fs * 0.15, my - fs); ctx.lineTo(mx - fs * 0.42, my - fs * 0.34); ctx.lineTo(mx + fs * 0.05, my - fs * 0.42);
+      ctx.closePath(); ctx.fill();
+    }
+    // Near range: a warmer navy-brown blend, distinct from the far ridge's cool haze
+    // and from pure P.ink — a third tonal step between distance and foreground.
+    const midInk = mixColor(P.ink, P.groundShade, 0.32);
+    for (const [fx, fs] of [[0.50, 62], [0.61, 94], [0.72, 68], [0.82, 112], [0.94, 78]]) {
+      mountain(ctx, W * fx, horizon - fs * 0.32, fs, midInk, P.cream);
+    }
+
+    // Pine silhouettes on the slopes below the mountains — fixed positions (this is
+    // presentation-only art, not simulation, so no RNG stream is spent on it).
+    // Pine ink leans toward the palette's one green (P.good) instead of pure navy —
+    // otherwise the trees are indistinguishable from the mountains and UI at a glance.
+    const pineInk = mixColor(P.ink, P.good, 0.13);
+    // lean tilts the whole tree a few degrees — identical dead-vertical copies read as
+    // mechanically stamped; even a slight lean sells hand placement.
+    const drawPine = (px, py, s, lean = 0) => {
+      ctx.save();
+      ctx.translate(px, py); ctx.rotate(lean); ctx.translate(-px, -py);
+      ctx.fillStyle = pineInk;
+      ctx.fillRect(px - s * 0.06, py, s * 0.12, s * 0.22);
+      // Rim light mixes toward the sun's own gold, not a generic cream lighten — ties
+      // the trees back into the one light source everything else answers to.
+      const lit = mixColor(pineInk, P.hero, 0.4);
+      for (const [w, h, dy] of [[0.55, 0.55, 0], [0.42, 0.5, 0.32], [0.28, 0.42, 0.58]]) {
+        ctx.fillStyle = pineInk;
+        ctx.beginPath();
+        ctx.moveTo(px - s * w * 0.5, py - s * dy);
+        ctx.lineTo(px + s * w * 0.5, py - s * dy);
+        ctx.lineTo(px, py - s * (dy + h));
+        ctx.closePath(); ctx.fill();
+        // Lit half (toward the same down-right light every other shape obeys).
+        ctx.fillStyle = lit;
+        ctx.beginPath();
+        ctx.moveTo(px, py - s * dy);
+        ctx.lineTo(px + s * w * 0.5, py - s * dy);
+        ctx.lineTo(px, py - s * (dy + h));
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    };
+    // Loose overlapping clumps, not an evenly spaced planted grid — each entry near an
+    // existing tree is a companion at a staggered height/lean, not a lone stamped copy.
+    for (const [fx, fy, fs, lean] of [
+      [0.40, 0.82, 46, -0.05], [0.435, 0.865, 30, 0.08], [0.48, 0.88, 40, 0.04],
+      [0.38, 0.74, 30, 0.06], [0.405, 0.755, 20, -0.07], [0.44, 0.78, 26, 0],
+      [0.63, 0.66, 22, -0.04], [0.70, 0.60, 18, 0.05],
+      [0.90, 0.68, 24, 0], [0.925, 0.70, 16, 0.09], [0.97, 0.60, 20, -0.03],
+    ]) drawPine(W * fx, H * fy, fs, lean);
 
     // One world-map road carries the eye from the menu toward the objective.
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -375,24 +537,96 @@ class Game {
     ctx.stroke();
     ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
 
+    const pointOnRoad = u => ({
+      x: W * (0.55 + u * 0.29),
+      y: H * (0.91 - u * 0.50 - Math.sin(u * Math.PI) * 0.035),
+    });
+
     // Wolfsjaw Hold: a tiny, readable destination rather than unrelated key art.
-    const hx = W * 0.855, hy = H * 0.34, hs = Math.min(W, H) * 0.105;
+    // Sized to clear the tallest far-ridge peak — the castle should be the tallest
+    // silhouette on the skyline, not tied with (or beaten by) the mountains behind it.
+    const hx = W * 0.855, hy = H * 0.27, hs = Math.min(W, H) * 0.15;
+    // A rock outcrop under the walls — without it the keep looks welded flat onto the
+    // mountainside instead of crowning its own promontory. Faceted (shadow plane + a
+    // lit plane facing the same down-right light as everything else), and taller/wider
+    // than the keep footprint so it reads as ground the castle stands on.
+    const rockDark = mixColor(P.ink, P.groundShade, 0.28), rockLit = mixColor(rockDark, P.cream, 0.4);
+    ctx.fillStyle = rockDark;
+    ctx.beginPath();
+    ctx.moveTo(hx - hs * 1.25, hy + hs * 0.95); ctx.lineTo(hx - hs * 0.60, hy + hs * 0.20);
+    ctx.lineTo(hx - hs * 0.05, hy + hs * 0.55); ctx.lineTo(hx + hs * 0.55, hy + hs * 0.15);
+    ctx.lineTo(hx + hs * 1.35, hy + hs * 0.95); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = rockLit;
+    ctx.beginPath();
+    ctx.moveTo(hx - hs * 0.05, hy + hs * 0.55); ctx.lineTo(hx + hs * 0.55, hy + hs * 0.15);
+    ctx.lineTo(hx + hs * 1.35, hy + hs * 0.95); ctx.lineTo(hx + hs * 0.35, hy + hs * 0.95); ctx.closePath(); ctx.fill();
     ctx.fillStyle = P.ink;
     ctx.fillRect(hx - hs * 0.55, hy, hs * 1.1, hs * 0.72);
     ctx.fillRect(hx - hs * 0.72, hy - hs * 0.28, hs * 0.32, hs);
     ctx.fillRect(hx + hs * 0.40, hy - hs * 0.28, hs * 0.32, hs);
     ctx.fillRect(hx - hs * 0.10, hy - hs * 0.45, hs * 0.20, hs * 1.17);
+    // Lit wall faces: a translucent strip on the light-facing (right) side of each
+    // block — the same down-right light every other menu shape obeys — so the keep
+    // reads as a volume instead of one flat silhouette.
+    ctx.save(); ctx.globalAlpha = 0.24; ctx.fillStyle = P.cream;
+    ctx.fillRect(hx + hs * 0.06, hy, hs * 0.49, hs * 0.72);
+    ctx.fillRect(hx - hs * 0.50, hy - hs * 0.28, hs * 0.10, hs);
+    ctx.fillRect(hx + hs * 0.62, hy - hs * 0.28, hs * 0.10, hs);
+    ctx.fillRect(hx + hs * 0.02, hy - hs * 0.45, hs * 0.08, hs * 1.17);
+    ctx.restore();
+    // Crenellations: a few teeth along the keep and each flanking tower —
+    // the difference between a fortress silhouette and a plain box.
+    const crenellate = (x0, x1, y) => {
+      const teeth = 4, w = (x1 - x0) / (teeth * 2 - 1);
+      for (let i = 0; i < teeth; i++) ctx.fillRect(x0 + i * 2 * w, y - hs * 0.09, w, hs * 0.09);
+    };
+    crenellate(hx - hs * 0.55, hx + hs * 0.55, hy);
+    crenellate(hx - hs * 0.72, hx - hs * 0.40, hy - hs * 0.28);
+    crenellate(hx + hs * 0.40, hx + hs * 0.72, hy - hs * 0.28);
     ctx.fillStyle = P.cream;
     ctx.fillRect(hx - hs * 0.62, hy - hs * 0.18, hs * 0.12, hs * 0.34);
     ctx.fillRect(hx + hs * 0.50, hy - hs * 0.18, hs * 0.12, hs * 0.34);
-    ctx.fillStyle = P.enemy;
+    // Gate glow: a soft falloff around a bright core reads as light spilling from an
+    // archway; a flat-filled rectangle would just read as a painted yellow block.
+    const gateX = hx, gateY = hy + hs * 0.51, gateGlowR = hs * 0.17;
+    const gateGlow = ctx.createRadialGradient(gateX, gateY, 0, gateX, gateY, gateGlowR);
+    gateGlow.addColorStop(0, P.hero);
+    gateGlow.addColorStop(0.55, 'rgba(255,211,77,0.65)');
+    gateGlow.addColorStop(1, 'rgba(255,211,77,0)');
+    ctx.fillStyle = gateGlow;
+    ctx.beginPath(); ctx.arc(gateX, gateY, gateGlowR, 0, Math.PI * 2); ctx.fill();
+    // An arched doorway, not a squared-off box — a rect topped with a semicircle is
+    // what actually reads as a gate instead of a lit window.
+    ctx.fillStyle = P.hero;
+    ctx.fillRect(hx - hs * 0.09, hy + hs * 0.44, hs * 0.18, hs * 0.28);
+    ctx.beginPath(); ctx.arc(hx, hy + hs * 0.44, hs * 0.09, Math.PI, 0); ctx.fill();
     const flagWave = Math.sin(this.menuT * 2.2) * hs * 0.05;
+    ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.moveTo(hx, hy - hs * 0.45); ctx.lineTo(hx + hs * 0.36, hy - hs * 0.34 + flagWave); ctx.lineTo(hx, hy - hs * 0.22); ctx.closePath(); ctx.fill();
+    // Third flag on the right tower balances the left one — two flanking flags either
+    // side of the center spire instead of one lone tower left bare.
+    const flagWave3 = Math.sin(this.menuT * 2.2 + 2.1) * hs * 0.04;
+    ctx.beginPath(); ctx.moveTo(hx + hs * 0.56, hy - hs * 0.28); ctx.lineTo(hx + hs * 0.82, hy - hs * 0.20 + flagWave3); ctx.lineTo(hx + hs * 0.56, hy - hs * 0.10); ctx.closePath(); ctx.fill();
+    // Second, smaller flag on the left tower — the castle reads as garrisoned, not empty.
+    const flagWave2 = Math.sin(this.menuT * 2.2 + 1.1) * hs * 0.04;
+    ctx.beginPath(); ctx.moveTo(hx - hs * 0.66, hy - hs * 0.28); ctx.lineTo(hx - hs * 0.40, hy - hs * 0.20 + flagWave2); ctx.lineTo(hx - hs * 0.66, hy - hs * 0.10); ctx.closePath(); ctx.fill();
 
-    const pointOnRoad = u => ({
-      x: W * (0.55 + u * 0.29),
-      y: H * (0.91 - u * 0.50 - Math.sin(u * Math.PI) * 0.035),
-    });
+    // Torches line the road, echoing the lit path up to the hold.
+    const roadStart = pointOnRoad(0.05), roadEnd = pointOnRoad(0.95);
+    const rdx = roadEnd.x - roadStart.x, rdy = roadEnd.y - roadStart.y;
+    const rlen = Math.hypot(rdx, rdy) || 1;
+    const normal = { x: -rdy / rlen, y: rdx / rlen };
+    for (let i = 0; i < 7; i++) {
+      const u = 0.08 + i * 0.13;
+      const p = pointOnRoad(u);
+      const side = i % 2 === 0 ? 1 : -1;
+      const px = p.x + normal.x * 22 * side, py = p.y + normal.y * 22 * side;
+      ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 16); ctx.stroke();
+      ctx.fillStyle = P.enemy;
+      ctx.beginPath(); ctx.moveTo(px, py - 16); ctx.lineTo(px + 7, py - 13); ctx.lineTo(px, py - 10); ctx.closePath(); ctx.fill();
+    }
+
     const travel = (0.22 + this.menuT * 0.035) % 1;
     // Dust remains presentation-only and deterministic; no gameplay/fx RNG is consumed.
     ctx.fillStyle = 'rgba(242,227,193,0.62)';
@@ -406,8 +640,17 @@ class Game {
       ctx.fillRect(p.x - 3, p.y - 10, 6, 11);
       ctx.beginPath(); ctx.arc(p.x, p.y - 13, 3, 0, Math.PI * 2); ctx.fill();
       if (spear) {
-        ctx.fillRect(p.x + 4, p.y - 25, 2, 25);
-        ctx.beginPath(); ctx.moveTo(p.x + 5, p.y - 29); ctx.lineTo(p.x + 2, p.y - 23); ctx.lineTo(p.x + 8, p.y - 23); ctx.closePath(); ctx.fill();
+        // Tilted, wood-shafted, with a diamond steel head — a dead-vertical shaft plus
+        // a symmetric triangle head reads as a UI up-arrow at this scale, not a spear.
+        ctx.save();
+        ctx.translate(p.x + 3, p.y - 9);
+        ctx.rotate(-0.3);
+        ctx.fillStyle = mixColor(P.ink, P.groundShade, 0.25);
+        ctx.fillRect(-1, -23, 2, 23);
+        ctx.fillStyle = P.cream;
+        ctx.beginPath();
+        ctx.moveTo(0, -29); ctx.lineTo(-2.5, -21.5); ctx.lineTo(0, -24); ctx.lineTo(2.5, -21.5); ctx.closePath(); ctx.fill();
+        ctx.restore();
       }
     };
     for (let i = 4; i >= 0; i--) drawSoldier(pointOnRoad(Math.max(0, travel - 0.055 * (i + 1))), i % 2 === 0);
@@ -426,27 +669,36 @@ class Game {
     const P = PAL.world;
     const layout = this.menuLayout(W, H);
     this.drawMenuScenery(W, H, P, layout.compact);
+    this.drawMenuVignette(W, H, P, layout.panelX + layout.panelW + 60);
 
     // Compact banner lockup leaves the world vignette and navigation equal room.
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const fs2 = Math.min(82, W * (layout.compact ? 0.075 : 0.062));
     ctx.font = `900 ${fs2}px Inter, system-ui, sans-serif`;
     const tw2 = ctx.measureText('BANNERFALL').width;
-    const rx = layout.centerX - tw2 / 2 - 25, ry2 = layout.titleY - fs2 * 0.54, rw = tw2 + 50, rh = fs2 * 1.08;
+    // Clamp the ribbon's own center so its left notch point stays on-canvas — at
+    // layout.centerX alone the point lands at a negative x and gets silently clipped,
+    // leaving a flat, asymmetric left edge instead of the intended banner-tail shape.
+    const titleCenterX = Math.max(layout.centerX, tw2 / 2 + 25 + 18 + 8);
+    const rx = titleCenterX - tw2 / 2 - 25, ry2 = layout.titleY - fs2 * 0.54, rw = tw2 + 50, rh = fs2 * 1.08;
+    this.drawMenuDiamond(titleCenterX, ry2 - 14, 6, P.cream, 5);
     ctx.fillStyle = P.enemy;
     ctx.fillRect(rx, ry2, rw, rh);
     ctx.beginPath(); ctx.moveTo(rx, ry2); ctx.lineTo(rx - 18, ry2 + rh / 2); ctx.lineTo(rx, ry2 + rh); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(rx + rw, ry2); ctx.lineTo(rx + rw + 18, ry2 + rh / 2); ctx.lineTo(rx + rw, ry2 + rh); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#A32E23';
     ctx.fillRect(rx, ry2 + rh - 6, rw, 6);
-    ctx.fillText('BANNERFALL', layout.centerX + 3, layout.titleY + 3);
+    ctx.fillText('BANNERFALL', titleCenterX + 3, layout.titleY + 3);
     ctx.fillStyle = P.ink;
-    ctx.fillText('BANNERFALL', layout.centerX, layout.titleY);
+    ctx.fillText('BANNERFALL', titleCenterX, layout.titleY);
     ctx.strokeStyle = P.cream; ctx.lineWidth = 1.25;
-    ctx.strokeText('BANNERFALL', layout.centerX, layout.titleY);
-    ctx.font = `600 ${layout.compact ? 14 : 15}px Inter, system-ui, sans-serif`;
-    ctx.fillStyle = P.ink;
-    ctx.fillText('Raise a warband. Raze the camps. Take Wolfsjaw Hold.', layout.centerX, layout.titleY + fs2 * 0.88);
+    ctx.strokeText('BANNERFALL', titleCenterX, layout.titleY);
+    // Subtitle drops to a lighter weight and smaller size — a clearer step down from
+    // the bold row labels than the near-equal weight/size it had before.
+    ctx.font = `500 ${layout.compact ? 12 : 13}px Inter, system-ui, sans-serif`;
+    ctx.fillStyle = P.cream;
+    ctx.fillText('Raise a warband. Raze the camps. Take Wolfsjaw Hold.', titleCenterX, layout.titleY + fs2 * 0.88);
+    this.drawMenuDiamond(titleCenterX, layout.titleY + fs2 * 0.88 + 18, 6, P.cream, 5);
     const headings = {
       new: ['CHOOSE YOUR CAMPAIGN', 'Difficulty cannot be changed after departure.'],
       confirm: ['REPLACE SAVED CAMPAIGN?', 'Your current campaign will be permanently replaced.'],
@@ -455,7 +707,7 @@ class Game {
     };
     const heading = headings[this.menuPanel];
     if (heading) {
-      ctx.fillStyle = P.ink;
+      ctx.fillStyle = P.cream;
       ctx.font = '900 19px Inter, system-ui, sans-serif';
       ctx.fillText(heading[0], layout.centerX, H * 0.335);
       ctx.font = '600 13px Inter, system-ui, sans-serif';
@@ -468,6 +720,12 @@ class Game {
     const items = this.menuItems();
     const pw = layout.panelW, rowH = 42, gap = 8;
     const startY = heading ? layout.panelY : layout.rootY;
+    const frameH = items.length * (rowH + gap) - gap;
+    // Engraved frame around the whole list, echoing the title's diamond dividers.
+    ctx.strokeStyle = P.cream; ctx.lineWidth = 1.5;
+    rrect(ctx, layout.panelX - 12, startY - 22, pw + 24, frameH + 44, 10); ctx.stroke();
+    this.drawMenuDiamond(layout.centerX, startY - 22, 6, P.cream, 5);
+    this.drawMenuDiamond(layout.centerX, startY + frameH + 22, 6, P.cream, 5);
     this.menuHitRegions = [];
     items.forEach((item, index) => {
       const x = layout.panelX, y = startY + index * (rowH + gap);
@@ -478,9 +736,13 @@ class Game {
       ctx.lineWidth = selected ? 3 : 1.5;
       rrect(ctx, x, y, pw, rowH, 8); ctx.stroke();
       ctx.textAlign = 'left';
-      ctx.fillStyle = selected ? P.ink : P.cream;
+      // Marker drawn separately from the label so it can carry its own accent color —
+      // the selected arrow reads as the ribbon's red, not just a darker copy of the text.
       ctx.font = '800 15px Inter, system-ui, sans-serif';
-      ctx.fillText(`${selected ? '▸  ' : '   '}${item.label}`, x + 18, y + rowH / 2 + 1);
+      ctx.fillStyle = selected ? P.enemy : mixColor(P.cream, P.ink, 0.35);
+      ctx.fillText(selected ? '▸' : '•', x + 18, y + rowH / 2 + 1);
+      ctx.fillStyle = selected ? P.ink : P.cream;
+      ctx.fillText(item.label, x + 36, y + rowH / 2 + 1);
       if (item.meta) {
         ctx.textAlign = 'right';
         ctx.font = '600 11px Inter, system-ui, sans-serif';
@@ -489,7 +751,7 @@ class Game {
       this.menuHitRegions.push({ id: item.id, x, y, w: pw, h: rowH });
     });
     ctx.textAlign = 'center';
-    ctx.fillStyle = P.ink;
+    ctx.fillStyle = P.cream;
     ctx.font = '700 12px Inter, system-ui, sans-serif';
     ctx.fillText(`${this.menuPanel === 'root' ? '↑↓ / WASD  Navigate' : '↑↓  Navigate'}    ·    ENTER  Select${this.menuPanel === 'root' ? '' : '    ·    ESC  Back'}    ·    M  Mute`, layout.centerX, H - 24);
   }
