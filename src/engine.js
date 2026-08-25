@@ -1,5 +1,5 @@
 // Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rdb594a1bb6f7';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rf4fdc54d1099';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -124,7 +124,7 @@ export class Camera {
   constructor(w, h) {
     this.x = 0; this.y = 0; this.zoom = 1;
     this.w = w; this.h = h;
-    this.shakeT = 0; this.shakeAmp = 0;
+    this.shakeT = 0; this.shakeAmp = 0; this.shakeDur = 0.25;
     this.sx = 0; this.sy = 0;
   }
   follow(tx, ty, dt, speed = 5) {
@@ -132,13 +132,30 @@ export class Camera {
     this.x = lerp(this.x, tx, t);
     this.y = lerp(this.y, ty, t);
   }
-  shake(amp, time = 0.25) { this.shakeAmp = Math.max(this.shakeAmp, amp); this.shakeT = Math.max(this.shakeT, time); }
+  // shakeDur is the span the current decay normalises against, not just the latest
+  // requested time. Starting from rest (shakeT <= 0, whether because a previous shake
+  // fully decayed or because a caller reset shakeT/shakeAmp directly) it snaps back to
+  // the 0.25 default before folding in the new call, so a shake at or under that length
+  // always decays exactly as before. While a shake is already in flight it instead
+  // extends alongside shakeT and shakeAmp under the same "strongest/longest wins"
+  // Math.max rule, floored at 0.25, so a longer second shake raises the span for the
+  // rest of the decay and a shorter one changes nothing.
+  shake(amp, time = 0.25) {
+    if (this.shakeT <= 0) this.shakeDur = 0.25;
+    this.shakeAmp = Math.max(this.shakeAmp, amp);
+    this.shakeT = Math.max(this.shakeT, time);
+    this.shakeDur = Math.max(this.shakeDur, time, 0.25);
+  }
   update(dt, rng) {
     if (this.shakeT > 0) {
       this.shakeT -= dt;
-      const a = this.shakeAmp * (this.shakeT > 0 ? this.shakeT / 0.25 : 0);
+      // Linear decay from shakeAmp at the start of the shake to 0 at shakeT === 0,
+      // normalised against shakeDur (the actual requested duration, floored at 0.25)
+      // instead of a hardcoded 0.25 — otherwise a shake longer than 0.25s starts its
+      // decay above shakeAmp and overshoots the requested amplitude.
+      const a = this.shakeAmp * (this.shakeT > 0 ? this.shakeT / this.shakeDur : 0);
       this.sx = (rng() * 2 - 1) * a; this.sy = (rng() * 2 - 1) * a;
-      if (this.shakeT <= 0) this.shakeAmp = 0;
+      if (this.shakeT <= 0) { this.shakeAmp = 0; this.shakeDur = 0.25; }
     } else { this.sx = 0; this.sy = 0; }
   }
   apply(ctx) {

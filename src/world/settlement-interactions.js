@@ -3,14 +3,14 @@
 // the toast line that reports it. Also the post-victory bookkeeping for a razed
 // camp (campVictoryExtra) and the stronghold-assault request with its objective
 // descriptor (Milestone 025).
-import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=rdb594a1bb6f7';
-import { dist2 } from '../engine.js?v=rdb594a1bb6f7';
-import { ACTIONS } from '../input-actions.js?v=rdb594a1bb6f7';
+import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=rf4fdc54d1099';
+import { dist2 } from '../engine.js?v=rf4fdc54d1099';
+import { ACTIONS } from '../input-actions.js?v=rf4fdc54d1099';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP,
   encounterObjective, strongholdModifiers, strongholdStateId, strongholdAdvantageLines,
   settlementRecord, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=rdb594a1bb6f7';
+} from '../region.js?v=rf4fdc54d1099';
 
 const P = PAL.world;
 
@@ -113,11 +113,17 @@ export function updateSettlementInteractions(world, inp) {
     // unoccupied, unowned settlement brings it under the banner without a fight —
     // and queues the one-time specialization choice. Occupied land must be won
     // back by the sword (the retake battle's onWinExtra).
-    if (s && !world.isSettlementOccupied(s) &&
-        settlementRecord(world.save, s.id)?.owner === OWNERSHIP.NEUTRAL &&
-        inp.pressedAction(ACTIONS.CLAIM)) {
-      if (world.claimSettlement(s)) {
-        world.particles.ring(world.hero.x, world.hero.y, 44, P.hero, 0.6, 4);
+    if (s && !world.isSettlementOccupied(s) && inp.pressedAction(ACTIONS.CLAIM)) {
+      const rec = settlementRecord(world.save, s.id);
+      if (rec?.owner === OWNERSHIP.NEUTRAL) {
+        if (world.claimSettlement(s)) {
+          world.particles.ring(world.hero.x, world.hero.y, 44, P.hero, 0.6, 4);
+        }
+      } else if (rec?.owner === OWNERSHIP.PLAYER && !rec.spec) {
+        // The choice dismissed with X ("decide later") is not lost — it stays
+        // readable on the settlement's own record, and G at its gates is the
+        // documented way back in (see dismissSpecChoice).
+        world.openSpecChoice(s.id);
       }
     }
   }
@@ -157,7 +163,7 @@ export function campVictoryExtra(world, camp, st) {
     const razedNow = world.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     if (!camp.stronghold) {
       let remnantNote = '';
-      if (razedNow >= 3) {
+      if (razedNow >= REGION.linkedCamps.length) {
         const strongSt = world.save.camps.find(c => c.id === 'strong');
         if (!strongSt.garrison) strongSt.garrison = world.rollGarrison(strongCamp);
         const remnants = (world.save.parties || []).filter(p => p.camp === 'strong');
@@ -168,7 +174,7 @@ export function campVictoryExtra(world, camp, st) {
           ? ` ${absorbed} bandit remnants withdraw into Wolfsjaw and man its walls — storm it!`
           : ' Wolfsjaw stands alone — storm it!';
       }
-      world.save.toast = `Camp razed (${razedNow}/3)!` + remnantNote;
+      world.save.toast = `Camp razed (${razedNow}/${REGION.linkedCamps.length})!` + remnantNote;
     }
   };
 }

@@ -127,6 +127,112 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('dismissing the spec choice does not lose it — G at the gates reopens it', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  await page.evaluate(({ x, y }) => {
+    window.__g.scene.hero.x = x;
+    window.__g.scene.hero.y = y;
+  }, { x: S('ashford').x, y: S('ashford').y });
+  await tickAction(page, 'claim'); // capture ashford — its spec modal opens
+  await tickAction(page, 'withdraw'); // "decide later"
+  const dismissed = await page.evaluate(() => {
+    const w = window.__g.scene;
+    const rec = w.save.settlements.find(s => s.id === 'ashford');
+    return { screenOpen: !!w.screen, owner: rec.owner, spec: rec.spec };
+  });
+  expect(dismissed.screenOpen).toBe(false);
+  expect(dismissed.owner).toBe('player'); // the capture itself is not undone by dismissing
+  expect(dismissed.spec).toBeFalsy(); // but no specialization was chosen either
+
+  // G at the same gates — still owned, still unspecialized — reopens the prompt.
+  await tickAction(page, 'claim');
+  const reopened = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return { kind: w.screen && w.screen.kind, id: w.screen && w.screen.settlement.id };
+  });
+  expect(reopened.kind).toBe('spec');
+  expect(reopened.id).toBe('ashford');
+
+  await tickAction(page, 'confirm'); // commit the first option (Barracks)
+  const committed = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return {
+      spec: w.save.settlements.find(s => s.id === 'ashford').spec,
+      screenOpen: !!w.screen,
+    };
+  });
+  expect(committed.spec).toBe('barracks');
+  expect(committed.screenOpen).toBe(false);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('capturing a second settlement while a first choice is still outstanding does not lose the first', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  await page.evaluate(({ x, y }) => {
+    window.__g.scene.hero.x = x;
+    window.__g.scene.hero.y = y;
+  }, { x: S('ashford').x, y: S('ashford').y });
+  await tickAction(page, 'claim'); // capture ashford
+  await tickAction(page, 'withdraw'); // decide later — leaves ashford queued, unspecialized
+
+  await page.evaluate(({ x, y }) => {
+    window.__g.scene.hero.x = x;
+    window.__g.scene.hero.y = y;
+  }, { x: S('brindle').x, y: S('brindle').y });
+  await tickAction(page, 'claim'); // capture brindle while ashford's choice is still outstanding
+  const bothPending = await page.evaluate(() => {
+    const w = window.__g.scene;
+    const ashford = w.save.settlements.find(s => s.id === 'ashford');
+    const brindle = w.save.settlements.find(s => s.id === 'brindle');
+    return {
+      ashfordOwner: ashford.owner, ashfordSpec: ashford.spec,
+      brindleOwner: brindle.owner, brindleSpec: brindle.spec,
+      screenKind: w.screen && w.screen.kind,
+      screenId: w.screen && w.screen.settlement.id,
+      captures: w.save.stats.captures,
+    };
+  });
+  // Capturing brindle opened ITS spec modal, but ashford's earlier, still-undecided
+  // choice was not silently dropped by queueSpecChoice() overwriting its single pointer —
+  // the settlement's own owner/spec fields are the real pending state.
+  expect(bothPending.ashfordOwner).toBe('player');
+  expect(bothPending.ashfordSpec).toBeFalsy();
+  expect(bothPending.brindleOwner).toBe('player');
+  expect(bothPending.brindleSpec).toBeFalsy();
+  expect(bothPending.screenKind).toBe('spec');
+  expect(bothPending.screenId).toBe('brindle');
+  expect(bothPending.captures).toBe(2);
+
+  await tickAction(page, 'confirm'); // commit brindle's choice
+
+  // Return to ashford's gates: G still reopens its own, still-outstanding choice.
+  await page.evaluate(({ x, y }) => {
+    window.__g.scene.hero.x = x;
+    window.__g.scene.hero.y = y;
+  }, { x: S('ashford').x, y: S('ashford').y });
+  await tickAction(page, 'claim');
+  const ashfordReopened = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return { kind: w.screen && w.screen.kind, id: w.screen && w.screen.settlement.id };
+  });
+  expect(ashfordReopened.kind).toBe('spec');
+  expect(ashfordReopened.id).toBe('ashford');
+
+  await tickAction(page, 'confirm'); // commit ashford's choice too
+  const final = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return {
+      ashfordSpec: w.save.settlements.find(s => s.id === 'ashford').spec,
+      brindleSpec: w.save.settlements.find(s => s.id === 'brindle').spec,
+    };
+  });
+  expect(final.ashfordSpec).toBe('barracks');
+  expect(final.brindleSpec).toBe('barracks'); // same default first option, distinct settlement
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('each specialization applies exactly its documented benefit while held', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openWorld(page);

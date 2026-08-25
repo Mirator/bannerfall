@@ -395,3 +395,45 @@ wireframe, with an independent subagent quality review after every implementatio
   direction that matters: a sleep shorter than protocol delivery latency reports an empty
   error list and passes with the error still in flight. A round trip through the page
   delivers everything the page emitted before it.
+
+## Audit pass: nine defects found by reading, fixed (2026-08-24)
+
+- A settlement's permanent specialization could be lost for good. `drawSpecPanel` offers
+  "X decide later" and `dismissSpecChoice` promised "G at the gates reopens it", but no
+  reopen path existed: the CLAIM handler only ran while `owner === 'neutral'`, so G on
+  owned land did nothing. `queueSpecChoice` also overwrote its single pointer, and the
+  `game.pendingSpecChoice` handoff the constructor reads was never written by anything, so
+  a choice queued from a battle's `onWinExtra` died with the World that raised it. G at the
+  gates now reopens an owned, unspecialized settlement's choice; `queueSpecChoice` writes
+  the Game pointer; `openSpecChoice` names the id `chooseSpec` will commit, so the reopen
+  path cannot commit a stale id or none. No schema field was added — the pending state was
+  already derivable from `owner`/`spec` on `save.settlements`.
+- The headless watchdog dereferenced `game` and `platform` before `bootstrap()` created
+  them. `frame()` has guarded this since it was written; the `setInterval` beside it did
+  not. Inside the window `await saves.initialize()` opens, `game.update(DT)` threw, the
+  catch called `game.enterMenu()` which threw the same error out of the callback, and the
+  cycle repeated every 50ms. Guarded, and the recovery call is now itself contained.
+- `Camera.update` normalised its decay against a hardcoded 0.25 rather than the duration
+  the shake was given, so every shake longer than that overshot: the brute slam peaked at
+  12.6 against a requested 9, defeat at 20.0 against 10. `shakeDur` carries the real span
+  under the same strongest/longest-wins rule; shakes at or under 0.25 are unchanged, which
+  is every remaining call site. All twenty visual baselines still match.
+- `SaveRepository.flush()` never cleared `lastError`, so one transient storage failure made
+  every later flush reject and pinned main.js's "Save failed" warning for the session even
+  though writes were landing. `#enqueue` now records the outcome of the most recently
+  settled operation instead of latching the first failure.
+- Off-screen chevrons had no reserved rectangle for the objective chip added in Milestone
+  025, so they clamped over the hold timer and the guard pips in every objective fight —
+  which is every camp raid, defense, retake and the finale. Reserved, gated on
+  `battle.objective` so elimination fights place chevrons exactly as before.
+- `buildParties` accepted `raid`/`raidKind` on a pre-v4 save while the migration comment
+  claimed the legacy flag refused them. It refuses them now, the way `buildSettlements`
+  already refused `owner`/`spec`, so a legacy shape cannot smuggle in raid state and break
+  the documented rule that a migrated campaign never opens under raid pressure.
+- The linked-camp count 3 was hardcoded in three places; all three read
+  `REGION.linkedCamps.length` now. The Break-the-position fallback allocated a stand-in
+  object plus a nested `d` per troop per tick for the whole approach march; it reuses one
+  scratch object per battle, the pattern `_steerScratch` and `_crossingScratch` already set.
+- Not fixed, recorded: orders still lose to giving none (`@sweep` measures idle 73% against
+  62% for the best deliberate policy), which needs a measured balance pass rather than an
+  edit; and the `pushOutOf` pin between two nearby rocks noted in `battlefield-brief.js`.

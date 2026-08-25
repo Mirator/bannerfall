@@ -3,13 +3,13 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=rdb594a1bb6f7';
-import { clamp, rrect } from './engine.js?v=rdb594a1bb6f7';
-import { SQUAD_LABELS } from './battle/constants.js?v=rdb594a1bb6f7';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=rf4fdc54d1099';
+import { clamp, rrect } from './engine.js?v=rf4fdc54d1099';
+import { SQUAD_LABELS } from './battle/constants.js?v=rf4fdc54d1099';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=rdb594a1bb6f7';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=rdb594a1bb6f7';
+} from './region.js?v=rf4fdc54d1099';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=rf4fdc54d1099';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;

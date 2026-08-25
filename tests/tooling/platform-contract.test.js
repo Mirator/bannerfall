@@ -110,6 +110,23 @@ test('flush rejects queued failures and preserves an observable lastError', asyn
   assert.match(repository.lastError.message, /disk full/);
 });
 
+test('flush recovers once a later write succeeds, clearing the stale lastError', async () => {
+  const fake = fakePlatform();
+  const repository = new SaveRepository(fake.platform);
+  await repository.initialize();
+  const write = fake.platform.storage.write;
+  fake.platform.storage.write = async () => { throw new Error('quota blip'); };
+  await assert.rejects(repository.writeCampaign(false, JSON.parse(validSaveRaw())), /quota blip/);
+  await assert.rejects(repository.flush(), /quota blip/);
+  assert.match(repository.lastError.message, /quota blip/);
+
+  fake.platform.storage.write = write;
+  await repository.writeCampaign(false, JSON.parse(validSaveRaw()));
+  await assert.doesNotReject(repository.flush(),
+    'a recovered write must clear the earlier failure instead of latching it forever');
+  assert.equal(repository.lastError, null);
+});
+
 // The contract's whole job is refusing a host that cannot serve the renderer. Until
 // these existed the suite only ever built a VALID fake and walked the happy path, so
 // both `throw` sites in assertPlatform() were unexecuted and a future desktop adapter

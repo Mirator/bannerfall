@@ -6,14 +6,14 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=rdb594a1bb6f7';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rdb594a1bb6f7';
-import { ACTIONS } from '../input-actions.js?v=rdb594a1bb6f7';
+import { HERO } from '../data.js?v=rf4fdc54d1099';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rf4fdc54d1099';
+import { ACTIONS } from '../input-actions.js?v=rf4fdc54d1099';
 import {
   BRACE_SPEED, BRACE_BONUS, BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
-} from './constants.js?v=rdb594a1bb6f7';
+} from './constants.js?v=rf4fdc54d1099';
 
 // Phase 4c: local obstacle avoidance ("tangent steering"). Casts a ray of length LOOKAHEAD
 // from (ux,uy) along the unit's desired heading (dirX,dirY, already a unit vector) toward its
@@ -336,10 +336,14 @@ export function updateTroopPhase(battle, dt, h) {
           if (dd < bd) { bd = dd; best = o; }
         }
         if (best) {
-          engage = {
-            x: best.x, y: best.y, vx: 0, vy: 0,
-            isObjective: true, objRef: best, d: { radius: best.r },
-          };
+          // Reused stand-in (battle.js), not a fresh object per troop per tick: vx/vy/
+          // isObjective are fixed at construction (a guard is a structure and does not
+          // move), only position, target and radius change per use.
+          const eng = battle._objectiveEngageScratch;
+          eng.x = best.x; eng.y = best.y;
+          eng.objRef = best;
+          eng.d.radius = best.r;
+          engage = eng;
         }
       }
 
