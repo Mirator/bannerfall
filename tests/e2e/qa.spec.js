@@ -27,6 +27,7 @@ const EXPECTED_QA_NAMES = [
   'rng_domains_keep_simulation_independent_of_effects',
   'perf_smoke_200_half_second_steps',
   'world_no_party_freezes_at_rivers',
+  'enemy_command_squads_orders_and_stall_override',
 ];
 
 async function waitForQaResult(page) {

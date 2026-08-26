@@ -1043,6 +1043,72 @@ function runQaSuiteImpl() {
     return 'all 5 river-pursuit cases resolved (crossed, fought, or moved on) — no freezes';
   });
 
+  // ======================================================================
+  // 17. Enemy command symmetry (Plan 027): the other side has squads too, the
+  //     commander's orders are deterministic, and the stall clock outranks it
+  // ======================================================================
+  record('enemy_command_squads_orders_and_stall_override', () => {
+    const trace = () => {
+      g.scenario('battle_big'); // bandits, raiders and a brute: three enemy squads manned
+      const b = G.scene;
+      const types = Object.keys(b.enemySquads);
+      assert(types.length >= 3, 'expected one enemy squad per enemy type, got ' + types.join(','));
+      for (const type of types) {
+        assert(b.enemySquads[type].stance === 'follow',
+          type + ' enemy squad did not start on the neutral order, got ' + b.enemySquads[type].stance);
+      }
+      // The deploy window is the player's free setup time and the commander must be silent
+      // through all of it — that silence is also what keeps the battle visual baselines,
+      // which settle at 1.5s, out of reach of any enemy order.
+      let guard = 0;
+      while (G.scene.state === 'intro' && guard++ < 50) g.step(0.1);
+      g.step(1.0);
+      assert(b.deployT > 0, 'battle_big should still be inside its deploy window here, deployT=' + b.deployT);
+      assert(b.enemyCmd.doctrine === 'follow',
+        'the commander issued an order during deploy: ' + b.enemyCmd.doctrine);
+      for (const type of types) {
+        assert(b.enemySquads[type].stance === 'follow', type + ' took an order during deploy');
+      }
+      // Past the horn it commands, and the squads genuinely diverge — the bows and the
+      // pack hold while the line goes in, which is the whole point of squad orders.
+      b.deployT = 0;
+      const seen = [];
+      for (let i = 0; i < 12; i++) {
+        g.step(0.5);
+        if (G.scene !== b || b.state === 'end') break;
+        seen.push(b.enemyCmd.doctrine + ':' + types.map(t => b.enemySquads[t].stance).join(','));
+      }
+      assert(seen.length > 0, 'battle ended before the commander could be observed');
+      assert(seen.some(row => row.indexOf('hold') >= 0), 'no enemy squad ever took a HOLD order: ' + seen.join(' | '));
+      assert(seen.some(row => {
+        const stances = row.split(':')[1].split(',');
+        return stances.some(x => x !== stances[0]);
+      }), 'enemy squads never diverged from one another: ' + seen.join(' | '));
+      return seen.join(' | ');
+    };
+    const first = trace();
+    const second = trace();
+    assert(first === second, 'the enemy commander is not deterministic: [' + first + '] vs [' + second + ']');
+
+    // The no-death stall clock outranks every order. `bloodlust` is the engine forcing a
+    // grind to close, so the commander must hand the fight straight back to it rather than
+    // keeping anyone on a stance that refuses to close.
+    g.scenario('battle_big');
+    const b = G.scene;
+    let guard = 0;
+    while (b.state === 'intro' && guard++ < 50) g.step(0.1);
+    b.deployT = 0;
+    b.bloodlust = true;
+    g.step(1.0);
+    for (const type of Object.keys(b.enemySquads)) {
+      assert(b.enemySquads[type].stance === 'follow',
+        'bloodlust must put every enemy squad back on the press, ' + type + ' is on ' +
+        b.enemySquads[type].stance);
+    }
+    return 'enemy squads start neutral, stay silent through deploy, diverge under command ' +
+      'identically across two runs, and collapse to the press under bloodlust';
+  });
+
   const passed = results.filter(r => r.ok).length;
   const failed = results.length - passed;
   return { passed, failed, results };

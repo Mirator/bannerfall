@@ -480,3 +480,57 @@ wireframe, with an independent subagent quality review after every implementatio
   adaptive intensity layers; one-shots have no positional pan; menu and world share a bed
   and the victory summary has none; and neither source track is a gapless loop, so the
   seam is the composer's fade-out meeting the fade-in rather than a true join.
+
+## Plan 027 — enemy command symmetry (stopped on its own condition)
+
+- The enemy has squads now. One per `ENEMY_TYPES` key, membership derived from type exactly
+  as the player's is, the same three stance names, and the same mechanics behind them: brace,
+  steady aim, charge exposure, formation slots. The commander lives in
+  `src/battle/enemy-command.js`, is rebuilt from the battle seed rather than persisted, and
+  draws from its own `RNG_DOMAINS.ENEMY_COMMAND` stream so it cannot shift the sequence the
+  rest of the fight consumes. No save-schema change, no new dependency, no budget moved, no
+  visual baseline touched.
+- The plan's premise is not met and is claimed nowhere. Over the same 120 organic camp raids
+  the shipped `@sweep` test measures, an idle hero won 75.0% before and wins 77.5% after —
+  inside this harness's own documented noise at that sample size. On the standard roaming
+  encounter he still wins 95.8% of 24 seeds. The first STOP condition in the plan says to
+  stop and report when the idle win rate does not fall, so that is what happened. The
+  `test.fail` annotation stays.
+- What did move is the gap between commanding and not commanding. Charging everything went
+  from 65.0% to 77.5% over the same 120 raids while idle barely moved, so the best deliberate
+  policy went from ten points behind pressing nothing to level with it. A formed-up enemy
+  that assaults on its own timing can be hit while it does so; the pre-027 converging swarm
+  punished a charge because it was already coming from every angle. A tie is not a win and
+  the assertion is a strict inequality, so nothing was flipped.
+- Inattention costs more men. On the roaming fixture an idle hero lost 0.46 troops per fight
+  before and loses 1.58 now, a 3.4x increase, for twelve percent more clock. Duration did not
+  balloon: camp raids went 46.3s to 47.8s, and every deliberate policy got faster or held.
+  The one number moving the wrong way is idle raids unresolved inside the harness's 95s
+  budget, 7 of 120 to 12 of 120; `split` and `holdLine` both improved (32 to 20, 30 to 28).
+- Four behaviours that read as obviously smarter are measured net losses FOR THE ENEMY, and
+  were removed rather than shipped. Concentration of fire on the wounded man already in
+  reach: 75% to 81.7% idle win rate, and 80.8% with hysteresis so it cannot churn. Raiders
+  preferring the player's bow line: another six points, because it walks an 85 hp raider
+  through four spearmen to reach a 60 hp archer. Head-hunting a stationary commander: 100% on
+  the roaming fixture, because an idle hero sits inside his own formation and everything sent
+  at him dies crossing it. Charge exposure ordered under bloodlust: 75% to 89%, a straight
+  35% damage gift for the rest of every long fight. The common cause is one sentence — in
+  this engine a second an enemy spends not attacking is damage it does not deal.
+- A per-unit flanking swerve does not converge and was replaced by moving the muster point
+  instead. A constant rotation applied to a constantly re-read bearing orbits a target that
+  does not move: one raider circled a static warband at a fixed 497 units for the whole 90s
+  budget. The muster point also has to sit outside everything the player can reach without
+  deciding to — at a 150 standoff the muster walked the enemy line into the middle of the
+  player's blob and stood it still there, and the fixture resolved in 16.8s against a 37.4s
+  baseline.
+- The control that makes all of the above readable: with the commander forced off and every
+  enemy squad left on `follow`, both fixtures replay the pre-027 numbers digit for digit.
+  `follow` is byte-identical to the old AI on purpose, and it is worth re-running that
+  control before trusting any future measurement in this area.
+- The audit's central claim now holds from both directions. `self-playing-fix-options.md`
+  showed no enemy STAT change fixes the self-playing problem; this shows no enemy BEHAVIOUR
+  change does either, for the same reason. The encounter generator's 0.7-1.2x fair band
+  counts bodies, and on the real combat scale the roaming fixture is about 71 dps and 750
+  hit points against 46 and 610. The two levers left standing are the two this slice kept
+  out of scope on purpose: change the win condition, or change the encounter generator. The
+  commander is a prerequisite for the second rather than a substitute for it.

@@ -1,6 +1,6 @@
 // Shared engine: math, RNG, input, camera, particles, flat-shaded drawing helpers.
 // Audio lives in src/audio.js and imports from here; never the other way round.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r44f9dbca8fbc';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rb7fae751c29c';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -37,6 +37,11 @@ export const RNG_DOMAINS = Object.freeze({
   // Plan 024: battlefield-brief ford jitter (Phase 2) and any obstacle/zone terrain draw
   // (Phase 3) — gameplay-affecting, so it gets its own stream rather than sharing BATTLE_FX.
   BATTLE_TERRAIN: 0x6A09E667,
+  // Plan 027: the enemy commander's own nerve offset and anchor jitter. Deliberately NOT
+  // simRng: keeping it separate means the commander's randomness cannot shift the draw
+  // sequence every other battle consumer depends on, so the legacy determinism records
+  // stay comparable and a commander change is attributable to the commander alone.
+  ENEMY_COMMAND: 0xBB67AE85,
 });
 
 export function deriveSeed(seed, domain) {

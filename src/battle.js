@@ -1,29 +1,33 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=r44f9dbca8fbc';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r44f9dbca8fbc';
-import { SpatialGrid } from './battle/spatial-index.js?v=r44f9dbca8fbc';
-import { ACTIONS } from './input-actions.js?v=r44f9dbca8fbc';
-import { BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP } from './battle/constants.js?v=r44f9dbca8fbc';
+import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=rb7fae751c29c';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=rb7fae751c29c';
+import { SpatialGrid } from './battle/spatial-index.js?v=rb7fae751c29c';
+import { ACTIONS } from './input-actions.js?v=rb7fae751c29c';
+import { BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP } from './battle/constants.js?v=rb7fae751c29c';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=r44f9dbca8fbc';
-import { drawScene, drawProps } from './battle/render-scene.js?v=r44f9dbca8fbc';
+} from './battle/terrain.js?v=rb7fae751c29c';
+import { drawScene, drawProps } from './battle/render-scene.js?v=rb7fae751c29c';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=r44f9dbca8fbc';
+} from './battle/separation.js?v=rb7fae751c29c';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=r44f9dbca8fbc';
+} from './battle/ai-phases.js?v=rb7fae751c29c';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
-} from './battle/combat.js?v=r44f9dbca8fbc';
+} from './battle/combat.js?v=rb7fae751c29c';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=r44f9dbca8fbc';
+} from './battle/objectives.js?v=rb7fae751c29c';
+import {
+  buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
+  enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
+} from './battle/enemy-command.js?v=rb7fae751c29c';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -257,6 +261,14 @@ export class Battle {
     });
     this.totalEnemies = this.enemies.length;
     this.startTroops = this.troops.length;
+    // Plan 027: the other side gets squads and a commander, built from the same battle seed
+    // so nothing about it is persisted — a battle is not resumable and the commander is
+    // reconstructible, exactly like simRng/fxRng. Its RNG stream is separate from simRng, so
+    // it cannot perturb the draw sequence the rest of the fight depends on.
+    buildEnemyCommand(this, battleSeed);
+    // Reused output for enemyAnchorFor() (ai-phases.js), same instance-owned scratch pattern
+    // as _steerScratch: written and read synchronously inside one enemy's iteration.
+    this._enemyAnchorScratch = { x: 0, y: 0 };
     // strengths on the same scale the map uses (world.js's strength()/myStrength()) — for the defeat diagnosis
     this.enemyStrength = enemyStrength(setup.enemies);
     this.playerStrength = playerStrength(setup.troops);
@@ -299,6 +311,11 @@ export class Battle {
       cd: 0.5 + this.simRng() * d.cooldown, windupT: 0, facing: Math.PI,
       target: null, lunge: 0, bob: this.fxRng() * TAU, flash: 0, slamT: 0,
       blindT: 0, // Phase 5: only a ranged enemy (raider) ever moves this off 0.
+      // Plan 027, mirroring the troop record: charge exposure lingers after the order
+      // changes, and the enemy commander's formation slot on a held line.
+      exposedT: 0, eslot: null,
+      // Plan 027: seconds a stalking wolf is still breaking off after a bite (hit and run).
+      recoilT: 0,
     });
   }
 
@@ -458,6 +475,11 @@ export class Battle {
     this._unitGrid.clearStats(); this._obstacleGrid.clearStats();
 
     this.updateCommandPhase(inp);
+    // Plan 027: the enemy commander reads the field and issues orders BEFORE anybody moves,
+    // so both sides act on the same tick's orders — the player's own orders were just read
+    // above. Its own decisions are throttled to CMD_TICK internally; this call is a timer
+    // bump on every other tick.
+    this.updateEnemyCommandPhase(dt);
     const ax = inp.axis();
     this.updateHeroPhase(dt, inp, h, ax);
     this._enemyGrid.rebuild(this.enemies);
@@ -581,6 +603,22 @@ export class Battle {
 
   updateEnemyPhase(dt, h) {
     enemyPhase(this, dt, h);
+  }
+
+  // Plan 027 seams. updateEnemyCommandPhase is one of the ordered phases, so it is a method
+  // for the same reason its siblings are: world-battle-seams.spec.js patches the pipeline by
+  // name. enemyStance mirrors squadStance as the per-unit read every enemy AI branch and the
+  // damage path go through; assignEnemySlots is reached by the reinforcement-wave path.
+  updateEnemyCommandPhase(dt) {
+    enemyCommandPhase(this, dt);
+  }
+
+  enemyStance(e) {
+    return readEnemyStance(this, e);
+  }
+
+  assignEnemySlots() {
+    assignSlotsForEnemies(this);
   }
 
   updateStalematePhase() {
