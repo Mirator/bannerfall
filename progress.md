@@ -534,3 +534,90 @@ wireframe, with an independent subagent quality review after every implementatio
   hit points against 46 and 610. The two levers left standing are the two this slice kept
   out of scope on purpose: change the win condition, or change the encounter generator. The
   commander is a prerequisite for the second rather than a substitute for it.
+
+
+## Plan 028 - rebase the encounter generator on measured combat power
+
+- The map balanced on a headcount. `enemyStrength`/`playerStrength` counted bodies: a brute
+  5, everything else 1, a knight 2, the hero 3. Measured over 2544 seeded headless battles,
+  a brute is worth 3.19 spearmen, a wolf 0.52, a bandit 0.80, and an idle hero about half of
+  one. Both surviving levers from the phase-4 audit pointed here, so this slice replaced the
+  number rather than tuning anything that reads it.
+- Fighting weight is now sqrt(total damage per second x total hit points), normalised so one
+  spearman is 1.0. That product is the Lanchester square law, which is what a fight between
+  two lines that each shoot at whoever is nearest obeys; the square root makes it scale
+  linearly with force size, so it drops straight into the tier bands, the odds thresholds
+  and the badges. An enemy's cadence is cooldown PLUS windup, because it telegraphs the blow
+  and only starts its cooldown once the strike lands - every earlier piece of arithmetic in
+  this line of work divided by cooldown alone and overstated a bandit by 38%.
+- The per-type corrections were fitted, not reasoned out, and two came back opposite to the
+  reasoning that motivated them. A raider is worth 1.65x its raw damage-times-durability
+  figure and a brute 1.90x; both were expected to be worth less, on the grounds that a slow
+  brute arrives late and a kiting raider spends its time not attacking. The naive product
+  alone calls 87.4% of decisive matchups, which is what headcount already manages. The
+  corrections are the whole difference between "no better" and 93.9%.
+- It took two measurement grids, and finding out why cost a full round of fitting. 1776
+  battles over hand-built enemy ladders are what separate one body's worth from another's -
+  a grid of average mixes cannot tell a wolf from a raider. But fitted on those alone, the
+  metric put the 50% crossing at 1.12 rather than 1.00 on compositions the generator
+  actually rolls. A second grid of 768 battles drawn through the shipped roller fixed that.
+  The archer is the clearest case: 0.86 against pure ladders, 1.30 against rolled mixes,
+  because a pure wolf pack sends every body at the bow line and eats it, which the ladders
+  are full of and real play is not.
+- The hero enters the metric as 120 hit points and no damage at all. That is deliberate: the
+  generator sizes every fight against a commander who gives no orders and never swings, and
+  everything the player does with the sword is his margin over the odds the map showed him.
+  The warband hover panel says so in words, because a number that leaves out the player's
+  own sword has to.
+- Calibration, measured rather than assumed. Over 216 generator-drawn even-tier fights an
+  idle hero wins 49.1%, against 58.9% before, and the band delivers 0.99-1.17 of real power
+  where it used to deliver 0.73-1.29. The weak tier stays a foothold at 85.2% and the strong
+  tier is 0% of 144. A fresh campaign sees weak 33 / even 27 / strong 28 on the map at start
+  across 20 seeds, and 0 of those 20 open with nothing at or under the beatable ratio.
+- Two of the brief's premises did not survive the measurement and are reported rather than
+  worked around. The roaming fixture the audits quote as the standard even encounter is a
+  0.57 power ratio - a weak fight, and headcount agreed at 7 against 12, so an idle hero
+  winning 95.8% of it was never evidence about the generator. And the camp ladder was
+  already close to honest: its authored 0.7/0.9/1.1 tiers delivered about 0.66/0.89/1.06 of
+  real power before, so camp raids moved 77.5% to 70.8% and no further.
+- What was actually wrong was the variance, and its cause was the hero counting three
+  points. He is 43% of a starting warband's declared strength and 21% of a late one's, so
+  the same tier meant very different fights at different points in a run: the old even band
+  gave a fresh warband a 1.29 ratio at its top, which an idle hero lost every time, and a
+  mid warband a 1.14, which it won more often than not. The new band spans 0.18 of ratio
+  across three rosters instead of 0.56.
+- A second, hidden bias had the same shape. The composition roller stopped on the body that
+  crossed the target, and one body is 7% of a late warband's weight and 18% of a starting
+  one's - so a fresh campaign was quietly served harder fights than the band it drew. It now
+  stops on whichever side of the target is closer, which took a fresh warband's realised
+  ratio at a 1.10 draw from 1.20 to 1.08 and the pooled even-band idle win rate from 38% to
+  49.1%.
+- The beatable-party floor was genuinely broken by the rebase and the worst-case record
+  caught it. A comp aimed anywhere inside the even band could overshoot the beatable ratio
+  by one body and leave nothing on the map the player could beat, which is the deadlock the
+  floor exists to prevent. `trimToBeatable()` makes the guarantee structural rather than
+  probabilistic: pop bodies until the party is provably under the ratio, never below one
+  body, consuming no simRng draws. `isSettlementClaimed()` needed no change - it counts
+  occupiers and compares no forces.
+- The `@sweep` annotation stays, and it is now a measured loss rather than a tie. Resolved
+  at 360 raids per policy: idle 71.7% +/- 2.4, chargeAll 66.4% +/- 2.5, holdLine 36.4%,
+  split 35.6%. Paired seed by seed and camp by camp, charging won 40 raids that pressing
+  nothing lost and lost 59 that it won - a margin of -5.3 +/- 2.8 points against commanding.
+  Plan 019 measured -10, Plan 027 closed it to 0.0, this puts it at -5.3. Smaller draws of
+  the same fixture landed at -2.5 and +3.0, which is exactly why it was resolved at three
+  times the sample size before anything was flipped.
+- Why commanding still loses is visible in one column. Idle leaves 41 of 360 raids
+  unfinished inside the harness budget and chargeAll leaves 20, nine seconds faster.
+  Charging buys tempo with a 1.35x damage penalty, and a warband on FOLLOW does not need the
+  tempo. Harder encounters made that trade worse rather than better, because the penalty
+  scales with the incoming damage.
+- Four Plan 020 records changed semantics and each preserved its intent; one of them got
+  stronger. The tier-distribution record's `assert(other === 0, 'a spawned party landed
+  outside all three declared tiers')` was vacuous - the old classifier always returned one
+  of three names, so the bucket could never fill. It now counts a draw that falls in a gap
+  between the declared bands, which is what the assertion always claimed to check.
+- No save-schema change, no new runtime dependency, no performance budget touched, and no
+  visual baseline moved. The brief and hover panels genuinely changed their text and two
+  baselines' party fixtures changed body count, but all 20 comparisons passed inside the
+  suite's existing tolerance with no diff artifacts, so nothing was recaptured and nothing
+  was left stale.

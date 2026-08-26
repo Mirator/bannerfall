@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { UNIT_TYPES, ENEMY_TYPES } from '../../src/data.js';
+import { UNIT_TYPES, ENEMY_TYPES, playerStrength, weightText } from '../../src/data.js';
 import { buildAftermathModel, buildBriefModel } from '../../src/world-screens.js';
 import { SQUAD_LABELS } from '../../src/battle/constants.js';
 
@@ -62,7 +62,16 @@ test('the brief roster names every type present, in declared order', () => {
   // The player's roster deliberately speaks a different register: squad banners (SPEARS,
   // BOWS, HORSE), not prose bodies. Pinned so the two vocabularies stay distinct on purpose.
   assert.equal(model.player.roster, UNIT_KEYS.map(k => `1 ${SQUAD_LABELS[k]}`).join(', '));
-  assert.equal(model.player.strength, 3 + UNIT_KEYS.length + 1); // hero counts 3, knight 2
+  // Plan 028 semantic update: `strength` is measured FIGHTING WEIGHT now, not a headcount
+  // (it used to be `3 + bodies + 1` — hero 3, knight 2). This is a label-contract test, so
+  // it pins the CONTRACT rather than a magic number: the brief must report the same figure
+  // the shared formula produces for that roster, and it must be a finite positive number
+  // the brief can format. Restating the arithmetic here would just be a second copy of the
+  // metric that could drift from the first.
+  const expected = playerStrength(UNIT_KEYS.map(type => ({ type })));
+  assert.equal(model.player.strength, expected);
+  assert.ok(Number.isFinite(expected) && expected > 0, `player strength must be a usable number, got ${expected}`);
+  assert.equal(weightText(model.player.strength), (Math.round(expected * 10) / 10).toFixed(1));
 });
 
 test('an unrecognised type is counted rather than dropped or crashing', () => {

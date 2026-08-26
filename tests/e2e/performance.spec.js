@@ -76,11 +76,15 @@ test('world rendering stays within its own budget with hover latched on and a br
   const result = await page.evaluate(() => {
     const g = window.__g, world = g.scene;
     world.hero.x = 1600; world.hero.y = 900; // clear of every settlement's safe zone
-    const mine = world.myStrength();
+    // Plan 028 semantic update: this used to be `Math.round(world.myStrength())` bandits,
+    // which was 12 on the old headcount scale and would be 5 on the fighting-weight scale.
+    // This is a RENDERING BUDGET test — the number that matters is how many tokens and
+    // brief rows are drawn, not how strong they are — so the body count is pinned at the
+    // 12 it has always measured rather than allowed to halve with the metric change.
     world.parties.length = 0;
     world.parties.push({
       camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
-      comp: Array.from({ length: Math.max(1, Math.round(mine)) }, () => 'bandit'),
+      comp: Array.from({ length: 12 }, () => 'bandit'),
       home: { x: world.hero.x, y: world.hero.y }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
       occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
       _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,

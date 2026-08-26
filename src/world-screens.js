@@ -3,13 +3,13 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS } from './data.js?v=rb7fae751c29c';
-import { clamp, rrect } from './engine.js?v=rb7fae751c29c';
-import { SQUAD_LABELS } from './battle/constants.js?v=rb7fae751c29c';
+import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS, weightText } from './data.js?v=r1fcd6454285e';
+import { clamp, rrect } from './engine.js?v=r1fcd6454285e';
+import { SQUAD_LABELS } from './battle/constants.js?v=r1fcd6454285e';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=rb7fae751c29c';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=rb7fae751c29c';
+} from './region.js?v=r1fcd6454285e';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r1fcd6454285e';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
@@ -109,7 +109,10 @@ export function hoverTargetAt(world, wx, wy) {
       title: 'Your warband', bodies: troops.length + 1, strength,
       lines: [
         troops.length ? troopBreakdown(troops) : 'no troops — just you',
-        `you count for 3 · fighting weight ${strength}`,
+        // Plan 028: the hero is not worth three spearmen on the map's books. He is 120
+        // hit points that the odds already assume you will not swing — the sword is your
+        // margin over them, so it is not counted here.
+        `fighting weight ${weightText(strength)} · your sword is not in it`,
       ],
     };
   }
@@ -125,7 +128,7 @@ export function hoverTargetAt(world, wx, wy) {
       title: heavy ? 'Raiding party (heavy)' : 'Raiding party',
       bodies, heavy, strength, mine, odds, mood: p.mood || null,
       lines: [
-        `${bodies} riders${heavy ? ' (heavy)' : ''} · fighting weight ${strength} · yours ${mine}`,
+        `${bodies} riders${heavy ? ' (heavy)' : ''} · fighting weight ${weightText(strength)} · yours ${weightText(mine)}`,
         enemyBreakdown(p.comp),
         `${odds} · ${partyIntent(p)}`,
       ],
@@ -143,7 +146,7 @@ export function hoverTargetAt(world, wx, wy) {
     kind: 'camp', x: camp.x, y: camp.y, scouted: true, title,
     bodies, heavy, strength, mine,
     lines: [
-      `${bodies} defenders${heavy ? ' (heavy)' : ''} · fighting weight ${strength} · yours ${mine}`,
+      `${bodies} defenders${heavy ? ' (heavy)' : ''} · fighting weight ${weightText(strength)} · yours ${weightText(mine)}`,
       enemyBreakdown(campState.garrison),
     ],
   };
@@ -274,10 +277,10 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.fillText('THE ENEMY', rightX - colW / 2, colY);
   ctx.font = '600 13px Inter, system-ui, sans-serif';
   ctx.fillText(model.player.roster, leftX - colW / 2, colY + 26);
-  ctx.fillText(`${model.player.bodies} bodies · fighting weight ${model.player.strength}`, leftX - colW / 2, colY + 46);
+  ctx.fillText(`${model.player.bodies} bodies · fighting weight ${weightText(model.player.strength)}`, leftX - colW / 2, colY + 46);
   ctx.fillText(model.enemy.roster, rightX - colW / 2, colY + 26);
   ctx.fillText(
-    model.enemy.scouted ? `${model.enemy.bodies} bodies · fighting weight ${model.enemy.strength}` : 'composition unknown',
+    model.enemy.scouted ? `${model.enemy.bodies} bodies · fighting weight ${weightText(model.enemy.strength)}` : 'composition unknown',
     rightX - colW / 2, colY + 46,
   );
   ctx.textAlign = 'center';

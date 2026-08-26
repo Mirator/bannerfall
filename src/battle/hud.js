@@ -1,10 +1,10 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deploy countdown, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, enemyStrength, playerStrength } from '../data.js?v=rb7fae751c29c';
-import { TAU, clamp, rrect } from '../engine.js?v=rb7fae751c29c';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rb7fae751c29c';
-import { stanceIcon } from './render-units.js?v=rb7fae751c29c';
+import { HERO, BALANCE, enemyStrength, playerStrength, weightText } from '../data.js?v=r1fcd6454285e';
+import { TAU, clamp, rrect } from '../engine.js?v=r1fcd6454285e';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=r1fcd6454285e';
+import { stanceIcon } from './render-units.js?v=r1fcd6454285e';
 
 // Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
 // viewport shows about a third of the field, and squad balloons already collapse below
@@ -446,8 +446,13 @@ export function drawHud(battle, ctx) {
       // The hero's own survival is what decides an even fight, so say that rather than
       // pointing at HOLD: measured across camp raids, HOLD is not the stronger order, and
       // advice that sends the player to the weaker option teaches the wrong lesson.
-      const advice = battle.enemyStrength > battle.playerStrength + 2
-        ? `They were stronger (${battle.enemyStrength} vs your ${battle.playerStrength}) — recruit at a village, then return`
+      // Plan 028: the "+2 strength points" gap became a ratio, because fighting weight is
+      // a measured quantity now and an absolute margin means different things to a
+      // four-man warband and a twelve-man one. `oddsStronger` is the same threshold the
+      // map's odds pill used to promise this fight was winnable, so the defeat screen and
+      // the brief cannot disagree about whether the player was outmatched.
+      const advice = battle.enemyStrength > battle.playerStrength * BALANCE.oddsStronger
+        ? `They were stronger (${weightText(battle.enemyStrength)} vs your ${weightText(battle.playerStrength)}) — recruit at a village, then return`
         : 'Even odds — you fell, not your warband. Dash out of the scrum before you are surrounded';
       ctx.fillText(advice, W / 2, Hh * 0.36 + 90);
     }

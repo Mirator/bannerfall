@@ -3,14 +3,14 @@
 // the toast line that reports it. Also the post-victory bookkeeping for a razed
 // camp (campVictoryExtra) and the stronghold-assault request with its objective
 // descriptor (Milestone 025).
-import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=rb7fae751c29c';
-import { dist2 } from '../engine.js?v=rb7fae751c29c';
-import { ACTIONS } from '../input-actions.js?v=rb7fae751c29c';
+import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=r1fcd6454285e';
+import { dist2 } from '../engine.js?v=r1fcd6454285e';
+import { ACTIONS } from '../input-actions.js?v=r1fcd6454285e';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP,
   encounterObjective, strongholdModifiers, strongholdStateId, strongholdAdvantageLines,
   settlementRecord, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=rb7fae751c29c';
+} from '../region.js?v=r1fcd6454285e';
 
 const P = PAL.world;
 

@@ -1,33 +1,33 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=rb7fae751c29c';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=rb7fae751c29c';
-import { SpatialGrid } from './battle/spatial-index.js?v=rb7fae751c29c';
-import { ACTIONS } from './input-actions.js?v=rb7fae751c29c';
-import { BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP } from './battle/constants.js?v=rb7fae751c29c';
+import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=r1fcd6454285e';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r1fcd6454285e';
+import { SpatialGrid } from './battle/spatial-index.js?v=r1fcd6454285e';
+import { ACTIONS } from './input-actions.js?v=r1fcd6454285e';
+import { BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP } from './battle/constants.js?v=r1fcd6454285e';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=rb7fae751c29c';
-import { drawScene, drawProps } from './battle/render-scene.js?v=rb7fae751c29c';
+} from './battle/terrain.js?v=r1fcd6454285e';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r1fcd6454285e';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=rb7fae751c29c';
+} from './battle/separation.js?v=r1fcd6454285e';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=rb7fae751c29c';
+} from './battle/ai-phases.js?v=r1fcd6454285e';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
-} from './battle/combat.js?v=rb7fae751c29c';
+} from './battle/combat.js?v=r1fcd6454285e';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=rb7fae751c29c';
+} from './battle/objectives.js?v=r1fcd6454285e';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
-} from './battle/enemy-command.js?v=rb7fae751c29c';
+} from './battle/enemy-command.js?v=r1fcd6454285e';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();

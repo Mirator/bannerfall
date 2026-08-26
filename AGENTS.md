@@ -480,7 +480,9 @@ clears the settlement rather than leaving a phantom occupation with nobody to
 fight. The other, probabilistic half of the deadlock floor guarantee is
 `World.enforceBeatableFloor()`, run once per world tick: if no live party
 (including one occupying a settlement) sits at or under
-`BALANCE.beatablePartyRatio`, it downgrades the single weakest live party to
+`BALANCE.beatablePartyRatio` — a ratio of measured fighting weight since Plan
+028, and still pinned to the top of the `even` band so "beatable" and "a fair
+fight" mean the same number — it downgrades the single weakest live party to
 an even-tier composition. It is an emergency correction, not a routine
 crutch — the weighted spawn tiers below keep something beatable on the map
 in ordinary play. Cover both mechanisms with the same "drive the worst case,
@@ -491,8 +493,63 @@ guarantees a party in a flat fair band. It draws a weighted tier
 (`BALANCE.partyTiers.weak/even/strong`) whose weights shift toward `strong` as
 non-stronghold camps are razed, so the curve rises across a run instead of
 tracking the player forever. An explicit `band` argument still overrides the
-draw (used by QA to probe the `[2,24]` strength clamp directly); never assert
+draw (used by QA to probe `BALANCE.encounterWeightClamp` directly); never assert
 a tier-distribution property from a single seed — sweep several.
+
+## Fighting weight (Plan 028)
+
+There is exactly ONE answer to "how strong is this force", it lives in
+`src/data.js` beside the rest of the balance tables, and every consumer reads it
+through `enemyStrength(comp)` / `playerStrength(troops)`:
+
+```
+fighting weight = sqrt( total damage per second  x  total hit points ) / one spearman
+```
+
+That product is the Lanchester square law. The square root makes it scale
+linearly with force size, so one spearman is 1.0 and the tier bands, the odds
+thresholds and the badges all keep the scale players already read. **A ratio of
+1.00 between two forces is a measured coin flip**, not an assertion: the
+per-type multipliers in `POWER_EFFICIENCY` were fitted by maximum likelihood
+against 2544 seeded headless battles with the logistic intercept pinned at zero
+(`scripts/zz-power-probe.mjs`, `zz-power-probe2.mjs`, `zz-power-fit3.mjs`;
+results in `critiques/encounter-power-comparison.md`).
+
+Five things about it are load-bearing and each cost a measurement:
+
+- **An enemy's cadence is `cooldown + windup`, never `cooldown`.** It telegraphs
+  the blow and only starts its cooldown once the strike lands. `attackCycle()`
+  is the single place this is expressed; dividing by `cooldown` alone overstates
+  a bandit by 38%, and every pre-028 piece of arithmetic in this line of work
+  did exactly that.
+- **The hero is soak, not damage** — `HERO.hp` hit points and zero output. The
+  encounter generator therefore sizes every fight against a commander who gives
+  no orders and never swings, which is the player the phase-4 audit found
+  winning 96% of roaming fights; everything the player does with the sword is
+  his margin over the odds the map showed him. The warband hover panel says so
+  in words, because a number that omits the player's own sword has to.
+  `playerStrength` floors the warband's output at one spearman's worth so a
+  wiped-out warband still has a finite weight.
+- **`POWER_EFFICIENCY` is fitted, not reasoned out, and it is fitted on the
+  distribution the generator produces.** Rolled compositions and hand-built
+  ladders disagree about the archer (0.86 against pure enemy ladders, 1.30
+  against rolled mixes) because a pure wolf pack sends every body at
+  `nearestFriendlyRanged` and eats the whole bow line, which never happens in a
+  real mix. Re-fit on both grids together if the unit tables ever change; do not
+  hand-adjust one entry.
+- **The tier bands and camp tiers are ratios of this number now.**
+  `WORLD.camps[].tier` (0.7 / 0.9 / 1.1 / 1.5) finally means what it reads as.
+  `BALANCE.encounterWeightClamp` replaces the old `[2, 24]` strength clamp and
+  is a body-count safety bound as much as a balance one.
+- **`rollComposition` fills to a WEIGHT target, one `R()` draw per body.** The
+  brute gate is unchanged in intent: a brute is only ever placed when the force
+  can still absorb it without overshooting, which is what the old
+  `target - str >= 5` did. Because it adds whole bodies it can only stop once
+  the target is crossed, so every clamp assertion needs a one-body tolerance.
+
+Retuning any of `UNIT_TYPES`, `ENEMY_TYPES` or `HERO` invalidates the fit. It
+does not invalidate the FORMULA — the square law and the cadence rule stand —
+but the multipliers are empirical and must be re-measured.
 
 Regional conquest (Milestone 025): the campaign's spine is now one region with
 a named stronghold (Wolfsjaw). `src/region.js` is the single data-driven home

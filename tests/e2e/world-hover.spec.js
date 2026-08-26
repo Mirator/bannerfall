@@ -75,7 +75,12 @@ test('hover reveals composition, fighting weight, and intent for a roaming party
   expect(runtimeErrors).toEqual([]);
 });
 
-test('hover on the warband states the hero counts for three', async ({ page }) => {
+// Plan 028 semantic update: the hero used to be worth three strength points on the map's
+// books, and this test asserted the panel said so. He is worth 120 hit points and no
+// damage now — the encounter generator deliberately sizes every fight against a commander
+// who never swings — so the panel says THAT instead. Same intent: the warband panel must
+// state, in words, how the hero enters the odds the map is showing.
+test('hover on the warband states how the hero enters the odds', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await boot(page);
   await page.evaluate(installAimAt);
@@ -88,7 +93,9 @@ test('hover on the warband states the hero counts for three', async ({ page }) =
   expect(result.hover).not.toBeNull();
   expect(result.hover.kind).toBe('hero');
   expect(result.hover.bodies).toBe(result.fixture.bodies);
-  expect(result.hover.lines.some(l => l.includes('you count for 3'))).toBe(true);
+  expect(typeof result.hover.strength).toBe('number');
+  expect(result.hover.lines.some(l => l.includes('fighting weight'))).toBe(true);
+  expect(result.hover.lines.some(l => l.includes('your sword is not in it'))).toBe(true);
   expect(runtimeErrors).toEqual([]);
 });
 

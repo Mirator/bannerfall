@@ -668,24 +668,43 @@ function runQaSuiteImpl() {
   });
 
   // ======================================================================
-  // 11. World: spawned party strength always stays within [2, 24]
+  // 11. World: a spawned party's FIGHTING WEIGHT always stays inside the encounter clamp
+  //
+  // Plan 028 semantic update, same intent. The clamp used to be the literal [2, 24]
+  // strength points named in this record's title; it is now BALANCE.encounterWeightClamp
+  // on the measured fighting-weight scale, read from the balance table rather than
+  // restated here so the bound and the code cannot drift. The assertion is unchanged in
+  // kind and still drives the extremes (a 0.0001x band and a 100x band) rather than the
+  // ordinary case. Both bounds carry a ONE-BODY tolerance, because the roller adds whole
+  // bodies and can only stop once the target is crossed: the clamp is honoured to within
+  // the heaviest body the last draw could have been. Brutes are excluded from that
+  // tolerance on purpose — rollComposition refuses any brute that would overshoot the
+  // target at all, so the body that finally crosses the line is always a light one.
   // ======================================================================
-  record('world_party_strength_stays_in_2_24_band', () => {
+  record('world_party_weight_stays_in_the_encounter_clamp', () => {
     g.scenario('world', { seed: 424242 }); // pinned: reproducible rng stream across runs
     const scene = G.scene;
     const fakeCamp = { id: '__test_camp__', x: 1000, y: 1000 };
-    const bands = [0.0001, 0.5, 1.0, 5, 100]; // extremes + normal, to probe the clamp(2,24)
+    const cl = BALANCE.encounterWeightClamp;
+    const tol = Math.max(...['bandit', 'raider', 'wolf'].map(t => scene.strength([t])));
+    const bands = [0.0001, 0.5, 1.0, 5, 100]; // extremes + normal, to probe the clamp
     const violations = [];
     for (const band of bands) {
       for (let i = 0; i < 5; i++) {
         scene.spawnParty(fakeCamp, band);
         const p = scene.parties[scene.parties.length - 1];
         const s = scene.strength(p.comp);
-        if (s < 2 || s > 24) violations.push('band=' + band + ' -> strength=' + s);
+        if (p.comp.length === 0) violations.push('band=' + band + ' -> empty party');
+        if (s < cl.min - tol || s > cl.max + tol) {
+          violations.push('band=' + band + ' -> weight=' + s.toFixed(2));
+        }
       }
     }
-    assert(violations.length === 0, 'party strength left [2,24] band: ' + violations.join('; '));
-    return 'party strength stayed within [2,24] across ' + (bands.length * 5) + ' spawns (bands ' + bands.join(',') + ')';
+    assert(violations.length === 0,
+      'party weight left the [' + cl.min + ', ' + cl.max + '] clamp (one-body tolerance ' +
+      tol.toFixed(2) + '): ' + violations.join('; '));
+    return 'party fighting weight stayed inside [' + cl.min + ', ' + cl.max + '] across ' +
+      (bands.length * 5) + ' spawns (bands ' + bands.join(',') + ')';
   });
 
   // ======================================================================
@@ -696,24 +715,45 @@ function runQaSuiteImpl() {
   record('world_party_spawn_tiers_weighted_toward_strong', () => {
     const seeds = [1, 42, 999, 20260817, 555];
     const N = 200;
-    // gaps between the declared tiers (weak .45-.7, even .8-1.2, strong 1.5-2.2) — the
-    // midpoints of the empty bands, so rounding noise from spawnParty's integer target
-    // can never push a draw across a classification boundary.
-    const tierOf = ratio => (ratio <= 0.75 ? 'weak' : ratio >= 1.35 ? 'strong' : 'even');
+    // Plan 028 semantic update: the tier bands are ratios of measured FIGHTING WEIGHT now,
+    // not of headcount strength points, so the classification boundaries move with them.
+    // They are derived from BALANCE rather than restated here, and sit at the MIDPOINTS OF
+    // THE EMPTY GAPS between the declared bands — exactly as before — so the granularity
+    // of adding whole bodies to a comp cannot push a draw across a boundary. The
+    // assertions are unchanged in intent: all three tiers must appear, every draw must
+    // land inside a declared band, and the curve must rise as camps fall.
+    //
+    // The `other` bucket is also made REAL by this update. It used to be unreachable —
+    // the old tierOf always returned one of three names, so asserting other === 0 asserted
+    // nothing. A draw now counts as `other` when its ratio falls in a gap between the
+    // declared bands or outside all of them, which is the property the assertion always
+    // claimed to check. `tol` is ONE BODY, applied on both sides: the roller adds whole
+    // bodies and stops on whichever side of the target is nearer, so a realised weight sits
+    // within one body of the band it was drawn from in either direction. The tolerance is
+    // the heaviest LIGHT body, because rollComposition refuses any brute that would
+    // overshoot at all, so the body that decides the stop is always a light one.
+    const T = BALANCE.partyTiers;
+    const weakEven = (T.weak.max + T.even.min) / 2;
+    const evenStrong = (T.even.max + T.strong.min) / 2;
+    const tierOf = ratio => (ratio <= weakEven ? 'weak' : ratio >= evenStrong ? 'strong' : 'even');
+    const inABand = (ratio, tol) => [T.weak, T.even, T.strong]
+      .some(b => ratio >= b.min - tol && ratio <= b.max + tol);
+    const outside = [];
     let weak = 0, even = 0, strong = 0, other = 0;
     let weakAtZero = 0, strongAtZero = 0, weakAtThree = 0, strongAtThree = 0;
     for (const seed of seeds) {
       g.scenario('world', { seed });
       const scene = G.scene;
       const mine = scene.myStrength();
+      const tol = Math.max(...['bandit', 'raider', 'wolf'].map(t => scene.strength([t]))) / mine;
       for (let i = 0; i < N; i++) {
         scene.spawnParty(CAMP_C1); // no band -> the weighted tier draw under test
         const ratio = scene.strength(scene.parties[scene.parties.length - 1].comp) / mine;
+        if (!inABand(ratio, tol)) { other++; if (outside.length < 5) outside.push(ratio.toFixed(2)); }
         const tier = tierOf(ratio);
         if (tier === 'weak') { weak++; weakAtZero++; }
         else if (tier === 'strong') { strong++; strongAtZero++; }
-        else if (tier === 'even') even++;
-        else other++;
+        else even++;
       }
       // now with every raidable camp razed, to confirm design decision 1: weights shift
       // toward `strong` (and away from `weak`) as camps fall across a run.
@@ -726,7 +766,9 @@ function runQaSuiteImpl() {
         else if (tier === 'strong') strongAtThree++;
       }
     }
-    assert(other === 0, 'a spawned party landed outside all three declared tiers: other=' + other);
+    assert(other === 0,
+      'spawned parties landed outside every declared tier band: other=' + other +
+      ' (examples: ' + outside.join(', ') + ')');
     assert(weak > 0 && even > 0 && strong > 0,
       'expected all three tiers over ' + (seeds.length * N) + ' draws, got weak=' + weak + ' even=' + even + ' strong=' + strong);
     assert(strongAtThree > strongAtZero,

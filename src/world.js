@@ -1,20 +1,20 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=rb7fae751c29c';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rb7fae751c29c';
-import { SAVE_VERSION } from './save.js?v=rb7fae751c29c';
+import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r1fcd6454285e';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r1fcd6454285e';
+import { SAVE_VERSION } from './save.js?v=r1fcd6454285e';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=rb7fae751c29c';
-import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=rb7fae751c29c';
-import { drawScene } from './world/render-scene.js?v=rb7fae751c29c';
+} from './region.js?v=r1fcd6454285e';
+import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r1fcd6454285e';
+import { drawScene } from './world/render-scene.js?v=r1fcd6454285e';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rb7fae751c29c';
+} from './world/battle-transition.js?v=r1fcd6454285e';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -25,13 +25,13 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=rb7fae751c29c';
+} from './world/settlement-interactions.js?v=r1fcd6454285e';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rb7fae751c29c';
-import { WORLD_ART } from './world/visual-style.js?v=rb7fae751c29c';
+} from './world/terrain.js?v=r1fcd6454285e';
+import { WORLD_ART } from './world/visual-style.js?v=r1fcd6454285e';
 
 const P = PAL.world;
 
@@ -395,22 +395,25 @@ export class World {
     return strong.min + R() * (strong.max - strong.min);
   }
 
-  // Roaming-party composition, target strength on `simRng` — used by spawnParty and by
-  // the floor guarantee (enforceBeatableFloor) so both draw from one formula. Weights
+  // Roaming-party composition, target FIGHTING WEIGHT on `simRng` — used by spawnParty and
+  // by the floor guarantee (enforceBeatableFloor) so both draw from one formula. Weights
   // live in BALANCE.compRolls.party, next to the garrison table rollGarrison uses.
+  // Plan 028: the target is a power target, not a headcount of strength points.
   rollComp(target) {
     return rollComposition(target, this.simRng, BALANCE.compRolls.party);
   }
 
-  // Spawn a party aimed at a strength band around the player. `band`, when given
-  // explicitly, overrides the weighted tier draw (used by the floor guarantee's
-  // callers and by QA to probe the [2,24] clamp directly).
+  // Spawn a party aimed at a POWER band around the player's warband (Plan 028: the band
+  // multiplies myStrength(), which is now measured fighting weight rather than a body
+  // count). `band`, when given explicitly, overrides the weighted tier draw (used by the
+  // floor guarantee's callers and by QA to probe the encounterWeightClamp directly).
   spawnParty(camp, band) {
     const R = this.simRng;
     const mine = this.myStrength();
     const razed = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     const effectiveBand = band ?? this.rollPartyBand(razed);
-    const target = clamp(Math.round(mine * effectiveBand), 2, 24);
+    const cl = BALANCE.encounterWeightClamp;
+    const target = clamp(mine * effectiveBand, cl.min, cl.max);
     const comp = this.rollComp(target);
     // never spawn a party inside a river or mountain — retry a few scatter offsets
     let px = camp.x, py = camp.y;
@@ -471,6 +474,7 @@ export class World {
     if (alive.length && this.parties.length < this.partyCap()) {
       const camp = alive[(this.simRng() * alive.length) | 0];
       this.spawnParty(camp, evenBand());
+      this.trimToBeatable(this.parties[this.parties.length - 1].comp, beatable);
       this.particles.ring(camp.x, camp.y, 40, P.ink, 0.5, 3);
       this.persistParties();
       return;
@@ -478,8 +482,19 @@ export class World {
     // Only at the party cap, with no room to add one, is an existing band rewritten.
     let weakest = this.parties[0];
     for (const p of this.parties) if (this.strength(p.comp) < this.strength(weakest.comp)) weakest = p;
-    const target = clamp(Math.round(mine * evenBand()), 2, 24);
-    weakest.comp = this.rollComp(target);
+    const cl = BALANCE.encounterWeightClamp;
+    weakest.comp = this.trimToBeatable(this.rollComp(clamp(mine * evenBand(), cl.min, cl.max)), beatable);
+  }
+
+  // Plan 028: the floor's promise has to be STRUCTURAL, not probabilistic. rollComposition
+  // fills until the target weight is CROSSED, so a comp aimed anywhere in the even band can
+  // land one body above `beatablePartyRatio` and leave the campaign with nothing beatable on
+  // the map — which is the exact deadlock the floor exists to prevent. Trimming bodies off
+  // the end makes it exact, and it consumes no `simRng` draws, so adding it cannot perturb
+  // the campaign stream. Never trims below one body: an empty party is not an encounter.
+  trimToBeatable(comp, beatable) {
+    while (comp.length > 1 && this.strength(comp) > beatable) comp.pop();
+    return comp;
   }
 
   // Camps still fielding parties, and the ceiling on how many may be alive at once.
@@ -492,19 +507,27 @@ export class World {
     return alive.length ? 2 + alive.length * 2 : 0;
   }
 
-  // brutes hit ~5x harder than a bandit; knights count double. Badges show THIS number.
-  // (shared with battle.js's enemyStrength/playerStrength — one formula, not two.)
+  // Measured fighting weight (Plan 028): sqrt(damage x hit points), one spearman = 1.0.
+  // Badges show THIS number. (Shared with battle.js's enemyStrength/playerStrength — one
+  // formula, not two.)
   strength(comp) { return enemyStrength(comp); }
 
   // Garrisons are rolled ONCE — when your scouts first sight the camp — and frozen.
   // Bandits don't magically reinforce because you recruited; what you scouted is what you fight.
+  // Plan 028: `camp.tier` (0.7 / 0.9 / 1.1 / 1.5) now multiplies fighting weight, so those
+  // authored numbers finally mean what they read as — camp 1 is a 0.7 fight, the hold is a
+  // 1.5 one. The seed still quantises `mine` to an integer so scouting a camp twice with a
+  // fractionally different warband cannot re-roll it.
   rollGarrison(camp) {
     const mine = this.myStrength();
-    const garrisonSeed = (camp.x * 31 + camp.y * 7 + mine * 13 + (this.save.runSeed ?? 0)) >>> 0;
+    const garrisonSeed = (camp.x * 31 + camp.y * 7 + Math.round(mine) * 13 + (this.save.runSeed ?? 0)) >>> 0;
     const R = makeRng(deriveSeed(garrisonSeed, RNG_DOMAINS.WORLD_GARRISON));
     const hardMul = this.save.hard ? 1.25 : 1;
-    const target = Math.max(camp.size + 2, Math.round(mine * (camp.tier || 1) * hardMul));
-    const bruteCap = camp.stronghold ? 3 : mine >= 12 ? 2 : mine >= 8 ? 1 : 0;
+    const caps = BALANCE.garrisonBruteCaps;
+    const target = Math.max(camp.size * BALANCE.campWeightPerSize,
+      mine * (camp.tier || 1) * hardMul);
+    const bruteCap = camp.stronghold ? caps.strongholdCap
+      : mine >= caps.twoAt ? 2 : mine >= caps.oneAt ? 1 : 0;
     return rollComposition(target, R, BALANCE.compRolls.garrison, bruteCap);
   }
   // what the map/prompt SHOWS: the scouted count, or nothing if not yet scouted
@@ -1029,7 +1052,10 @@ export class World {
     const target = targets[(this.simRng() * targets.length) | 0];
     const hold = WORLD.camps.find(c => c.id === REGION.strongholdId);
     const mine = this.myStrength();
-    const comp = rollComposition(clamp(Math.round(mine * 1.1), 4, 24), this.simRng, BALANCE.compRolls.garrison);
+    // Plan 028: a regional raid rides out at 1.1x the player's fighting weight — the same
+    // number it always carried, now measured rather than counted in bodies.
+    const cl = BALANCE.encounterWeightClamp;
+    const comp = rollComposition(clamp(mine * 1.1, cl.min, cl.max), this.simRng, BALANCE.compRolls.garrison);
     const R = this.simRng;
     let px = hold.x, py = hold.y;
     for (let i = 0; i < 8; i++) {
