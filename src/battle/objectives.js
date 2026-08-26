@@ -16,7 +16,7 @@
 //
 // Determinism/boundary notes: this module reads only simulation state (positions,
 // terrain arrays), consumes NO RNG, and never reads camera/HUD/render state.
-import { clamp } from '../engine.js?v=r44f9dbca8fbc';
+import { clamp } from '../engine.js?v=rb7fae751c29c';
 
 // Build the runtime objective from the plain descriptor, or null for the classic
 // elimination fight. Called from the Battle constructor AFTER buildTerrain so the
@@ -107,6 +107,10 @@ export function updateObjectivePhase(battle, dt) {
           battle.spawnEnemy(type, ex, ey);
         });
         battle.totalEnemies += wave.comp.length;
+        // Plan 027: reinforcements need a place in the line, or they would all default to
+        // the same slot and stack on the anchor when the commander orders a hold. Rebuilt
+        // once per wave, never per spawn — per spawn would be quadratic in the constructor.
+        battle.assignEnemySlots();
         battle.commandFlash = { text: 'REINFORCEMENTS!', t: 1.2 };
         battle.game.sfx.horn(98);
       }

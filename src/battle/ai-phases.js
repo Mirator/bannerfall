@@ -6,14 +6,16 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r44f9dbca8fbc';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r44f9dbca8fbc';
-import { ACTIONS } from '../input-actions.js?v=r44f9dbca8fbc';
+import { HERO } from '../data.js?v=rb7fae751c29c';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rb7fae751c29c';
+import { ACTIONS } from '../input-actions.js?v=rb7fae751c29c';
 import {
   BRACE_SPEED, BRACE_BONUS, BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
-} from './constants.js?v=r44f9dbca8fbc';
+  CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T,
+} from './constants.js?v=rb7fae751c29c';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=rb7fae751c29c';
 
 // Phase 4c: local obstacle avoidance ("tangent steering"). Casts a ray of length LOOKAHEAD
 // from (ux,uy) along the unit's desired heading (dirX,dirY, already a unit vector) toward its
@@ -483,6 +485,15 @@ export function updateEnemyPhase(battle, dt, h) {
     e.cd -= dt;
     if (e.flash > 0) e.flash -= dt;
     if (e.lunge > 0) e.lunge -= dt * 5;
+    // Plan 027: the order this man's squad is under, set by the enemy commander. 'follow'
+    // is the default and is byte-identical to the pre-027 AI, so every difference below is
+    // attributable to an order somebody actually gave.
+    const stance = battle.enemyStance(e);
+    // Charge exposure, mirroring the troop path exactly: men running at the enemy have
+    // their shields down, and it lingers CHARGE_RECOVER seconds after the order changes so
+    // a one-tick order flick cannot buy the speed for none of the cost.
+    if (stance === 'charge') e.exposedT = CHARGE_RECOVER;
+    else if (e.exposedT > 0) e.exposedT = Math.max(0, e.exposedT - dt);
     // wolves earn their name: they hunt the backline (nearest ranged troop)
     let tgt;
     if (e.type === 'wolf') {
@@ -490,6 +501,11 @@ export function updateEnemyPhase(battle, dt, h) {
       tgt = best ? { obj: best, isHero: false } : battle.nearestFriendly(e.x, e.y);
     } else if (e.d.ranged) {
       // Phase 5: a ranged enemy (raider) prefers a target it can see; see pickRangedFriendly.
+      // Plan 027 deliberately did NOT change this. Making raiders prefer the player's bow
+      // line — the obvious "smarter" choice, since archers are the softest thing that can
+      // hurt a formed-up enemy — was measured and is a NET LOSS for the enemy: it walks a
+      // 85 hp raider across the field and through the player's spears to reach a 60 hp
+      // archer. Camp-raid idle win rate rose from 75% to 81.7% on that change alone.
       tgt = pickRangedFriendly(battle, e, e.x, e.y, dt);
     } else {
       tgt = battle.nearestFriendly(e.x, e.y);
@@ -511,19 +527,34 @@ export function updateEnemyPhase(battle, dt, h) {
           if (dist2(e.x, e.y, battle.hero.x, battle.hero.y) < e.d.slamR * e.d.slamR) battle.damageFriendly(battle.hero, true, e.d.dmg, e);
           for (const t of [...battle.troops]) if (dist2(e.x, e.y, t.x, t.y) < e.d.slamR * e.d.slamR) battle.damageFriendly(t, false, e.d.dmg);
         } else if (e.d.ranged) {
-          battle.fireArrow(e.x, e.y - 10, to.x, to.y, false, e.d.dmg, e.d.projSpeed, e.type);
+          // Steady aim, the same trade the player's bow line gets on HOLD: a raider that
+          // shoots from a set position groups tighter than one walking.
+          const spread = stance === 'hold' ? BOW_SPREAD_BRACED : BOW_SPREAD;
+          battle.fireArrow(e.x, e.y - 10, to.x, to.y, false, e.d.dmg, e.d.projSpeed, e.type, spread);
           e.blindT = 0; // the shot only ever gets this far because LOS gated windup entry below
         } else {
           e.lunge = 1;
           if (d < e.d.range + 16) {
-            battle.damageFriendly(to, tgt.isHero, e.d.dmg, e);
+            // A set line receives a charge, mirroring the player's brace. Deliberately NOT
+            // extended to a slam: BRACE_BONUS on an AoE is a different mechanic from
+            // bracing against one man, and a 1.8x brute slam is a lethality change, which
+            // is exactly what the audit measured and rejected.
+            const closingFast = stance === 'hold' && len(to.vx, to.vy) > BRACE_SPEED;
+            battle.damageFriendly(to, tgt.isHero, e.d.dmg * (closingFast ? BRACE_BONUS : 1), e);
             if (!tgt.isHero) { to.vx += Math.cos(e.facing) * 85; to.vy += Math.sin(e.facing) * 85; }
+            // Hit and run: a stalking wolf that has bitten breaks off rather than staying
+            // in reach of the spear line. Only ever set while its squad is holding, so a
+            // committed (bloodlust) pack never recoils and the stall guarantee is intact.
+            if (e.type === 'wolf' && stance === 'hold') e.recoilT = WOLF_RECOIL_T;
           }
         }
         e.cd = e.d.cooldown;
       }
     } else {
-      const speedMul = battle.bloodlust ? 1.3 : 1;
+      // Charge speed and bloodlust speed are taken as a MAXIMUM, never multiplied: 1.3
+      // times 1.15 is not "faster", it is a different unit.
+      const chargeMul = stance === 'charge' ? CHARGE_SPEED_MUL : 1;
+      const speedMul = battle.bloodlust ? Math.max(1.3, chargeMul) : chargeMul;
       // Phase 4a: sampled once per enemy per tick at its current position, reused for both
       // the approach and keep-away branches below — terrain costs the same to cross either
       // direction.
@@ -533,24 +564,88 @@ export function updateEnemyPhase(battle, dt, h) {
       // blind for more than 1.5s stops kiting at range and advances instead, until a shot
       // (below) proves LOS is back and clears blindT.
       const blind = e.d.ranged && e.blindT > BLIND_ADVANCE_T;
-      if (e.d.ranged && d < e.d.keepAway && !battle.bloodlust && !blind) {
+
+      // ---- Plan 027: the stance picks the goal. Everything below the block is the shared
+      // movement tail, unchanged. `follow` leaves all three of these at their pre-027
+      // values, so that path is identical to what shipped before.
+      // `hasGoal` plus two scalars rather than an object: this runs per enemy per tick and
+      // the module allocates nothing else on that path.
+      let hasGoal = false, goalX = 0, goalY = 0;
+      let standGround = false;  // brake in place this tick
+      let kiteAllowed = true;   // whether the ranged keep-away rule below may fire
+      if (stance === 'hold' && e.recoilT > 0) {
+        // Breaking off after a bite: run, do not brake, and do not stop to trade.
+        e.recoilT -= dt;
+        kiteAllowed = false;
+        hasGoal = true; goalX = e.x + (e.x - to.x); goalY = e.y + (e.y - to.y);
+      } else if (stance === 'hold') {
+        // HOLD means something different to each archetype, and deliberately so — the
+        // player's own HOLD already means "brace" to a spearman and "steady aim" to an
+        // archer. The shared part is that nobody on HOLD walks into a fight they were not
+        // sent to.
+        if (e.type === 'wolf') {
+          kiteAllowed = false;
+          const commits = to.hp <= (to.maxHp || 1) * WOLF_COMMIT_HP || isIsolated(battle, to);
+          if (!commits) {
+            // Stalking: keep the pack at distance and refuse the trade until the target is
+            // wounded or has strayed off the warband. A wolf that stands in a line is just
+            // a slow bandit with a quarter of the hit points.
+            if (d < WOLF_STALK_R * 0.9) { hasGoal = true; goalX = e.x + (e.x - to.x); goalY = e.y + (e.y - to.y); }
+            else if (d <= WOLF_STALK_R * 1.25) standGround = true;
+          }
+        } else if (!mustersInLine(e)) {
+          // A bow does not muster (see mustersInLine): it is already where it needs to be,
+          // at its own working range. Movement stays exactly what it was — kite in, stand
+          // in the band, close when out of range — and what HOLD buys it is the tighter
+          // grouping at the moment of the shot (BOW_SPREAD_BRACED, applied where the arrow
+          // is loosed).
+        } else if (d <= wantR + 8) {
+          kiteAllowed = false;
+          standGround = true; // something is already in reach — fight where you stand
+        } else {
+          kiteAllowed = false;
+          const anchor = enemyAnchorFor(battle, e, battle._enemyAnchorScratch);
+          if (dist2(e.x, e.y, anchor.x, anchor.y) < 24 * 24) standGround = true;
+          else { hasGoal = true; goalX = anchor.x; goalY = anchor.y; }
+        }
+      } else if (stance === 'charge') {
+        // Committing means closing: a charging bow does not back off. It gets no swerve of
+        // its own — a per-unit arc was measured to leave a lone raider orbiting a static
+        // warband for the whole 90s budget, because a constant rotation applied to a
+        // constantly re-read bearing never resolves against a target that does not move.
+        // Flanking is where the force MUSTERS, decided once by the commander.
+        kiteAllowed = false;
+      }
+      // The Phase-5 blindness guarantee outranks every order: a ranged unit that cannot see
+      // its target must always end up walking out from behind whatever is occluding it,
+      // whatever the commander said. Without this, a raider ordered to hold behind a wood
+      // stands there for the rest of the fight.
+      if (blind) { standGround = false; hasGoal = false; }
+
+      if (kiteAllowed && e.d.ranged && d < e.d.keepAway && !battle.bloodlust && !blind) {
         const a = Math.atan2(e.y - to.y, e.x - to.x);
         e.vx = lerp(e.vx, Math.cos(a) * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
         e.vy = lerp(e.vy, Math.sin(a) * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
-      } else if (d > wantR || blind) {
-        let gx = to.x, gy = to.y;
-        if (!e.d.ranged && d < wantR * 3.5) { // surround instead of stacking
-          if (e.jit == null) e.jit = battle.enemies.indexOf(e) * 2.399;
-          gx += Math.cos(e.jit) * wantR * 0.7; gy += Math.sin(e.jit) * wantR * 0.7;
-        }
-        if (blind) {
-          // Task 1 corrective pass: sidestep around whatever occludes the shot instead of
-          // walking into it. On a bounded sidestep give-up, gx/gy keep the pre-fix
-          // straight-at-target goal already set above.
-          const bdx = to.x - e.x, bdy = to.y - e.y, blen = len(bdx, bdy);
-          const bdirX = blen > 0 ? bdx / blen : 1, bdirY = blen > 0 ? bdy / blen : 0;
-          const heading = blindSidestepHeading(e, e.x, e.y, bdirX, bdirY, blen, dt, battle.blockers);
-          if (heading) { gx = e.x + heading.x * LOOKAHEAD; gy = e.y + heading.y * LOOKAHEAD; }
+      } else if (standGround) {
+        e.vx *= 0.85; e.vy *= 0.85;
+      } else if (hasGoal || d > wantR || blind) {
+        let gx, gy;
+        if (hasGoal) { gx = goalX; gy = goalY; }
+        else {
+          gx = to.x; gy = to.y;
+          if (!e.d.ranged && d < wantR * 3.5) { // surround instead of stacking
+            if (e.jit == null) e.jit = battle.enemies.indexOf(e) * 2.399;
+            gx += Math.cos(e.jit) * wantR * 0.7; gy += Math.sin(e.jit) * wantR * 0.7;
+          }
+          if (blind) {
+            // Task 1 corrective pass: sidestep around whatever occludes the shot instead of
+            // walking into it. On a bounded sidestep give-up, gx/gy keep the pre-fix
+            // straight-at-target goal already set above.
+            const bdx = to.x - e.x, bdy = to.y - e.y, blen = len(bdx, bdy);
+            const bdirX = blen > 0 ? bdx / blen : 1, bdirY = blen > 0 ? bdy / blen : 0;
+            const heading = blindSidestepHeading(e, e.x, e.y, bdirX, bdirY, blen, dt, battle.blockers);
+            if (heading) { gx = e.x + heading.x * LOOKAHEAD; gy = e.y + heading.y * LOOKAHEAD; }
+          }
         }
         // Milestone 025 Slice C: enemies prioritize contesting a Hold objective —
         // while outside the marked ground their goal blends toward it, so the
@@ -578,7 +673,10 @@ export function updateEnemyPhase(battle, dt, h) {
       // cooldown effectively never advances and it keeps taking the movement branch above
       // (including the blind-advance fallback) instead of freezing through a repeated
       // windup-then-nothing loop every tick.
-      if (e.cd <= 0 && d < (e.d.ranged ? e.d.range : wantR + 8) &&
+      // Plan 027 mirrors "a charge forfeits the bow line": a raider ordered forward is
+      // running with its bow down until it is inside its working range.
+      const advancingBow = e.d.ranged && stance === 'charge' && d > wantR;
+      if (e.cd <= 0 && !advancingBow && d < (e.d.ranged ? e.d.range : wantR + 8) &&
           (!e.d.ranged || battle.hasLineOfSight(e.x, e.y - 10, to.x, to.y))) {
         e.windupT = e.d.windup; // telegraph
       }

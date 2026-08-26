@@ -220,6 +220,32 @@ stays out of the save. Stance trade-offs live in named constants in
 tune those, not scattered literals, and re-run `tests/e2e/stance-balance.spec.js`. The
 phases that read them are in `src/battle/ai-phases.js`.
 
+Enemy command (Plan 027) mirrors that structure on the other side. `Battle.enemySquads`
+holds one squad per `ENEMY_TYPES` key with the same three stance names, membership derived
+from type exactly as the player's is, so it costs no save-schema version either; the
+commander itself lives in `src/battle/enemy-command.js` and is reconstructed from
+`setup.seed` at construction, never persisted. Read a unit's order through
+`battle.enemyStance(e)`, never a global. Four rules constrain any change here, and each one
+exists because a measurement put it there:
+
+- **`follow` is byte-identical to the pre-027 enemy AI, and is the default.** With the
+  commander disabled and every squad left on `follow`, the two measurement fixtures replay
+  the pre-027 numbers exactly (`critiques/enemy-command-comparison.md`). Keep it that way:
+  it is what makes any behaviour difference attributable to an order.
+- **The first decision cannot land before `CMD_TICK`.** The nine battle visual baselines
+  settle at 1.5s and `battle_bridge` (an ambush, deploy 0) reaches 0.4s of live fight. A
+  faster commander would rewrite baselines that have nothing to do with it.
+- **`bloodlust` outranks the commander**, which drops every squad to the `press` doctrine
+  (all `follow`). The no-death stall clock is the guarantee that a patient enemy can never
+  produce an unresolvable fight, and it must never be argued with. It deliberately does NOT
+  order `charge` there: measured, making the enemy eat `CHARGE_EXPOSURE` for the rest of
+  every long fight raised the camp-raid idle win rate from 75% to 89% — a gift to the player.
+- **Smarter target selection is a measured NET LOSS for the enemy in this engine** and was
+  removed rather than shipped. Both concentration of fire (finishing the wounded man in
+  reach, even with hysteresis) and raiders preferring the player's bow line cost the enemy
+  6-7 points of camp-raid win rate each. Do not re-add either without re-measuring; the
+  reasoning that they "obviously" help is exactly what the numbers refuted.
+
 Battle objectives (Milestone 025): a battle may carry a descriptor-built runtime
 objective — `hold` (a zone the player's troops must stand in, paused while an enemy
 contests it) or `break` (2-3 destructible guards; the count for a stronghold comes
@@ -275,7 +301,7 @@ and must never be raised or bypassed to obtain green CI.
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,
 pinned world seeds, and fixed timesteps rather than wall-clock sleeps. Preserve
-the existing 25 named legacy records and their result shape. Do not weaken an
+the existing 26 named legacy records and their result shape. Do not weaken an
 assertion, raise a performance budget, or ignore page/console errors to obtain
 green CI.
 
@@ -513,6 +539,13 @@ in the same change that makes it true. An unexpected pass is useful drift that
 signals the test debt is ready to retire; never weaken the assertion or add a skip
 to make the gate green. Expected failures are always `test.fail` with a plan or
 finding reference — never `skip` or `fixme`.
+
+Plan 027 attacked that finding from the other side (an enemy commander rather than more
+player affordances) and **did not** overturn it, so the annotation stays. It did close the
+gap: over the same 120 organic camp raids, charging everything went from 65% to 77.5% while
+pressing nothing went from 75% to 77.5% — a 10-point deficit became a tie. The assertion is
+a strict inequality and a tie does not satisfy it. See `critiques/enemy-command-comparison.md`
+for the full before/after table and plans/027 for why the idle win rate did not move.
 
 That sweep is also the most expensive test in the repository, so it is tagged
 `@sweep` and split out of the `chromium` project the PR gate runs. `npm test`

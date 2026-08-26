@@ -1,16 +1,16 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=r44f9dbca8fbc';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r44f9dbca8fbc';
-import { Sfx } from './audio.js?v=r44f9dbca8fbc';
-import { Battle } from './battle.js?v=r44f9dbca8fbc';
-import { World } from './world.js?v=r44f9dbca8fbc';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r44f9dbca8fbc';
-import { FIELD } from './battle/constants.js?v=r44f9dbca8fbc';
-import { ACTIONS } from './input-actions.js?v=r44f9dbca8fbc';
-import { createWebPlatform } from './platform/web-platform.js?v=r44f9dbca8fbc';
-import { SaveRepository } from './persistence/save-repository.js?v=r44f9dbca8fbc';
-import { buildSummaryModel } from './world-screens.js?v=r44f9dbca8fbc';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r44f9dbca8fbc';
+import { PAL, WORLD } from './data.js?v=rb7fae751c29c';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rb7fae751c29c';
+import { Sfx } from './audio.js?v=rb7fae751c29c';
+import { Battle } from './battle.js?v=rb7fae751c29c';
+import { World } from './world.js?v=rb7fae751c29c';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=rb7fae751c29c';
+import { FIELD } from './battle/constants.js?v=rb7fae751c29c';
+import { ACTIONS } from './input-actions.js?v=rb7fae751c29c';
+import { createWebPlatform } from './platform/web-platform.js?v=rb7fae751c29c';
+import { SaveRepository } from './persistence/save-repository.js?v=rb7fae751c29c';
+import { buildSummaryModel } from './world-screens.js?v=rb7fae751c29c';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=rb7fae751c29c';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

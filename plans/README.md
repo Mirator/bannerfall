@@ -128,6 +128,14 @@ explicitly selected because its impact becomes high when battle populations grow
   `separation.js` defect found but deliberately left out of scope, and a LOS cover target
   (55-70% corridor coverage) that was not reached (shipped at 38%).
 
+Plan 027 gave the enemy squads, stances and a commander mirroring Plan 019's player side.
+It is filed as STOPPED on its own condition: it did not make an idle hero lose (77.5% against
+a 75.0% baseline over 120 organic camp raids), and its `test.fail` annotation stays. It did
+close the orders-versus-idle gap from -10 points to level, and it records four measured
+negative results — concentration of fire, raiders preferring the bow line, head-hunting a
+stationary commander, and charge exposure under bloodlust each make the game EASIER. See the
+plan's Implementation findings and `critiques/enemy-command-comparison.md`.
+
 ## Deferred audit findings
 
 - None. Plan 016 resolved the remaining low-priority menu save-parsing finding

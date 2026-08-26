@@ -1,14 +1,19 @@
 // What a hit does and how a fight ends: damage application on both sides, arrow spawning,
 // and the win/loss/retreat resolution. Separated from the AI phases that decide to swing
 // and from the tick loop that orders them.
-import { BALANCE } from '../data.js?v=r44f9dbca8fbc';
-import { len } from '../engine.js?v=r44f9dbca8fbc';
-import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r44f9dbca8fbc';
-import { objectiveVictory } from './objectives.js?v=r44f9dbca8fbc';
+import { BALANCE } from '../data.js?v=rb7fae751c29c';
+import { len } from '../engine.js?v=rb7fae751c29c';
+import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=rb7fae751c29c';
+import { objectiveVictory } from './objectives.js?v=rb7fae751c29c';
 
 export function damageEnemy(battle, e, dmg, kx, ky, source) {
   const P = battle.palette;
   battle.lastAction = battle.time;
+  // Plan 027: charge exposure applies to the enemy on exactly the same terms as the troop
+  // path below — a squad the enemy commander sent forward is running with its shields down
+  // too. This is what makes committing a decision with a price rather than a free tempo
+  // gain, and it is the player's reward for punishing a charge instead of meeting it.
+  if (battle.enemyStance(e) === 'charge' || (e.exposedT || 0) > 0) dmg *= CHARGE_EXPOSURE;
   e.hp -= dmg;
   e.flash = 0.12;
   e.vx += kx; e.vy += ky;

@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES } from '../data.js?v=r44f9dbca8fbc';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rb7fae751c29c';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -12,6 +12,12 @@ export const SQUAD_TYPES = Object.freeze(Object.keys(UNIT_TYPES));
 // Exported so world-screens.js (Plan 021) can label the player's roster on the brief
 // screen with the exact same strings instead of duplicating them.
 export const SQUAD_LABELS = Object.freeze({ spear: 'SPEARS', archer: 'BOWS', knight: 'HORSE' });
+
+// Plan 027: the enemy's squads mirror the player's exactly — one per ENEMY_TYPES key,
+// membership derived from type, never assigned. Same three stance names, same
+// brace/steady-aim/charge-exposure mechanics. A new enemy type cannot exist without a
+// squad for the commander to address, for the same reason SQUAD_TYPES above holds.
+export const ENEMY_SQUAD_TYPES = Object.freeze(Object.keys(ENEMY_TYPES));
 
 // Stance trade-offs. A braced melee line hits harder against anything closing faster than
 // BRACE_SPEED, and a standing bow line shoots tighter than a walking one. See plans/019 for
@@ -39,6 +45,93 @@ export const STANCE_NOTES = Object.freeze({
   hold: { melee: 'braced', ranged: 'steady aim' },
   charge: { melee: 'shields down', ranged: 'bows down' },
 });
+
+// ---------------------------------------------------------------- Plan 027: enemy command
+// The enemy commander re-reads the field this often. Two properties fix this number and
+// neither is negotiable without re-checking the other:
+//   * It is the delay before the FIRST decision, and the nine battle visual baselines
+//     settle at 1.5s. Eight carry the default 8s deploy window (no enemy phase runs at
+//     all); `battle_bridge` is an ambush with deploy 0 and reaches 0.4s of live fight
+//     after its 1.1s intro. 0.8s is provably outside every captured frame.
+//   * It is the reaction latency the player feels. Faster reads as clairvoyance, slower
+//     reads as the enemy not noticing.
+export const CMD_TICK = 0.8;
+// How far from the player's centre of mass, on the enemy's own side, the force musters.
+// It must sit OUTSIDE everything the player can reach without deciding to: past melee's
+// FOLLOW engage radius (150) and past bow range (archer.range * 0.9 = 207). Measured the
+// hard way — at 150 the "muster" walked the whole enemy line into the middle of the
+// player's blob and stood it still there, and the fixture resolved FASTER than baseline
+// (16.8s against 37.4s) because a stationary clump inside a warband is the easiest thing
+// on the field to kill.
+export const CMD_STANDOFF = 340;
+// Lateral spread of the anchor from battle to battle, drawn from the ENEMY_COMMAND stream
+// so the same fixture does not form up on the identical spot every seed.
+export const CMD_ANCHOR_JITTER = 190;
+// The commander pulls its anchor toward real Plan 024 cover (`battle.blockers`: hills,
+// woods, houses) when there is any this close, by this fraction of the distance. A
+// briefless template fight has few or no blockers and simply keeps the un-pulled anchor.
+export const CMD_COVER_R = 420;
+export const CMD_COVER_PULL = 0.45;
+// Formation geometry for a held enemy line. Only the men with spears muster — see the
+// `hold` branch in ai-phases.js for why a bow and a wolf do not — so the rank gap
+// separates the bandit wall from the brutes behind it, and the row/col gaps space the men
+// inside a rank.
+export const CMD_RANK_GAP = 95;
+export const CMD_ROW_GAP = 34;
+export const CMD_COL_GAP = 46;
+// Mean distance of the player's troops from their own centroid. Below BLOB the warband is
+// one undifferentiated lump, so the assault forms up off its flank where a blob has no
+// frontage; above it the warband is strung out and the assault forms frontally, straight
+// through the thin part. The reaction lives in WHERE the line forms, which is what flanking
+// physically is — not in a per-unit swerve, which was measured to make a lone raider orbit
+// a static warband indefinitely (see plans/027's Implementation findings).
+// Binary on purpose: the two assaults issue identical orders and differ only in where the
+// force musters, so a third middle band would need a third muster placement to mean
+// anything, and there is no third thing a commander wants to do about a line's width.
+export const BLOB_SPREAD = 190;
+// How far off the direct approach axis a flanking muster point sits, in radians.
+export const CMD_FLANK_ANGLE = 1.15;
+// The commander commits everything once the player's warband is down to this fraction of
+// its starting size: there is nothing left to manoeuvre against, and a charge into a broken
+// line cannot be punished. Scaled by the per-battle nerve draw.
+export const CMD_BLOOD_FRAC = 0.45;
+// Per-battle nerve, drawn once from the ENEMY_COMMAND stream: multiplies the fraction above
+// so one garrison commits earlier than another and a fixture does not play out the same way
+// at every seed.
+export const CMD_NERVE_MIN = 0.8;
+export const CMD_NERVE_SPAN = 0.5;
+// The whole point of the muster: an enemy force that arrives TOGETHER instead of in the
+// order its unit speeds happen to deliver it. Un-commanded, a wolf at 158 reaches the
+// player's line eleven seconds before a brute at 55 and both die alone; that staggered
+// arrival is why "kill everything" resolved itself from either side. The commander holds
+// the assault until this fraction of its men are within CMD_SLOT_TOL of their slots, or
+// until CMD_FORM_MAX seconds have passed, whichever comes first.
+export const CMD_FORMED_FRAC = 0.7;
+export const CMD_SLOT_TOL = 90;
+// Deliberately under STALL_NO_DEATH (14): the assault must always arrive before the stall
+// clock has to force it, so the clock stays a guarantee rather than a scheduler.
+export const CMD_FORM_MAX = 6;
+// A stalking wolf holds this far from its target and refuses to close. It commits on its
+// own — no order needed — against a target under WOLF_COMMIT_HP of its health, or one
+// this much further from the warband's centroid than the warband's own mean spread.
+export const WOLF_STALK_R = 250;
+export const WOLF_COMMIT_HP = 0.5;
+// Hit and run. A stalking wolf that lands a bite breaks off for this long before coming
+// back in, instead of standing in the scrum until a spearman kills it. This is what makes
+// a 55 hp skirmisher a skirmisher rather than the cheapest thing on the field to kill, and
+// it is the mechanical reason a pack is dangerous to a stationary commander: nothing the
+// player owns except the knight (175) and the hero himself (315) can catch a wolf at 158.
+//
+// It applies ONLY while the pack's squad is on `hold`. Under `commit` — bloodlust, or a
+// broken warband — wolves charge and stay charged, so the no-death stall clock's guarantee
+// that a kiting fight always closes is never weakened by this.
+export const WOLF_RECOIL_T = 1.35;
+export const WOLF_ISOLATION_MUL = 1.7;
+export const WOLF_ISOLATION_PAD = 70;
+// Movement multiplier for a charging squad, on both sides. The player's troops already
+// carry a hardcoded 1.15 in updateTroopPhase; the enemy reads this name, and the value is
+// the same because the mechanic is the same.
+export const CHARGE_SPEED_MUL = 1.15;
 
 // Battlefield size (Plan 024 Phase 1). 2x each side -> 4x area.
 export const FIELD = Object.freeze({ W: 2500, H: 1760 });

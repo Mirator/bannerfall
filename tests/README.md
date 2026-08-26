@@ -390,7 +390,7 @@ data and are passed into the page, because module imports do not exist on
 
 ## Legacy check inventory
 
-The 25 deterministic records cover:
+The 26 deterministic records cover:
 
 1. menu-to-world transition;
 2. battle invariants and victory;
@@ -425,7 +425,14 @@ The 25 deterministic records cover:
 22. seeded battle determinism;
 23. the RNG-domain effects-independence check;
 24. the 200-step performance smoke budget;
-25. river-pursuit movement without freezing.
+25. river-pursuit movement without freezing;
+26. enemy command symmetry (Plan 027): every enemy type has a squad, all of them
+    start on the neutral order, none of them takes an order while the deploy
+    window is open (which is also what keeps the 1.5s battle visual baselines out
+    of the commander's reach), the squads genuinely diverge once it commands, two
+    identical runs produce an identical order sequence, and `bloodlust` collapses
+    every enemy squad back to the press so the no-death stall clock's guarantee
+    always outranks the commander.
 
 ## Visual baselines are captured on Linux, on purpose
 

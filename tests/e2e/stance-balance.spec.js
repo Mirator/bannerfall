@@ -236,6 +236,18 @@ test.describe('stance balance', () => {
     // 120-raid draw landed toward the high end of that pooled range, same as the plan's own
     // 60-raid sweep did). The assertion below (best deliberate policy beats idle) still
     // fails honestly both times, so `test.fail()` reports green — not decided on one run.
+    //
+    // Plan 027 (enemy command symmetry) attacked this from the other side — the enemy got
+    // squads, stances and a commander instead of the player getting more affordances — and
+    // it moved the margin without overturning the finding. Re-measured on this exact
+    // fixture after that change: idle 78%, chargeAll 78%, split 48%. Charging everything
+    // came up twelve points (it was 62%) while pressing nothing barely moved, so the
+    // ten-point deficit is now a TIE. A tie does not satisfy a strict `toBeGreaterThan`,
+    // and flipping the annotation on a zero-point margin would repeat exactly the mistake
+    // Plan 019 had to retract, so the annotation stays. `plans/027-enemy-command-symmetry.md`
+    // and `critiques/enemy-command-comparison.md` carry the full before/after table, the
+    // isolation control that proves the untouched path replays the old numbers digit for
+    // digit, and the four enemy behaviours that measured as making the game EASIER.
     test.fail();
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked
