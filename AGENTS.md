@@ -17,6 +17,7 @@ specific defect or measurement put them there.
 - [Performance budgets](#performance-budgets)
 - [Determinism and RNG domains](#determinism-and-rng-domains)
 - [Visual regression](#visual-regression)
+- [Audio](#audio)
 - [Save schema and persistence](#save-schema-and-persistence)
 - [Campaign lifecycle](#campaign-lifecycle)
 - [Expected failures and test debt](#expected-failures-and-test-debt)
@@ -73,6 +74,7 @@ Which focused coverage a change owes, beyond the required `npm test` gate:
 | the regional model in `src/region.js` | `npx playwright test tests/e2e/region.spec.js` |
 | battle objectives (`src/battle/objectives.js`, terminal paths) | `npx playwright test tests/e2e/battle-objectives.spec.js` |
 | capture/claim, specialization, raids, defenses, stronghold power | `npx playwright test tests/e2e/regional-campaign.spec.js` |
+| `src/audio.js`, anything under `assets/audio/` | `npx playwright test tests/e2e/audio.spec.js` |
 | production visuals | `npm run test:visual` |
 | Playwright or CI configuration | `npm run test:tooling` |
 
@@ -310,6 +312,54 @@ When a change legitimately alters visuals, dispatch the
 the artifact, and commit only the intentionally changed or new PNGs. See
 `tests/README.md` for the covered world/battle states and the baseline
 workflow.
+
+## Audio
+
+Audio lives in `src/audio.js` (Plan 026) and imports `engine.js` for its RNG helpers.
+`engine.js` must NEVER import or re-export it back: with no bundler an import cycle is a
+real hazard, and this is the one place the dependency is easy to reverse by accident.
+
+Audio is PRESENTATION. Sample choice and pitch jitter draw from the module's own
+`RNG_DOMAINS.AUDIO_FX` stream; nothing here may read or advance `simRng`, and no
+simulation phase may read audio state.
+
+The integration hazard is `console.error`, not the mix. `collectRuntimeErrors` fails any
+spec that sees one, and three audio mistakes produce one:
+
+- **Autoplay.** The `AudioContext` is built lazily on the first sound request, never at
+  boot. `resume()` is attempted one at a time and always carries a rejection handler (an
+  un-caught rejection is a page error). `applyTrack()` refuses to start a bed unless the
+  context is actually `running`, and re-runs when the resume lands. The gesture comes from
+  `attachUnlock(window)`, called once from `bootstrap()`.
+- **Missing files.** Every name in the `SFX`/`MUSIC` manifests must exist under
+  `assets/audio/`; a 404 is a console error in Chromium. `tests/e2e/audio.spec.js` fetches
+  the whole manifest and asserts 200. URLs resolve against `import.meta.url`, not the
+  document, because the game is also served from a project-Pages subpath.
+- **Unhandled rejections** from `fetch`/`decodeAudioData`/`element.play()`. Every one is
+  caught and downgraded to `console.warn`: a host that cannot serve a clip loses the clip,
+  it does not fail the page.
+
+Music STREAMS through an `HTMLAudioElement` and a `MediaElementAudioSourceNode`; it is not
+run through `decodeAudioData`. Measured: the 233-second campaign bed decodes to roughly
+330 MB of resident float PCM. Do not "simplify" it into a looping `AudioBufferSourceNode`.
+One-shots stay decoded buffers — about ten seconds of audio in total, and a one-shot that
+waits on the network has already missed its frame.
+
+Every SFX file is peak-normalised to −3 dBFS by `scripts/build-audio.py`, so all relative
+mix balance is in the `SFX` gain table in code. Tune levels there, not by re-rendering a
+file. `horn(freq)` takes a real pitch because its call sites mean one; it picks the
+nearest of three samples and detunes within 0.7×–1.45×.
+
+Assets are CC0 or public domain, with no attribution requirement, and every file's source
+and licence is recorded in `assets/audio/SOURCES.md`. Do not add a clip whose licence you
+cannot verify is attribution-free — that record is what makes a Steam release checkable.
+`scripts/build-audio.py` is the reproducible pipeline and needs python, numpy and ffmpeg;
+it runs only when assets are rebuilt and is not a build step.
+
+Playwright launches Chromium with the autoplay policy relaxed, so a context reaches
+`running` immediately there and the suspended state a real browser starts in never occurs
+by accident. `audio.spec.js` therefore suspends the context deliberately to exercise the
+gate; keep that test honest rather than relying on the harness's leniency.
 
 ## Save schema and persistence
 

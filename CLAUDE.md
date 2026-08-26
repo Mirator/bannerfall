@@ -44,6 +44,8 @@ otherwise.
 | `src/battle.js`, `src/battle/` | fight scene: ordered phases, combat, separation, objectives, HUD |
 | `src/region.js` | regional conquest model (ownership, specializations, stronghold power, raid cadence) — pure data, single source |
 | `src/save.js` | versioned save schema and migration boundary (currently v4) |
+| `src/audio.js` | `Sfx`: sample-backed one-shots, two streamed music beds, master/music/sfx buses |
+| `assets/audio/` | the shipped clips; `SOURCES.md` records CC0 provenance per file |
 | `src/platform/`, `src/persistence/` | capability + storage adapters (Steam-ready boundary) |
 | `src/input-actions.js` | named action layer; gameplay never reads raw key codes |
 | `src/data.js` | balance and unit tuning |
@@ -82,6 +84,11 @@ replacing a delegator with a direct module call silently disables coverage.
 - **Terrain has one source.** Add a road or river only through
   `World.buildTerrainGeometry()` in `src/world/terrain.js`, or rendering,
   collision and navigation will diverge.
+- **Audio must not `console.error`.** No sound before a user gesture, no music
+  started on a suspended `AudioContext`, and every file named in `src/audio.js`'s
+  manifest must exist — an autoplay violation or a 404 fails every spec that calls
+  `collectRuntimeErrors`. New clips are CC0-only and are recorded in
+  `assets/audio/SOURCES.md`. See `AGENTS.md`'s Audio section.
 
 ## Mechanics that look like bugs but are not
 

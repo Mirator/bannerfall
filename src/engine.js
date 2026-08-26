@@ -1,5 +1,6 @@
-// Shared engine: math, RNG, input, camera, particles, audio, flat-shaded drawing helpers.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r4c28c87ff1ea';
+// Shared engine: math, RNG, input, camera, particles, flat-shaded drawing helpers.
+// Audio lives in src/audio.js and imports from here; never the other way round.
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r44f9dbca8fbc';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -262,92 +263,9 @@ export class Particles {
   }
 }
 
-// ---------------------------------------------------------------- Audio (WebAudio synth — no assets)
-export class Sfx {
-  constructor(saves = null) {
-    this.saves = saves;
-    this.ctx = null;
-    this.master = null;
-    this.enabled = true;
-    this.muted = saves?.getSettings?.().muted === true;
-    this.lastAt = {};
-    this.noiseRng = makeRng(deriveSeed(0x534658, RNG_DOMAINS.AUDIO_FX));
-  }
-  setMuted(m) {
-    this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : 0.35;
-    return this.saves?.setMuted?.(m) ?? Promise.resolve();
-  }
-  ensure() {
-    if (!this.ctx) {
-      try {
-        this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-        this.master = this.ctx.createGain();
-        this.master.gain.value = this.muted ? 0 : 0.35;
-        this.master.connect(this.ctx.destination);
-      } catch (e) { this.enabled = false; }
-    }
-    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
-    return this.enabled && this.ctx;
-  }
-  throttle(name, ms) {
-    const now = performance.now();
-    if (this.lastAt[name] && now - this.lastAt[name] < ms) return true;
-    this.lastAt[name] = now;
-    return false;
-  }
-  env(node, t0, a, d, peak = 1) {
-    node.gain.setValueAtTime(0.0001, t0);
-    node.gain.linearRampToValueAtTime(peak, t0 + a);
-    node.gain.exponentialRampToValueAtTime(0.0001, t0 + a + d);
-  }
-  noise(dur, filterFreq, peak = 0.5, type = 'lowpass') {
-    if (!this.ensure()) return;
-    const c = this.ctx, t0 = c.currentTime;
-    const buf = c.createBuffer(1, c.sampleRate * dur, c.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < d.length; i++) d[i] = this.noiseRng() * 2 - 1;
-    const src = c.createBufferSource(); src.buffer = buf;
-    const f = c.createBiquadFilter(); f.type = type; f.frequency.value = filterFreq;
-    const g = c.createGain(); this.env(g, t0, 0.005, dur, peak);
-    src.connect(f); f.connect(g); g.connect(this.master);
-    src.start(t0); src.stop(t0 + dur + 0.05);
-  }
-  tone(freq, dur, type = 'square', peak = 0.25, slide = 0) {
-    if (!this.ensure()) return;
-    const c = this.ctx, t0 = c.currentTime;
-    const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t0);
-    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq + slide), t0 + dur);
-    const g = c.createGain(); this.env(g, t0, 0.008, dur, peak);
-    o.connect(g); g.connect(this.master);
-    o.start(t0); o.stop(t0 + dur + 0.05);
-  }
-  swing() { if (!this.throttle('swing', 60)) this.noise(0.12, 2600, 0.35, 'bandpass'); }
-  hit() { if (!this.throttle('hit', 40)) { this.noise(0.08, 900, 0.5); this.tone(140, 0.09, 'triangle', 0.3, -60); } }
-  kill() { if (!this.throttle('kill', 50)) { this.noise(0.14, 600, 0.5); this.tone(90, 0.16, 'sawtooth', 0.22, -40); } }
-  hurt() { this.tone(200, 0.18, 'sawtooth', 0.3, -120); this.noise(0.12, 500, 0.4); }
-  dash() { this.noise(0.22, 1800, 0.4, 'highpass'); }
-  bow() { if (!this.throttle('bow', 80)) { this.tone(600, 0.06, 'square', 0.12, 500); this.noise(0.05, 3000, 0.15, 'highpass'); } }
-  horn(freq = 220) {
-    if (!this.ensure()) return;
-    const c = this.ctx, t0 = c.currentTime;
-    for (const [f, p] of [[freq, 0.28], [freq * 1.5, 0.16], [freq * 2, 0.08]]) {
-      const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f;
-      const g = c.createGain();
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.linearRampToValueAtTime(p, t0 + 0.06);
-      g.gain.setValueAtTime(p, t0 + 0.3);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.65);
-      o.connect(g); g.connect(this.master);
-      o.start(t0); o.stop(t0 + 0.7);
-    }
-  }
-  coin() { this.tone(880, 0.07, 'square', 0.18); this.tone(1320, 0.1, 'square', 0.14); }
-  brute() { this.noise(0.3, 300, 0.7); this.tone(60, 0.3, 'sine', 0.5, -20); }
-  gallop() { if (!this.throttle('gallop', 210)) this.noise(0.04, 700, 0.1); }
-  victory() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.tone(f, 0.22, 'square', 0.2), i * 130)); }
-  defeat() { [392, 330, 262, 196].forEach((f, i) => setTimeout(() => this.tone(f, 0.3, 'sawtooth', 0.2), i * 180)); }
-}
+// Audio used to live here as a WebAudio oscillator synth. It is now a sample-backed
+// module of its own, `src/audio.js`, which imports this file for its RNG helpers — so the
+// dependency runs one way only and engine.js must NOT import or re-export it back.
 
 // Darken a #rrggbb color by factor f (0..1) — the volume pass draws every shade face as a
 // SOLID computed tone, never an alpha overlay (alpha overlays vanish at rater resolution)
