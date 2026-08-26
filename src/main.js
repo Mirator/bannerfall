@@ -1,15 +1,16 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=r4c28c87ff1ea';
-import { Input, Camera, Sfx, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r4c28c87ff1ea';
-import { Battle } from './battle.js?v=r4c28c87ff1ea';
-import { World } from './world.js?v=r4c28c87ff1ea';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r4c28c87ff1ea';
-import { FIELD } from './battle/constants.js?v=r4c28c87ff1ea';
-import { ACTIONS } from './input-actions.js?v=r4c28c87ff1ea';
-import { createWebPlatform } from './platform/web-platform.js?v=r4c28c87ff1ea';
-import { SaveRepository } from './persistence/save-repository.js?v=r4c28c87ff1ea';
-import { buildSummaryModel } from './world-screens.js?v=r4c28c87ff1ea';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r4c28c87ff1ea';
+import { PAL, WORLD } from './data.js?v=r44f9dbca8fbc';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r44f9dbca8fbc';
+import { Sfx } from './audio.js?v=r44f9dbca8fbc';
+import { Battle } from './battle.js?v=r44f9dbca8fbc';
+import { World } from './world.js?v=r44f9dbca8fbc';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r44f9dbca8fbc';
+import { FIELD } from './battle/constants.js?v=r44f9dbca8fbc';
+import { ACTIONS } from './input-actions.js?v=r44f9dbca8fbc';
+import { createWebPlatform } from './platform/web-platform.js?v=r44f9dbca8fbc';
+import { SaveRepository } from './persistence/save-repository.js?v=r44f9dbca8fbc';
+import { buildSummaryModel } from './world-screens.js?v=r44f9dbca8fbc';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r44f9dbca8fbc';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -73,6 +74,10 @@ class Game {
     this.testSeed = null; // one-shot deterministic runSeed override for scenario('world', {seed})
     this.effectsEnabled = true;
     this.renderDirty = true;
+    // The boot scene is the menu, but the constructor does not go through enterMenu(), so
+    // the opening bed is selected here. Nothing sounds yet: Sfx records the wanted track
+    // and only starts it once a gesture has unlocked the AudioContext.
+    this.sfx.setTrack('campaign');
   }
 
   invalidate() { this.renderDirty = true; }
@@ -103,7 +108,14 @@ class Game {
     this.saves.removeCampaign(this.testMode).catch(error => this.reportSaveFailure(error));
   }
 
+  // The one place scene-to-music mapping lives. The menu and the campaign map share a bed
+  // on purpose: the menu vista IS the campaign's establishing shot, and a cut between two
+  // different pieces on every CONTINUE press reads as a mistake rather than a transition.
+  // The victory summary drops the bed entirely — its fanfare is the music for that screen.
+  setSceneMusic(track) { this.sfx.setTrack(track); }
+
   enterMenu(panel = 'root') {
+    this.setSceneMusic('campaign');
     this.scene = null;
     this.sceneName = 'menu';
     this.menuT = 0;
@@ -169,6 +181,10 @@ class Game {
   }
 
   activateMenuItem(id) {
+    // Every activation ticks; the campaign-start ids additionally blow a horn below, and
+    // the two layered is the intended lockup — the click is the button, the horn is the
+    // departure.
+    this.sfx.uiSelect();
     if (id === 'continue') {
       const save = this.loadRun();
       if (save) { this.sfx.horn(262); this.startWorld(save); }
@@ -206,17 +222,21 @@ class Game {
       const hoverIndex = items.findIndex(item => item.id === hovered.id);
       if (hoverIndex >= 0 && hoverIndex !== this.menuIndex) {
         this.menuIndex = hoverIndex;
+        this.sfx.uiMove();
         this.invalidate();
       }
     }
 
     if (this.input.pressedAction(ACTIONS.MENU_UP)) {
       this.menuIndex = (this.menuIndex + items.length - 1) % items.length;
+      this.sfx.uiMove();
       this.invalidate();
     } else if (this.input.pressedAction(ACTIONS.MENU_DOWN)) {
       this.menuIndex = (this.menuIndex + 1) % items.length;
+      this.sfx.uiMove();
       this.invalidate();
     } else if (this.input.pressedAction(ACTIONS.MENU_BACK)) {
+      this.sfx.uiMove();
       if (this.menuPanel === 'confirm') this.setMenuPanel('new');
       else if (this.menuPanel !== 'root') this.setMenuPanel('root');
     } else if (this.input.pressedAction(ACTIONS.CONFIRM)) {
@@ -227,6 +247,7 @@ class Game {
   }
 
   startWorld(save) {
+    this.setSceneMusic('campaign');
     this.scene = new World(this, save);
     this.sceneName = 'world';
     this._lastSave = this.scene.save;
@@ -242,6 +263,7 @@ class Game {
     this.persistRun();
   }
   startBattle(setup) {
+    this.setSceneMusic('battle');
     this.scene = new Battle(this, setup);
     this.sceneName = 'battle';
     this.camera.zoom = 1;
@@ -249,6 +271,7 @@ class Game {
     this.invalidate();
   }
   startVictory(save) {
+    this.setSceneMusic(null);
     this.scene = null;
     this.sceneName = 'victory';
     this.victoryT = 0;
@@ -1311,6 +1334,10 @@ async function bootstrap() {
   resize();
   game = new Game({ platform, saves });
   resize();
+  // Chromium keeps an AudioContext suspended until the document has been interacted
+  // with. The DOM target is chosen here, next to the other window wiring; what happens
+  // on the gesture belongs to the audio module.
+  game.sfx.attachUnlock(window);
   platform.lifecycle.onSuspend(() => {
     game.input.clear();
     if (game.sceneName === 'world') game.persistRun();

@@ -437,3 +437,46 @@ wireframe, with an independent subagent quality review after every implementatio
 - Not fixed, recorded: orders still lose to giving none (`@sweep` measures idle 73% against
   62% for the best deliberate policy), which needs a measured balance pass rather than an
   edit; and the `pushOutOf` pin between two nearby rocks noted in `battlefield-brief.js`.
+
+## Plan 026: the first real audio pass (2026-08-26)
+
+- Audio moved out of `engine.js` into `src/audio.js` and stopped being a synthesiser.
+  `Sfx` was 90 lines of oscillators and filtered noise — a square-wave coin, a sawtooth
+  horn, four `setTimeout` beeps for victory — and there was no music. It is now backed by
+  22 files in `assets/audio/`, 3.6 MB total, every one CC0 or public domain with no
+  attribution requirement. `assets/audio/SOURCES.md` records source and licence per file.
+- Twelve one-shots come from Kenney's CC0 Impact Sounds / RPG Audio / UI Audio packs. The
+  two music beds are RandomMind's CC0 "Medieval: Exploration" (campaign and menu) and
+  "Medieval: Battle", from OpenGameArt. Three war horns, the bow release, two hoof falls
+  and the victory/defeat stingers are synthesised by `scripts/build-audio.py`: no CC0 pack
+  surveyed had a war horn or a bowstring that fitted. That script is the whole pipeline —
+  decode, trim, peak-normalise, encode, synthesise — and runs only when assets are
+  rebuilt; it is not a build step and adds no runtime dependency.
+- No gameplay code changed. Every public method name (`hit`, `swing`, `horn(freq)`, …) is
+  the same, so `src/battle/` and `src/world/` are untouched apart from the release token.
+  `uiMove`/`uiSelect` are new and wired into the menu, which navigated in silence before.
+  `horn(freq)` still honours its pitch — 98 Hz is the stronghold answering, 294 Hz is
+  picking a squad — by choosing the nearest of three samples and detuning by playback
+  rate, clamped to 0.7x-1.45x so it never stops sounding like the same instrument.
+- All SFX files are peak-normalised to the same -3 dBFS, so the relative mix lives in the
+  gain table in `src/audio.js` rather than being baked invisibly into 20 files. Sample and
+  pitch variation draw from the module's own `AUDIO_FX` stream, the domain the removed
+  noise generator used; audio is presentation and never touches `simRng`.
+- Music streams through an `HTMLAudioElement` into a `MediaElementAudioSourceNode`, not
+  `decodeAudioData`. Measured: the 233-second campaign bed decodes to roughly 330 MB of
+  resident float PCM, an order of magnitude more memory than the rest of the game. The
+  one-shots stay decoded buffers — ten seconds of audio between them, and a one-shot that
+  waits on the network has already missed its frame.
+- The integration risk was never the mix, it was `console.error`: an autoplay violation or
+  a 404 fails every spec that calls `collectRuntimeErrors`. The context is built lazily on
+  the first sound request, `resume()` is attempted one at a time and always with a
+  rejection handler, and no bed starts unless the context is actually `running`.
+  `tests/e2e/audio.spec.js` drives that gate explicitly by suspending the context, because
+  Playwright relaxes the autoplay policy and the suspended state never happens by accident
+  there. It also proves every manifest file returns 200 and that all eleven horn pitches
+  the game passes find a clip.
+- Left for later, recorded rather than hidden: volume settings are not persisted (the gain
+  nodes and setters exist, nothing writes them to `settings`); the battle bed has no
+  adaptive intensity layers; one-shots have no positional pan; menu and world share a bed
+  and the victory summary has none; and neither source track is a gapless loop, so the
+  seam is the composer's fade-out meeting the fade-in rather than a true join.
