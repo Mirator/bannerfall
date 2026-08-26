@@ -18,7 +18,7 @@ const EXPECTED_QA_NAMES = [
   'world_party_battle_decreases_party_count_by_one',
   'world_camp_raid_razes_camp',
   'world_grace_timer_active_after_battle_then_decays',
-  'world_party_strength_stays_in_2_24_band',
+  'world_party_weight_stays_in_the_encounter_clamp',
   'world_party_spawn_tiers_weighted_toward_strong',
   'world_party_spawn_timer_fills_the_map_to_its_cap',
   'world_party_break_off_occupies_settlement_and_recapture_restores_service',

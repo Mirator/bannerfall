@@ -242,12 +242,23 @@ test.describe('stance balance', () => {
     // it moved the margin without overturning the finding. Re-measured on this exact
     // fixture after that change: idle 78%, chargeAll 78%, split 48%. Charging everything
     // came up twelve points (it was 62%) while pressing nothing barely moved, so the
-    // ten-point deficit is now a TIE. A tie does not satisfy a strict `toBeGreaterThan`,
+    // ten-point deficit was a TIE. A tie does not satisfy a strict `toBeGreaterThan`,
     // and flipping the annotation on a zero-point margin would repeat exactly the mistake
-    // Plan 019 had to retract, so the annotation stays. `plans/027-enemy-command-symmetry.md`
+    // Plan 019 had to retract, so the annotation stayed. `plans/027-enemy-command-symmetry.md`
     // and `critiques/enemy-command-comparison.md` carry the full before/after table, the
     // isolation control that proves the untouched path replays the old numbers digit for
     // digit, and the four enemy behaviours that measured as making the game EASIER.
+    //
+    // Plan 028 (encounter power rebase) attacked it from the THIRD side — the encounter
+    // generator now sizes every fight on measured combat power instead of headcount — and
+    // it did not overturn the finding either. It was resolved at three times this
+    // fixture's sample size to make sure: 360 raids per policy
+    // (`scripts/zz-orders-wide.mjs`, `scripts/zz-orders-wide.json`), idle 71.7% +/- 2.4,
+    // chargeAll 66.4% +/- 2.5, holdLine 36.4%, split 35.6%. Paired seed by seed and camp
+    // by camp, charging won 40 raids that pressing nothing lost and lost 59 that it won:
+    // a margin of -5.3 +/- 2.8 points AGAINST commanding. This is not a tie and not noise,
+    // it is a measured loss, so the annotation stays and the assertion keeps reporting it
+    // honestly. See `critiques/encounter-power-comparison.md`.
     test.fail();
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked

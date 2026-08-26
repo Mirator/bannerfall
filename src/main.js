@@ -1,16 +1,16 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD } from './data.js?v=rb7fae751c29c';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rb7fae751c29c';
-import { Sfx } from './audio.js?v=rb7fae751c29c';
-import { Battle } from './battle.js?v=rb7fae751c29c';
-import { World } from './world.js?v=rb7fae751c29c';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=rb7fae751c29c';
-import { FIELD } from './battle/constants.js?v=rb7fae751c29c';
-import { ACTIONS } from './input-actions.js?v=rb7fae751c29c';
-import { createWebPlatform } from './platform/web-platform.js?v=rb7fae751c29c';
-import { SaveRepository } from './persistence/save-repository.js?v=rb7fae751c29c';
-import { buildSummaryModel } from './world-screens.js?v=rb7fae751c29c';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=rb7fae751c29c';
+import { PAL, WORLD, enemyStrength } from './data.js?v=r1fcd6454285e';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r1fcd6454285e';
+import { Sfx } from './audio.js?v=r1fcd6454285e';
+import { Battle } from './battle.js?v=r1fcd6454285e';
+import { World } from './world.js?v=r1fcd6454285e';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r1fcd6454285e';
+import { FIELD } from './battle/constants.js?v=r1fcd6454285e';
+import { ACTIONS } from './input-actions.js?v=r1fcd6454285e';
+import { createWebPlatform } from './platform/web-platform.js?v=r1fcd6454285e';
+import { SaveRepository } from './persistence/save-repository.js?v=r1fcd6454285e';
+import { buildSummaryModel } from './world-screens.js?v=r1fcd6454285e';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r1fcd6454285e';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -1239,11 +1239,15 @@ window.game = {
         // itself sits ~128px from Ashford, just inside the 130px radius).
         world.hero.x = 1600; world.hero.y = 900;
         const mine = world.myStrength();
-        const n = kind === 'ambush' ? Math.max(3, Math.ceil(mine * 1.6 / 5))
-          : kind === 'partyFlee' ? Math.max(1, Math.round(mine * 0.4))
-          : Math.max(1, Math.round(mine));
-        const comp = kind === 'ambush' ? Array.from({ length: n }, () => 'brute')
-          : Array.from({ length: n }, () => 'bandit');
+        // Plan 028: these three fixtures always meant "a party at N times my strength",
+        // and they still do — but `mine` is fighting weight now, so the body count is
+        // derived by dividing the target weight by one body's worth instead of by the old
+        // 5-points-per-brute / 1-point-per-bandit headcount rule.
+        const heavy = kind === 'ambush';
+        const band = heavy ? 1.6 : kind === 'partyFlee' ? 0.4 : 1.0;
+        const per = enemyStrength([heavy ? 'brute' : 'bandit']);
+        const n = Math.max(heavy ? 3 : 1, Math.round(mine * band / per));
+        const comp = Array.from({ length: n }, () => (heavy ? 'brute' : 'bandit'));
         world.parties.length = 0;
         world.parties.push({
           camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,

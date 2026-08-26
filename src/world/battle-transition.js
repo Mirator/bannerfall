@@ -12,13 +12,13 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=rb7fae751c29c';
-import { dist2, clamp } from '../engine.js?v=rb7fae751c29c';
-import { ACTIONS } from '../input-actions.js?v=rb7fae751c29c';
-import { buildBriefModel } from '../world-screens.js?v=rb7fae751c29c';
-import { sampleBattlefield } from './battlefield-brief.js?v=rb7fae751c29c';
-import { FIELD } from '../battle/constants.js?v=rb7fae751c29c';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=rb7fae751c29c';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r1fcd6454285e';
+import { dist2, clamp } from '../engine.js?v=r1fcd6454285e';
+import { ACTIONS } from '../input-actions.js?v=r1fcd6454285e';
+import { buildBriefModel } from '../world-screens.js?v=r1fcd6454285e';
+import { sampleBattlefield } from './battlefield-brief.js?v=r1fcd6454285e';
+import { FIELD } from '../battle/constants.js?v=r1fcd6454285e';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r1fcd6454285e';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -265,9 +265,12 @@ export function confirmBrief(world) {
       const waves = [];
       for (let i = 0; i < (mods.waves || 0); i++) {
         const mine = world.myStrength();
+        // Plan 028: a reserve wave is 0.8x the player's fighting weight, bounded by the
+        // same encounter clamp every other generated force uses.
+        const cl = BALANCE.encounterWeightClamp;
         waves.push({
           at: STRONGHOLD_WAVE_AT,
-          comp: rollComposition(clamp(Math.round(mine * 0.8), 4, 16), world.simRng, BALANCE.compRolls.garrison),
+          comp: rollComposition(clamp(mine * 0.8, cl.min, cl.max), world.simRng, BALANCE.compRolls.garrison),
         });
       }
       extras.waves = waves;

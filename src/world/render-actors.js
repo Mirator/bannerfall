@@ -1,12 +1,12 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with one body-count
 // badge, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, WORLD, UNIT_TYPES, oddsWord } from '../data.js?v=rb7fae751c29c';
-import { TAU, rrect, shadow } from '../engine.js?v=rb7fae751c29c';
+import { PAL, WORLD, UNIT_TYPES, BALANCE, oddsWord } from '../data.js?v=r1fcd6454285e';
+import { TAU, rrect, shadow } from '../engine.js?v=r1fcd6454285e';
 import {
   strongholdModifiers, STRONGHOLD_POWER_LABELS, OWNERSHIP, SPECIALIZATIONS,
-} from '../region.js?v=rb7fae751c29c';
-import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=rb7fae751c29c';
+} from '../region.js?v=r1fcd6454285e';
+import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r1fcd6454285e';
 
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
 
@@ -29,9 +29,12 @@ export function drawParty(world, ctx, p) {
   ctx.beginPath(); ctx.arc(p.x, p.y - 20 + bobY, 6, 0, TAU); ctx.fill();
   // One supporting badge: bodies stay numeric, while its fill alone communicates danger.
   // Heavy composition, exact odds and intent remain available in the hover/brief models.
+  // Plan 028: the marker threshold was a hardcoded 1.3 on the old headcount scale, which
+  // no longer means anything. It reads BALANCE.oddsStronger now, so the badge turning red
+  // and the pill saying "they outmatch you" are the same judgement rather than two.
   const pStr = world.strength(p.comp), mineStr = world.myStrength();
   const bodies = p.comp.length;
-  const outmatched = pStr > mineStr * 1.3;
+  const outmatched = pStr > mineStr * BALANCE.oddsStronger;
   ctx.fillStyle = outmatched ? P.enemy : P.ink;
   ctx.beginPath(); ctx.arc(p.x + 16, p.y - 26, WORLD_ART.scale.unit.partyBadgeR, 0, TAU); ctx.fill();
   ctx.fillStyle = P.cream;

@@ -41,6 +41,9 @@ conditions, and update its status row when done.
 | 023 | Make the world map alive only while the hero rides | P0 | M | 001-022 | DONE |
 | 024 | Rework the battlefield | P0 | XL | 001-023 | DONE |
 | 025 | The first region — one complete regional conquest loop | P0 | XL | 001-024 | DONE |
+| 026 | The first real audio pass | P1 | L | 001-025 | DONE |
+| 027 | Give the enemy a commander, so the player's orders have something to answer | P0 | L | 019, 024 | STOPPED on its own condition — shipped as structure, see plan |
+| 028 | Rebase the encounter generator on measured combat power | P0 | L | 020, 021, 027 | DONE — premise corrected by measurement, see plan |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -140,6 +143,19 @@ plan's Implementation findings and `critiques/enemy-command-comparison.md`.
 
 - None. Plan 016 resolved the remaining low-priority menu save-parsing finding
   by hydrating validated saves once and serving menu reads from memory.
+
+Plan 028 replaced the encounter generator's headcount with a measured combat-power metric
+(sqrt of damage times hit points, one spearman = 1.0), fitted against 2544 seeded battles.
+It is filed DONE but with its own premise corrected: the roaming fixture the phase-4 audit
+quotes as an even fight is a 0.57 power ratio that BOTH metrics call weak, and the camp
+ladder was already close to honest, so neither of the two numbers the brief set out to move
+moved much. What the measurement did establish is that the defect was VARIANCE — the hero
+counting three points made the same declared tier a coin flip for a late warband and an
+execution for a starting one — and that is fixed: the `even` band now delivers 0.99-1.17 of
+real power (49.1% idle win) where it delivered 0.73-1.29 (58.9%). The `@sweep` annotation
+stays and is now a measured loss rather than a tie: over 360 raids per policy, pressing
+nothing beats the best deliberate order by 5.3 +/- 2.8 points. See
+`critiques/encounter-power-comparison.md`.
 
 Plan 022 was executed from the 2026-08-20 codebase audit
 (`critiques/codebase-audit-2026-08-20.md`) rather than from a forward plan; it splits

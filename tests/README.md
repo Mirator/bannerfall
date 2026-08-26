@@ -102,7 +102,9 @@ through `Camera.toWorld`; the harness now replays all three stances for that rea
 `tests/e2e/world-hover.spec.js` covers the presentation-only map hover system:
 no panel until the pointer actually moves (asserted at boot and after
 stepping with the pointer untouched), composition/fighting-weight/intent for
-a roaming party, "you count for 3" for the warband, nothing compositional for
+a roaming party, how the hero enters the odds for the warband (Plan 028: he is
+120 hit points and no damage, not three spearmen — the panel says so and the
+test asserts both the words and a numeric weight), nothing compositional for
 an unscouted camp, the true composition for a scouted one, Wolfsjaw reading
 unscouted before its camps are razed, and that `state()` after N steps is
 byte-identical whether the pointer is parked on a party or on empty ground —
@@ -412,9 +414,14 @@ The 26 deterministic records cover:
 14. roaming-party victory removal;
 15. camp-raid razing (loot only — a raid never changes the warband);
 16. post-battle grace decay;
-17. roaming-party strength bounds;
+17. roaming-party fighting-weight bounds against `BALANCE.encounterWeightClamp`,
+    driven at a 0.0001x and a 100x band (Plan 028 renamed this from the old
+    `[2, 24]` strength-point bound; the tolerance is one body, because the
+    roller can only stop once the target is crossed);
 18. weighted spawn-tier distribution, swept over several seeds, shifting toward
-    `strong` as camps are razed (Plan 020);
+    `strong` as camps are razed (Plan 020; the tier boundaries are derived from
+    `BALANCE.partyTiers` since Plan 028 rather than hardcoded, so they follow
+    the bands);
 19. the spawn timer itself: armed at 30s, a 40s cadence after that, filling to
     `partyCap()` and stopping there, with the roster persisted;
 20. break-off-and-raid: occupying a settlement suspends its service, and
