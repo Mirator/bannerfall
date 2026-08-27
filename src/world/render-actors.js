@@ -1,12 +1,13 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with one body-count
 // badge, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, WORLD, UNIT_TYPES, BALANCE, oddsWord } from '../data.js?v=r1fcd6454285e';
-import { TAU, rrect, shadow } from '../engine.js?v=r1fcd6454285e';
+import { PAL, WORLD, UNIT_TYPES, BALANCE, oddsWord, armySlots, rankOf } from '../data.js?v=r0a1bd3998320';
+import { bannerCost, bannerLabel, perkMods } from '../progression.js?v=r0a1bd3998320';
+import { TAU, rrect, shadow } from '../engine.js?v=r0a1bd3998320';
 import {
   strongholdModifiers, STRONGHOLD_POWER_LABELS, OWNERSHIP, SPECIALIZATIONS,
-} from '../region.js?v=r1fcd6454285e';
-import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r1fcd6454285e';
+} from '../region.js?v=r0a1bd3998320';
+import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r0a1bd3998320';
 
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
 
@@ -103,6 +104,26 @@ export function drawHero(world, ctx) {
   ctx.fillStyle = P.hero;
   ctx.font = '800 11px Inter, system-ui, sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(String(world.save.troops.length + 1), h.x + 18, h.y - 29);
+  // Plan 029: chevrons under the badge, one per rank, for the HIGHEST-ranked man in the
+  // warband. The map cannot show every troop's rank on one token, and the number the
+  // player wants at a glance is "have I got anything worth losing" — so it is the best
+  // man, not an average. The per-body detail is on the battlefield and on hover.
+  // The Drillyard shift rides along, or the map draws no chevron on a man the battle
+  // ranks — the world and battlefield insignia must agree on who is a veteran.
+  const rankEarlier = perkMods(world.save.perks).rankEarlier;
+  const best = world.save.troops.reduce((m, t) => Math.max(m, rankOf(t.vet, rankEarlier)), 0);
+  if (best > 0) {
+    ctx.strokeStyle = P.hero;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < best; i++) {
+      const cy = h.y - 21 + i * 4;
+      ctx.moveTo(h.x + 14, cy);
+      ctx.lineTo(h.x + 18, cy + 3);
+      ctx.lineTo(h.x + 22, cy);
+    }
+    ctx.stroke();
+  }
 }
 
 export function drawHud(world, ctx) {
@@ -116,7 +137,9 @@ export function drawHud(world, ctx) {
   ctx.fillStyle = P.cream;
   ctx.font = '700 15px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  ctx.fillText(`⛃ ${world.save.gold}    ⚔ ${world.save.troops.length}/${world.save.armyCap}    ♥ ${world.save.heroHp}/${world.save.heroMaxHp}`, resource.x + 12, resource.y + resource.h / 2);
+  // Plan 029: the army figure is PLACES IN THE COLUMN, not bodies — a knight is two — so
+  // the number the player budgets against is the number the recruit refusal uses.
+  ctx.fillText(`⛃ ${world.save.gold}    ⚔ ${armySlots(world.save.troops)}/${world.save.armyCap}    ♥ ${world.save.heroHp}/${world.save.heroMaxHp}`, resource.x + 12, resource.y + resource.h / 2);
 
   // objective — Milestone 025: stronghold power, not a camp count. The player can
   // assault at any time; the chip says how much weakening has been earned so far.
@@ -166,9 +189,28 @@ export function drawHud(world, ctx) {
     const owned = rec && rec.owner === OWNERSHIP.PLAYER;
     const specLine = owned && rec.spec ? `${rec.spec === 'watchtower' ? '' : ''}${specName(rec.spec)}` : null;
     const claimLine = !owned && !rec?.spec ? 'G Claim this settlement for your banner' : null;
+    // Plan 029: every recruit line states its SLOT COST, and the panel carries the role
+    // text from UNIT_TYPES so a player can tell a spearman from an archer before buying
+    // one. The banner is the town's third purchase, beside the army cap.
+    const slotTag = (type) => {
+      const n = UNIT_TYPES[type].slots ?? 1;
+      return n > 1 ? ` (${n} slots)` : '';
+    };
+    const bCost = bannerCost(world.save.banner);
+    const bannerTxt = bCost == null
+      ? `Banner: ${bannerLabel(world.save.banner)} (highest)`
+      : `B Raise the banner ${bCost}g → ${bannerLabel(world.save.banner + 1)}s`;
+    // A settlement states the role of every body it actually sells: a player standing at
+    // the gates should be able to tell a spearman from an archer without leaving the map.
+    const roleLines = (types) => types.map(t => `${UNIT_TYPES[t].name}: ${UNIT_TYPES[t].role}`);
     const base = s.kind === 'town'
-      ? [`${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · R Knight ${UNIT_TYPES.knight.cost}g`, `${healTxt} · T +2 army cap ${world.armyCapCost()}g`]
-      : [`Village of ${s.name} — ${s.flavor}`, `Q Spearman ${sc}g · E Archer ${ac}g · ${healTxt}`];
+      ? [`${s.name} — ${s.flavor}`,
+         `Q Spearman ${sc}g · E Archer ${ac}g · R Knight ${UNIT_TYPES.knight.cost}g${slotTag('knight')}`,
+         `${healTxt} · T +2 army cap ${world.armyCapCost()}g · ${bannerTxt}`,
+         ...roleLines(['spear', 'archer', 'knight'])]
+      : [`Village of ${s.name} — ${s.flavor}`,
+         `Q Spearman ${sc}g · E Archer ${ac}g · ${healTxt}`,
+         ...roleLines(['spear', 'archer'])];
     if (owned && rec.spec) base.push(`${s.name} is yours — ${specLine}`);
     else if (!owned) base.push(claimLine);
     lines = base;

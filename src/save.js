@@ -1,6 +1,12 @@
 // Campaign save schema — the pure boundary between persisted text and World.
-import { WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE } from './data.js?v=r1fcd6454285e';
-import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r1fcd6454285e';
+import {
+  WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, armySlots, troopMaxHp, rankOf,
+} from './data.js?v=r0a1bd3998320';
+import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r0a1bd3998320';
+import {
+  BANNER_MAX, PERK_IDS, PERKS, PERK_TIER_GATES, isValidPerk, bannerRankCap, perkMods,
+  perkPointsEarned,
+} from './progression.js?v=r0a1bd3998320';
 
 // Version 2 made party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
@@ -12,7 +18,17 @@ import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r1fcd6454
 // gain the campaign-summary counters (battlesLost, goldEarned, goldSpent,
 // captures). Stronghold power is deliberately NOT persisted — it is a pure
 // derivation over owned settlements and razed linked camps (src/region.js).
-export const SAVE_VERSION = 4;
+// Version 5 (Plan 029) makes PROGRESSION persistent — the first state other than
+// gold that carries meaning across a run. Three new fields, and no others:
+//   troop.vet   — battles this body has WON and walked out of. Optional; absent
+//                 means zero. Rank is DERIVED from it (data.js rankOf) and never
+//                 stored, so the two can never disagree.
+//   save.perks  — the hero's chosen perks, in the order taken. Unique, known ids.
+//   save.banner — the banner stage, 0..BANNER_MAX. Caps the rank a troop may reach.
+// Perk POINTS are deliberately not persisted: `perkPointsEarned(save)` derives them
+// from razed camps plus stats.captures, so the award is idempotent across a reload
+// and there is no counter that can drift from the campaign it describes.
+export const SAVE_VERSION = 5;
 
 const CAMP_IDS = new Set(WORLD.camps.map(c => c.id));
 const SETTLEMENT_IDS = new Set(WORLD.settlements.map(s => s.id));
@@ -48,17 +64,64 @@ function readNumber(source, key, fallback, valid, legacy) {
   return valid(source[key]) ? source[key] : undefined;
 }
 
-function buildTroops(raw) {
+// Plan 029 (v5): a troop may carry `vet`. Two rules make it safe to persist:
+//   * A legacy (pre-v5) shape carrying it is REFUSED rather than silently migrated,
+//     matching how buildSettlements refuses owner/spec and buildParties refuses raid.
+//   * The hp bound is the RANKED maximum, because a veteran really does have more hit
+//     points. `troopMaxHp` is the one function the validator and Battle.spawnTroop both
+//     read, so a saved veteran can never fail to load against a different formula.
+// `bannerCap` bounds the rank a record may claim: `vet` accrues only up to the banner's
+// ceiling in play, so a record above it is a tampered or corrupt save, not a legal one.
+// A small tolerance on hp absorbs nothing — the bound is exact — but VET_MAX keeps a
+// hostile integer from being used to inflate hit points without bound.
+const VET_MAX = 9999;
+// `earlier` is the Drillyard perk's threshold shift, and the two bounds below use it
+// DIFFERENTLY, both deliberately:
+//   * The hp bound passes it through: the game writes hit points at the SHIFTED rank, so
+//     a validator bounding at `earlier` 0 would cap a Drillyard Elite at the Veteran
+//     maximum and refuse a save the game itself just wrote.
+//   * The rank-vs-banner legality check does NOT pass it: `vet` accrues under whatever
+//     shift was active AT THE TIME, so a body parked exactly at the ceiling before the
+//     perk was taken (vet 6 under a stage-0 banner) exceeds the ceiling the moment the
+//     thresholds shift under him. Checking the SHIFTED rank here refused that save and
+//     the repository then erased the slot — taking Drillyard destroyed the campaign on
+//     the next load. The invariant every legal history does satisfy is the UNSHIFTED
+//     rank staying at or under the ceiling: the accrual gate never lets `vet` past it
+//     (rankOf(v, e) >= rankOf(v, 0) for every shift), and the banner never goes down.
+function buildTroops(raw, preV5, bannerCap, earlier) {
   if (!Array.isArray(raw)) return null;
   const result = [];
   for (const troop of raw) {
     if (!plain(troop) || typeof troop.type !== 'string' || !UNIT_IDS.has(troop.type)) return null;
     const unit = { type: troop.type };
+    if (hasOwn(troop, 'vet')) {
+      if (preV5) return null;
+      if (!nonNegativeInteger(troop.vet) || troop.vet > VET_MAX) return null;
+      if (rankOf(troop.vet) > bannerCap) return null;
+      if (troop.vet > 0) unit.vet = troop.vet;
+    }
     if (hasOwn(troop, 'hp')) {
-      if (!finite(troop.hp) || troop.hp < 0 || troop.hp > UNIT_TYPES[troop.type].hp) return null;
+      if (!finite(troop.hp) || troop.hp < 0 || troop.hp > troopMaxHp(unit, earlier)) return null;
       unit.hp = troop.hp;
     }
     result.push(unit);
+  }
+  return result;
+}
+
+// Plan 029 (v5): the hero's perks. Order is the order taken (the display order on the
+// summary), so this is an array rather than a set; duplicates are refused because taking
+// the same perk twice is not a thing the choice screen can produce.
+function buildPerks(raw, legacy) {
+  if (raw === undefined) return legacy ? [] : null;
+  if (legacy) return null; // a pre-v5 shape carrying perks is not a pre-v5 shape
+  if (!Array.isArray(raw) || raw.length > PERK_IDS.length) return null;
+  const seen = new Set();
+  const result = [];
+  for (const id of raw) {
+    if (!isValidPerk(id) || seen.has(id)) return null;
+    seen.add(id);
+    result.push(id);
   }
   return result;
 }
@@ -97,12 +160,17 @@ function buildCamps(raw) {
 // Milestone 025 (v4) extends each entry with persistent ownership:
 //   owner — 'neutral' or 'player' (occupied enemy control is the occupied flag)
 //   spec  — the permanently chosen specialization; only legal on player-owned land
-// `legacy` is true when migrating a pre-version-4 save: every settlement starts
+// `preV4` is true when migrating a save older than version 4: every settlement starts
 // neutral and unchosen, matching the fresh-save default and the milestone's
-// "conservative defaults" requirement.
-function buildSettlements(raw, legacy) {
+// "conservative defaults" requirement, and a pre-v4 shape carrying either field is
+// refused rather than silently migrated.
+//
+// Plan 029 note: this takes preV4 rather than a general `legacy` flag, because a version-4
+// save IS legacy now and legitimately carries owner/spec. Conflating the two versions into
+// one boolean would refuse every real v4 campaign.
+function buildSettlements(raw, preV4, missingOk) {
   if (raw === undefined) {
-    return legacy ? WORLD.settlements.map(s => ({ id: s.id, occupied: false, owner: OWNERSHIP.NEUTRAL })) : null;
+    return missingOk ? WORLD.settlements.map(s => ({ id: s.id, occupied: false, owner: OWNERSHIP.NEUTRAL })) : null;
   }
   if (!Array.isArray(raw) || raw.length !== WORLD.settlements.length) return null;
   const seen = new Set();
@@ -113,7 +181,7 @@ function buildSettlements(raw, legacy) {
     if (typeof settlement.occupied !== 'boolean') return null;
     seen.add(settlement.id);
     let owner, spec;
-    if (legacy) {
+    if (preV4) {
       // v3 and earlier carried no ownership vocabulary.
       owner = OWNERSHIP.NEUTRAL;
       spec = undefined;
@@ -141,7 +209,7 @@ function canonicalCampHome(campId) {
   return camp ? { x: camp.x, y: camp.y } : null;
 }
 
-function buildParties(raw, legacy) {
+function buildParties(raw, preV4, missingHomeOk) {
   if (raw === null) return null;
   if (!Array.isArray(raw)) return undefined;
   const result = [];
@@ -154,7 +222,7 @@ function buildParties(raw, legacy) {
     if (hasOwn(party, 'home')) {
       if (!validPoint(party.home)) return undefined;
       next.home = { x: party.home.x, y: party.home.y };
-    } else if (legacy) {
+    } else if (missingHomeOk) {
       const home = canonicalCampHome(party.camp);
       if (!home) return undefined;
       next.home = home;
@@ -180,8 +248,8 @@ function buildParties(raw, legacy) {
     // Milestone 025: a party riding to raid a settlement persists that intent so a
     // reload cannot silently cancel (or duplicate) an inbound raid. Raid state did
     // not exist before v4, so — matching buildSettlements' owner/spec rule — a
-    // legacy shape carrying either field is refused rather than silently migrated.
-    if (legacy) {
+    // pre-v4 shape carrying either field is refused rather than silently migrated.
+    if (preV4) {
       if (hasOwn(party, 'raid') || hasOwn(party, 'raidKind')) return undefined;
     } else {
       if (hasOwn(party, 'raid')) {
@@ -223,17 +291,45 @@ function buildStats(raw, legacy) {
   return { won, kills, lost, playT, battlesLost, goldEarned, goldSpent, captures };
 }
 
-function buildV1(candidate, legacy) {
+// `version` is the shape the candidate DECLARES, not the shape it is normalized into.
+// Plan 029 had to split what used to be one `legacy` boolean, because version 4 is a legacy
+// shape now and legitimately carries the ownership and raid fields v3 must be refused for.
+// Three distinct questions come out of that, and each is asked by name:
+//   legacy — older than the current schema at all: missing fields take their defaults.
+//   preV4  — settlement ownership and party raid intent did not exist yet, so a shape
+//            claiming that version must not carry them.
+//   preV5  — perks, the banner and troop veterancy did not exist yet, same rule.
+function buildV1(candidate, version) {
+  const legacy = version < SAVE_VERSION;
+  const preV4 = version < 4;
+  const preV5 = version < 5;
   const gold = readNumber(candidate, 'gold', undefined, nonNegativeInteger, false);
   const x = readNumber(candidate, 'x', undefined, value => coordinate(value, WORLD.w), false);
   const y = readNumber(candidate, 'y', undefined, value => coordinate(value, WORLD.h), false);
   if (gold === undefined || x === undefined || y === undefined) return null;
 
-  const troops = buildTroops(candidate.troops);
+  // Plan 029 (v5): the banner is read BEFORE the troops, because it bounds the rank a
+  // troop record may legally claim and therefore the hit points it may carry.
+  let banner;
+  if (hasOwn(candidate, 'banner')) {
+    if (preV5) return null;
+    if (!nonNegativeInteger(candidate.banner) || candidate.banner > BANNER_MAX) return null;
+    banner = candidate.banner;
+  } else {
+    banner = preV5 ? 0 : null;
+  }
+  if (banner === null) return null;
+  const perks = buildPerks(candidate.perks, preV5);
+  if (!perks) return null;
+
+  // The Drillyard perk shifts every rank threshold, so the bound a troop record is checked
+  // against depends on the perks read just above. Perks before troops, deliberately.
+  const rankEarlier = perkMods(perks).rankEarlier;
+  const troops = buildTroops(candidate.troops, preV5, bannerRankCap(banner), rankEarlier);
   if (!troops) return null;
   const camps = buildCamps(candidate.camps);
   if (!camps) return null;
-  const settlements = buildSettlements(candidate.settlements, legacy);
+  const settlements = buildSettlements(candidate.settlements, preV4, preV4);
   if (!settlements) return null;
   const heroMaxHp = readNumber(candidate, 'heroMaxHp', HERO.hp,
     value => finite(value) && value > 0 && value <= MAX_HERO_HP, legacy);
@@ -241,12 +337,27 @@ function buildV1(candidate, legacy) {
     value => finite(value) && value >= 0 && value <= MAX_HERO_HP, legacy);
   if (heroMaxHp === undefined || heroHp === undefined || heroHp > heroMaxHp) return null;
 
+  // Plan 029: the cap counts PLACES IN THE COLUMN, not bodies — a knight is two. The
+  // migration is deliberately GRANDFATHERING rather than strict: a legitimate v4 campaign
+  // could hold twelve knights inside a cap of twelve, and that save must load with its
+  // army intact rather than be refused for a rule that did not exist when it was written.
+  // Raising the cap to fit what the player already has is the conservative reading; the
+  // new slot cost then applies to every future recruit, which is where the decision is.
+  const slots = armySlots(troops);
   let armyCap;
   if (hasOwn(candidate, 'armyCap')) {
-    if (!Number.isInteger(candidate.armyCap) || candidate.armyCap < BALANCE.armyCapBase || candidate.armyCap < troops.length) return null;
-    armyCap = candidate.armyCap;
+    if (!Number.isInteger(candidate.armyCap) || candidate.armyCap < BALANCE.armyCapBase) return null;
+    // A cap below the BODY count was malformed under every version — v4's own validator
+    // refused it — so it stays refused rather than grandfathered: the grandfather below
+    // exists for legal v4 armies the new SLOT cost outgrew (bodies <= cap < slots), and
+    // widening a shape v4 itself called corrupt would reward hand-editing with a cap.
+    if (candidate.armyCap < troops.length) return null;
+    // Only a pre-v5 shape is grandfathered: the slot rule did not exist for it. A current
+    // save whose cap does not cover its own column is malformed, not old.
+    if (!preV5 && candidate.armyCap < slots) return null;
+    armyCap = preV5 ? Math.max(candidate.armyCap, slots) : candidate.armyCap;
   } else if (legacy) {
-    armyCap = Math.max(BALANCE.armyCapBase, troops.length);
+    armyCap = Math.max(BALANCE.armyCapBase, slots);
   } else {
     return null;
   }
@@ -255,7 +366,7 @@ function buildV1(candidate, legacy) {
   const hard = readBoolean(candidate, 'hard', false, legacy);
   if (won === undefined || hard === undefined) return null;
   const parties = hasOwn(candidate, 'parties')
-    ? buildParties(candidate.parties, legacy)
+    ? buildParties(candidate.parties, preV4, preV4)
     : (legacy ? null : undefined);
   if (parties === undefined) return null;
   const runSeed = readNumber(candidate, 'runSeed', 777, nonNegativeInteger, legacy);
@@ -263,6 +374,16 @@ function buildV1(candidate, legacy) {
   if (runSeed === undefined || battleCount === undefined) return null;
   const stats = buildStats(candidate.stats, legacy);
   if (!stats) return null;
+
+  // Perks are bounded the way `vet` is, and for the same reason — a shape unreachable in
+  // play is a tampered or corrupt save, not a legal one. A perk exists only where a
+  // milestone paid for it (perkPointsEarned derives the budget from the same razes and
+  // captures validated above), and a tier only opens over perks ALREADY taken, so each
+  // perk's gate is checked against its position in the taken order.
+  if (perks.length > perkPointsEarned({ camps, stats })) return null;
+  for (let i = 0; i < perks.length; i++) {
+    if (PERK_TIER_GATES[PERKS[perks[i]].tier - 1] > i) return null;
+  }
 
   const result = {
     version: SAVE_VERSION,
@@ -273,6 +394,8 @@ function buildV1(candidate, legacy) {
     armyCap,
     camps,
     settlements,
+    perks,
+    banner,
     won,
     x,
     y,
@@ -303,10 +426,13 @@ export function migrateSave(candidate) {
   // summary counters at zero. The conservative-defaults rule means a migrated
   // campaign never starts mid-raid pressure: World arms its raid timer from
   // RAID.firstDelayT whenever the loaded save carries no regional timer.
-  if (version === SAVE_VERSION) return buildV1(candidate, false);
-  // Both legacy shapes are normalized through the same current validator. A
-  // version-1 party may predate the home field, so derive it from WORLD.camps.
-  return buildV1(candidate, true);
+  //
+  // Version 4 saves are legacy relative to v5: every troop starts unblooded
+  // (`vet` absent, rank 0), the hero has taken no perks, and the banner is stage 0.
+  // Perk points are re-derived from the razed camps and captures the save already
+  // carries, so a v4 campaign that has taken two settlements is offered its two
+  // choices on the next world tick rather than losing them.
+  return buildV1(candidate, version);
 }
 
 /** Parse persisted text and return a canonical, detached save or null. */

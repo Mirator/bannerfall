@@ -3,13 +3,17 @@
 // same shape as engine.js's rrect/tree/mountain helpers, which already live
 // outside the scenes. World.js owns `this.hoverTarget`/`this.screen`/`this.pending`
 // and calls into these helpers from draw()/updateWorldScreens().
-import { PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS, weightText } from './data.js?v=r1fcd6454285e';
-import { clamp, rrect } from './engine.js?v=r1fcd6454285e';
-import { SQUAD_LABELS } from './battle/constants.js?v=r1fcd6454285e';
+import {
+  PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS,
+  weightText, armySlots, rankOf, rankName,
+} from './data.js?v=r0a1bd3998320';
+import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r0a1bd3998320';
+import { clamp, rrect } from './engine.js?v=r0a1bd3998320';
+import { SQUAD_LABELS } from './battle/constants.js?v=r0a1bd3998320';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=r1fcd6454285e';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r1fcd6454285e';
+} from './region.js?v=r0a1bd3998320';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r0a1bd3998320';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
@@ -70,6 +74,24 @@ function troopBreakdown(troops) {
   return Object.keys(UNIT_TYPES).filter(t => counts[t] > 0).map(t => `${counts[t]} ${SQUAD_LABELS[t]}`).join(', ');
 }
 
+// Plan 029: one line summarising the warband's veterancy, by highest rank present. Named
+// ranks rather than a count of chevrons, because the name is what the perk screen, the
+// banner prompt and the summary all use — one vocabulary for the whole feature.
+// `earlier` is the Drillyard shift: the battle grants rank with it applied, so a panel
+// reading rank without it would tell a Drillyard campaign it has no veterans while the
+// battlefield draws their chevrons.
+function veteranLine(troops, earlier = 0) {
+  const counts = new Map();
+  for (const t of troops || []) {
+    const r = rankOf(t.vet, earlier);
+    if (r > 0) counts.set(r, (counts.get(r) || 0) + 1);
+  }
+  if (counts.size === 0) return 'no veterans yet — men earn rank by winning and surviving';
+  const parts = [...counts.keys()].sort((a, b) => b - a)
+    .map(r => `${counts.get(r)} ${rankName(r)}${counts.get(r) === 1 ? '' : 's'}`);
+  return parts.join(', ');
+}
+
 function partyIntent(p) {
   if (p.occupying) return 'holding a settlement it occupies';
   if (p.raid) return 'riding to raid a settlement';
@@ -103,7 +125,8 @@ export function hoverTargetAt(world, wx, wy) {
 
   if (best.kind === 'hero') {
     const troops = world.save.troops;
-    const strength = playerStrength(troops);
+    const earlier = perkMods(world.save.perks).rankEarlier;
+    const strength = playerStrength(troops, earlier);
     return {
       kind: 'hero', x: heroMarker.x, y: heroMarker.y,
       title: 'Your warband', bodies: troops.length + 1, strength,
@@ -113,13 +136,17 @@ export function hoverTargetAt(world, wx, wy) {
         // hit points that the odds already assume you will not swing — the sword is your
         // margin over them, so it is not counted here.
         `fighting weight ${weightText(strength)} · your sword is not in it`,
+        // Plan 029: veterancy IS counted in that weight (playerStrength reads `vet`), so
+        // the panel says how much of it is men who have been here before.
+        veteranLine(troops, earlier),
       ],
     };
   }
   if (best.kind === 'party') {
     const p = best.party;
     const bodies = p.comp.length, heavy = p.comp.includes('brute');
-    const strength = enemyStrength(p.comp), mine = playerStrength(world.save.troops);
+    const strength = enemyStrength(p.comp);
+    const mine = playerStrength(world.save.troops, perkMods(world.save.perks).rankEarlier);
     // Same odds-word convention as the close-range pill drawn under the party token
     // (world.js drawParty) — hover repeats it alongside the numbers it omits.
     const odds = oddsWord(strength, mine);
@@ -141,7 +168,8 @@ export function hoverTargetAt(world, wx, wy) {
     return { kind: 'camp', x: camp.x, y: camp.y, scouted: false, title, lines: ['unscouted — ride closer to scout it'] };
   }
   const bodies = campState.garrison.length, heavy = campState.garrison.includes('brute');
-  const strength = enemyStrength(campState.garrison), mine = playerStrength(world.save.troops);
+  const strength = enemyStrength(campState.garrison);
+  const mine = playerStrength(world.save.troops, perkMods(world.save.perks).rankEarlier);
   return {
     kind: 'camp', x: camp.x, y: camp.y, scouted: true, title,
     bodies, heavy, strength, mine,
@@ -195,7 +223,8 @@ export function drawHoverPanel(ctx, cam, model) {
 export function buildBriefModel(descriptor, save) {
   const playerRoster = troopBreakdown(save.troops) || 'no troops — just you';
   const playerBodies = save.troops.length + 1;
-  const playerStr = playerStrength(save.troops);
+  const earlier = perkMods(save.perks).rankEarlier;
+  const playerStr = playerStrength(save.troops, earlier);
   const scouted = descriptor.comp != null || !!descriptor.revealDeployment;
   const enemyRoster = scouted ? enemyBreakdown(descriptor.comp) : 'unknown — unscouted';
   const enemyBodies = scouted ? descriptor.comp.length : null;
@@ -219,7 +248,14 @@ export function buildBriefModel(descriptor, save) {
       advantages: stronghold.advantages.slice(),
     } : null,
     options: { confirm: true, withdraw: !!descriptor.canWithdraw },
-    player: { roster: playerRoster, bodies: playerBodies, strength: playerStr },
+    // Plan 029: what you are risking. `veterans` names what would be lost, `perks` names
+    // what you are bringing that the odds number does NOT include — the same honesty rule
+    // Plan 028 applied to the hero's sword.
+    player: {
+      roster: playerRoster, bodies: playerBodies, strength: playerStr,
+      veterans: veteranLine(save.troops, earlier),
+      perks: (save.perks || []).map(id => PERKS[id]).filter(Boolean).map(p => p.name),
+    },
     enemy: { roster: enemyRoster, bodies: enemyBodies, strength: enemyStr, scouted },
   };
 }
@@ -252,7 +288,9 @@ export function drawBriefPanel(ctx, cam, model) {
   const extraLines =
     (model.objective ? model.objective.length : 0) +
     (model.stronghold ? 1 + model.stronghold.advantages.length : 0);
-  const pw = Math.min(720, W - 60), ph = Math.min(420 + extraLines * 18, H - 60);
+  // Plan 029 added two roster lines on the player's column (veterans, perks), so the panel
+  // is 40px taller before the objective/stronghold lines are counted.
+  const pw = Math.min(720, W - 60), ph = Math.min(460 + extraLines * 18, H - 60);
   const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
   ctx.fillStyle = P.ink;
   rrect(ctx, px, py, pw, ph, 14); ctx.fill();
@@ -278,6 +316,13 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.font = '600 13px Inter, system-ui, sans-serif';
   ctx.fillText(model.player.roster, leftX - colW / 2, colY + 26);
   ctx.fillText(`${model.player.bodies} bodies · fighting weight ${weightText(model.player.strength)}`, leftX - colW / 2, colY + 46);
+  // Plan 029: the veteran line sits under the weight because it is part OF the weight;
+  // the perk line sits under that because it is not, and the brief says so by placing it
+  // apart rather than by adding a caveat nobody reads.
+  ctx.fillStyle = P.hero;
+  ctx.fillText(model.player.veterans, leftX - colW / 2, colY + 64);
+  if (model.player.perks.length) ctx.fillText(`⚑ ${model.player.perks.join(' · ')}`, leftX - colW / 2, colY + 82);
+  ctx.fillStyle = P.cream;
   ctx.fillText(model.enemy.roster, rightX - colW / 2, colY + 26);
   ctx.fillText(
     model.enemy.scouted ? `${model.enemy.bodies} bodies · fighting weight ${weightText(model.enemy.strength)}` : 'composition unknown',
@@ -286,10 +331,10 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.textAlign = 'center';
   ctx.font = '800 16px Inter, system-ui, sans-serif';
   ctx.fillStyle = model.odds === ODDS_WORDS.outmatched ? P.enemy : P.cream;
-  ctx.fillText(model.odds, W / 2, colY + 86);
+  ctx.fillText(model.odds, W / 2, colY + 112);
   ctx.font = '600 13px Inter, system-ui, sans-serif';
   ctx.fillStyle = P.cream;
-  let y = colY + 110;
+  let y = colY + 136;
   ctx.fillText(`Arena: ${model.arena || 'field'}`, W / 2, y);
   y += 24;
   if (model.objective) {
@@ -424,6 +469,79 @@ export function drawSpecPanel(ctx, cam, model) {
   return { spec: { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects } };
 }
 
+// ---------------------------------------------------------------- perk choice
+// Plan 029: the hero's perk choice, deliberately the same shape as the specialization
+// modal above — same model fields, same `index`, same row rects — so the panel below can
+// share its layout and `updateWorldScreens` can share its navigation. The options come
+// from progression.js so the tier gates live in one place.
+export function buildPerkModel(save) {
+  const options = availablePerks(save).map(p => ({
+    id: p.id, name: p.name, glyph: p.glyph, tier: p.tier, text: p.text, note: p.note,
+  }));
+  const taken = (save.perks || []).map(id => PERKS[id]).filter(Boolean);
+  return {
+    kind: 'perk',
+    index: 0,
+    options,
+    taken: taken.map(p => p.name),
+    // Stated on the panel: this is a milestone reward, and the player should be able to
+    // see which milestone paid for it without leaving the screen.
+    earned: perkPointsEarned(save),
+    spent: (save.perks || []).length,
+  };
+}
+
+export function drawPerkPanel(ctx, cam, model) {
+  const W = cam.w, H = cam.h;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = 'rgba(21,22,46,0.72)';
+  ctx.fillRect(0, 0, W, H);
+  const pw = Math.min(660, W - 60), rowH = 64, headH = 112, footH = 56;
+  const ph = headH + model.options.length * (rowH + 8) + footH;
+  const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
+  ctx.fillStyle = P.ink;
+  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
+  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = P.cream;
+  ctx.font = '900 24px Inter, system-ui, sans-serif';
+  ctx.fillText('THE CAMPAIGN HAS TAUGHT YOU SOMETHING', W / 2, py + 36);
+  ctx.font = '700 14px Inter, system-ui, sans-serif';
+  ctx.fillStyle = P.hero;
+  ctx.fillText('Choose one — permanent for this campaign', W / 2, py + 62);
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#9BA3BF';
+  ctx.fillText(model.taken.length ? `Already yours: ${model.taken.join(', ')}` : 'Your first', W / 2, py + 84);
+  ctx.fillText('↑↓ choose · ENTER commit · X decide later', W / 2, py + 102);
+
+  const rects = [];
+  model.options.forEach((opt, i) => {
+    const y = py + headH + i * (rowH + 8);
+    const selected = i === model.index;
+    ctx.fillStyle = selected ? P.cream : '#26304F';
+    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.fill();
+    ctx.strokeStyle = selected ? P.hero : '#3A4A72'; ctx.lineWidth = selected ? 3 : 1.5;
+    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = selected ? P.ink : P.cream;
+    ctx.font = '800 16px Inter, system-ui, sans-serif';
+    ctx.fillText(`${opt.glyph}  ${opt.name}`, px + 44, y + 26);
+    ctx.font = '600 12px Inter, system-ui, sans-serif';
+    ctx.fillStyle = selected ? '#3A4A72' : '#B9C2DC';
+    ctx.fillText(`${opt.text}  ·  ${opt.note}`, px + 44, y + 48);
+    rects.push({ x: px + 24, y, w: pw - 48, h: rowH });
+  });
+
+  ctx.textAlign = 'center';
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#9BA3BF';
+  ctx.fillText('Every one of these pays only when you give an order', W / 2, py + ph - footH / 2);
+  ctx.textBaseline = 'alphabetic';
+  const first = rects[0];
+  return { perk: { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects } };
+}
+
 // ---------------------------------------------------------------- campaign summary
 // Milestone 025 Slice E: the regional-conquest summary behind the stronghold
 // victory. Pure over the final save — the same campaign always summarizes the
@@ -457,6 +575,12 @@ export function buildSummaryModel(save) {
     finalGold: save.gold || 0,
     army: army.length ? army.join(', ') : 'no standing host',
     specs,
+    // Plan 029: what the run BUILT, not just what it spent. The veteran line and the perk
+    // list are the two things a campaign now carries that gold never did.
+    veterans: veteranLine(save.troops || [], perkMods(save.perks).rankEarlier),
+    banner: bannerLabel(save.banner || 0),
+    perks: (save.perks || []).map(id => PERKS[id]).filter(Boolean).map(p => p.name),
+    slots: armySlots(save.troops || []),
   };
 }
 

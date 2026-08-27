@@ -1,16 +1,17 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength } from './data.js?v=r1fcd6454285e';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r1fcd6454285e';
-import { Sfx } from './audio.js?v=r1fcd6454285e';
-import { Battle } from './battle.js?v=r1fcd6454285e';
-import { World } from './world.js?v=r1fcd6454285e';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r1fcd6454285e';
-import { FIELD } from './battle/constants.js?v=r1fcd6454285e';
-import { ACTIONS } from './input-actions.js?v=r1fcd6454285e';
-import { createWebPlatform } from './platform/web-platform.js?v=r1fcd6454285e';
-import { SaveRepository } from './persistence/save-repository.js?v=r1fcd6454285e';
-import { buildSummaryModel } from './world-screens.js?v=r1fcd6454285e';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r1fcd6454285e';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r0a1bd3998320';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r0a1bd3998320';
+import { Sfx } from './audio.js?v=r0a1bd3998320';
+import { Battle } from './battle.js?v=r0a1bd3998320';
+import { World } from './world.js?v=r0a1bd3998320';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r0a1bd3998320';
+import { FIELD } from './battle/constants.js?v=r0a1bd3998320';
+import { ACTIONS } from './input-actions.js?v=r0a1bd3998320';
+import { createWebPlatform } from './platform/web-platform.js?v=r0a1bd3998320';
+import { SaveRepository } from './persistence/save-repository.js?v=r0a1bd3998320';
+import { buildSummaryModel } from './world-screens.js?v=r0a1bd3998320';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r0a1bd3998320';
+import { perkChoiceDue, perkMods } from './progression.js?v=r0a1bd3998320';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -1025,6 +1026,15 @@ window.game = {
         speed: Math.round(sc.heroSpeed),
         flowing: sc.timeFlowing(),
         gold: sc.save.gold, troops: sc.save.troops.length,
+        // Plan 029: the persistent progression surface tests read instead of re-deriving.
+        // `slots` is the number the army cap is actually budgeted against (a knight is
+        // two), which is a different quantity from `troops` above and both are wanted.
+        slots: armySlots(sc.save.troops),
+        armyCap: sc.save.armyCap,
+        perks: (sc.save.perks || []).slice(),
+        banner: sc.save.banner || 0,
+        veterans: sc.save.troops.map(t => rankOf(t.vet, perkMods(sc.save.perks).rankEarlier)).filter(r => r > 0).length,
+        perkChoiceDue: perkChoiceDue(sc.save),
         parties: sc.parties.length,
         camps: sc.save.camps,
         settlements: sc.save.settlements,

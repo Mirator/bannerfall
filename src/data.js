@@ -60,23 +60,58 @@ export const SHADOW = { dx: 0.55, dy: 0.38 }; // hard shadow direction (unit len
 // Tuned for 20–40 s battles: units survive ~7–10 hits, orders have time to matter.
 // `name`/`plural` are the prose names for a body of this type; every label a screen shows
 // is derived from them (see world-screens.js), so a new type cannot exist without one.
+// Plan 029 gave each of the three a fight it uniquely wins, because the phase-4 audit's
+// finding 2 was literal: spear and archer carried the SAME `dmg: 10`, so the archer was a
+// spear with range and neither had a role. Three declared fields carry the identity, and
+// every consumer reads them from here rather than special-casing a type name:
+//
+//   `role`    — the prose the recruit prompt and the brief show. A type cannot exist
+//               without one, the same rule `name`/`plural` already carry.
+//   `slots`   — army-cap cost. Default 1; the knight costs 2 because the audit measured
+//               the cap (not gold) as the binding constraint and the knight as strictly
+//               best per slot. Read through armySlots(), never by counting bodies.
+//   `bonusVs` — a damage multiplier against a named ENEMY_TYPES key, paid only under
+//               STEADY AIM (the squad on HOLD). The archer's 2.0 against a brute is the
+//               "one enemy melee cannot safely stand beside" role; a brute's slam radius
+//               is 100 and its hit points are 420, so grinding it down is exactly the job
+//               a bow line should own. The order gate is measured, not decorative — see
+//               bonusVersus() in battle/ai-phases.js for the 7.5 points of idle camp-raid
+//               win rate an unconditional version handed to a player pressing nothing.
+//
+// The spearman's own signature is not in this table: it is the brace bonus in
+// battle/constants.js, which Plan 029 rebuilt so that it actually fires (measured, the
+// pre-029 rule fired on 0-6% of contacts — see critiques/progression-baseline.md).
 export const UNIT_TYPES = {
   spear: {
     name: 'Spearman', plural: 'spearmen', icon: 'spear',
-    hp: 100, dmg: 10, range: 30, speed: 105, radius: 10,
-    cooldown: 1.05, cost: 15,
+    role: 'Holds the line — braced, they gut whatever charges them',
+    hp: 100, dmg: 12, range: 30, speed: 105, radius: 10,
+    cooldown: 1.05, cost: 15, slots: 1,
   },
   archer: {
     name: 'Archer', plural: 'archers', icon: 'bow',
-    hp: 60, dmg: 10, range: 230, speed: 95, radius: 10,
-    cooldown: 1.7, cost: 25, ranged: true, projSpeed: 340, keepAway: 130,
+    role: 'A slow, heavy shaft — on HOLD they steady, and gut brutes for double',
+    hp: 60, dmg: 13, range: 230, speed: 95, radius: 10,
+    cooldown: 2.2, cost: 25, slots: 1, ranged: true, projSpeed: 340, keepAway: 130,
+    bonusVs: { brute: 2.0 },
   },
   knight: {
     name: 'Knight', plural: 'knights', icon: 'helm',
+    role: 'Picks its fight and leaves it — but eats two places in the column',
     hp: 170, dmg: 15, range: 34, speed: 175, radius: 12,
-    cooldown: 0.95, cost: 60, mounted: true,
+    cooldown: 0.95, cost: 60, slots: 2, mounted: true,
   },
 };
+
+// Army-cap cost of a roster. The cap counts PLACES IN THE COLUMN, not bodies, so a knight
+// is two. Every cap read — the recruit refusal, the HUD, the save validator, the
+// specialization's troop grant — goes through this one function; counting `troops.length`
+// against `armyCap` anywhere else is the bug this exists to prevent.
+export function armySlots(troops) {
+  let n = 0;
+  for (const t of troops || []) n += (UNIT_TYPES[t.type]?.slots ?? 1);
+  return n;
+}
 
 export const ENEMY_TYPES = {
   bandit: {
@@ -162,6 +197,51 @@ export const WORLD = {
 // it means a different thing depending on what the party is made of.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Veterancy (Plan 029). The rank TABLE lives here rather than in progression.js for one
+// structural reason: `playerStrength` below has to price a ranked warband, and data.js is
+// the module that owns every balance table and imports nothing (Plan 028 decision 5). A
+// rank multiplier scales BOTH damage and hit points, exactly as POWER_EFFICIENCY does, so
+// a veteran scales his own contribution to fighting weight linearly and the metric needs
+// no new concept to account for him. progression.js owns the perks, the banner ceiling and
+// the milestone arithmetic, and reads these.
+//
+// `vet` is battles WON and walked out of; rank is derived and never stored, so there is
+// one number to persist and no way for the two to disagree.
+// ---------------------------------------------------------------------------
+export const VET_RANKS = Object.freeze([
+  Object.freeze({ rank: 0, name: '', at: 0, mul: 1.00 }),
+  Object.freeze({ rank: 1, name: 'Veteran', at: 3, mul: 1.12 }),
+  Object.freeze({ rank: 2, name: 'Elite', at: 7, mul: 1.25 }),
+  Object.freeze({ rank: 3, name: 'Champion', at: 12, mul: 1.40 }),
+]);
+export const MAX_RANK = VET_RANKS.length - 1;
+
+// `earlier` shifts every threshold down (the Drillyard perk), never below one battle: a
+// body that has fought nothing is not a veteran, whatever the hero has learned.
+export function rankOf(vet, earlier = 0) {
+  const v = Number.isFinite(vet) && vet > 0 ? Math.floor(vet) : 0;
+  let rank = 0;
+  for (const r of VET_RANKS) if (r.at > 0 && v >= Math.max(1, r.at - earlier)) rank = r.rank;
+  return rank;
+}
+export function rankMul(rank) {
+  return VET_RANKS[Math.max(0, Math.min(MAX_RANK, rank | 0))].mul;
+}
+export function rankName(rank) {
+  return VET_RANKS[Math.max(0, Math.min(MAX_RANK, rank | 0))].name;
+}
+// The number a body's stats are scaled by, straight from its persisted record.
+export function troopVetMul(troop, earlier = 0) {
+  return rankMul(rankOf(troop && troop.vet, earlier));
+}
+// The hit-point ceiling a persisted troop record may legally carry. The save validator and
+// the battle spawner must agree on this exactly, or a saved veteran fails to load.
+export function troopMaxHp(troop, earlier = 0) {
+  const d = UNIT_TYPES[troop.type];
+  return d ? d.hp * troopVetMul(troop, earlier) : 0;
+}
+
 // Effective attack cadence. An enemy telegraphs its blow (`windup`) and only starts its
 // cooldown once the strike lands, so its real cycle is cooldown + windup; the player's
 // units have no telegraph and swing on the cooldown alone. Dividing enemy damage by
@@ -181,29 +261,48 @@ export function attackCycle(d) {
 // ratio of 1.00 means a measured coin flip by construction rather than by calibration.
 // Rows from mixed-composition matchups are up-weighted, because a mixed composition is
 // the only kind the encounter generator ever produces.
+// RE-FITTED FOR PLAN 029. Plan 028 documents that retuning UNIT_TYPES invalidates this
+// table, and Plan 029 retuned it (spear 12/1.05, archer 13/2.2 with an anti-brute counter,
+// knight at two army-cap slots). The formula is untouched — the square law and the cadence
+// rule stand — but every multiplier was re-measured over a fresh 2544 battles
+// (`scripts/zz-power-prog-grid.json`, `zz-power-prog-rolled.json`) and re-fitted the same
+// way: maximum likelihood, logistic intercept pinned at zero, rolled rows up-weighted.
+//
+// The one methodological change: the rolled up-weight went from 4x to 8x. At 4x the fit
+// put the 50% crossing on rolled compositions at about 1.07 rather than 1.00 — the same
+// failure Plan 028 hit at 1x and fixed with the same knob. 8x brings it to about 1.05
+// (67% at 1.00, 39% at 1.10) at 89.7% pooled accuracy against headcount's 84.6%.
+//
+// The fit was run TWICE, and the first run is worth recording because it measured the
+// wrong game: the archer's anti-brute counter shipped unconditionally in the first build,
+// and gating it behind steady aim (see bonusVersus in battle/ai-phases.js) moved the brute
+// from 1.74 to 2.00 — a gated archer no longer halves a brute, so a brute is worth what it
+// was again. Every multiplier below is from the gated build.
 export const POWER_EFFICIENCY = Object.freeze({
   spear: 1.00,
   // A bow line that is screened by anything at all shoots for the whole fight, and 230 is
-  // the longest reach on the field. (Fitted at 0.86 against the hand-built ladders alone,
-  // which is an artefact of those ladders: a PURE wolf pack sends every one of its bodies
-  // at `nearestFriendlyRanged`, so the whole archer line is eaten. A rolled composition is
-  // about a fifth wolves, and against that the bow line is worth this instead. The rolled
-  // grid is the distribution the generator draws from, so it is the one that decides.)
-  archer: 1.30,
-  // 175 px/s. A knight picks its fight, reaches it first, and can leave it.
-  knight: 1.20,
-  bandit: 1.00,
+  // still the longest reach on the field. Essentially Plan 028's 1.30 plus a share of the
+  // anti-brute counter, which the raw damage-times-durability product cannot see: the
+  // counter is conditional on an order, and the probe grids give no orders, so what the
+  // fit credits here is the bow line itself rather than the role.
+  archer: 1.43,
+  // 175 px/s. A knight picks its fight, reaches it first, and can leave it. Up from 1.20,
+  // which is the retuned spearman renormalising the scale rather than the knight changing:
+  // its stats are untouched by this plan and only its price in army-cap slots moved.
+  knight: 1.31,
+  bandit: 1.04,
   // Shoots at 210 and keeps away at 150: much of a raider's output is delivered before
-  // anything on the player's side can answer it. The single largest correction in the
-  // table, and the one that most surprised the fit.
-  raider: 1.65,
-  // 420 hit points that must be ground all the way down, plus an area slam. Still worth
-  // well under the 5 points the old headcount rule gave it, but nearly twice its raw
+  // anything on the player's side can answer it. Still the largest correction in the table.
+  raider: 2.00,
+  // 420 hit points that must be ground all the way down, plus an area slam. Worth well
+  // under the 5 points the old headcount rule gave it, and now fully twice its raw
   // damage-times-durability figure.
-  brute: 1.90,
+  brute: 2.00,
   // 55 hit points: a wolf lands its bite and dies, and overkill damage is wasted on it —
-  // which is exactly what the square law does not model on its own.
-  wolf: 0.95,
+  // which is exactly what the square law does not model on its own. Slightly down from
+  // 0.95, and the reason is the spear: a braced line that can finally punish a body
+  // arriving at 158 is a worse place for a wolf to be than it used to be.
+  wolf: 0.92,
 });
 
 function bodyPower(d, eff) {
@@ -249,11 +348,24 @@ export function enemyStrength(comp) {
   }
   return forceWeight(dps, hp);
 }
-export function playerStrength(troops) {
+// Plan 029: a troop record may carry `vet`, and a ranked body really is stronger, so the
+// generator has to price it. Without this the map would keep sizing fights against a
+// warband's BASE types while the player's actual warband outgrew them — tier honesty,
+// which is Plan 028's entire deliverable, would rot silently across a run. The rank
+// multiplier scales dps and hp together, so it is one factor on each term.
+//
+// `earlier` is the Drillyard perk's threshold shift, and a caller pricing a LIVE campaign
+// must pass it (perkMods(save.perks).rankEarlier): the battle grants rank with the shift
+// applied, so pricing at `earlier` 0 would size every fight against a weaker warband than
+// the one that actually deploys — the same tier-honesty rot, reintroduced by one perk.
+// The default keeps the Plan 028 signature for perk-less callers and fixtures.
+export function playerStrength(troops, earlier = 0) {
   let dps = HERO_POWER.dps, hp = HERO_POWER.hp;
   for (const t of troops || []) {
     const p = UNIT_POWER[t.type];
-    if (p) { dps += p.dps; hp += p.hp; }
+    if (!p) continue;
+    const mul = troopVetMul(t, earlier);
+    dps += p.dps * mul; hp += p.hp * mul;
   }
   return forceWeight(Math.max(dps, UNIT_POWER.spear.dps), hp);
 }
@@ -330,6 +442,14 @@ export const BALANCE = {
   // the town prompt — one formula (armyCapCost) so the price tag can never lie.
   armyCapCostBase: 40,
   armyCapCostStep: 20,
+  // Plan 029: the banner is the gold sink, and it buys a CEILING rather than a bonus —
+  // each stage raises the highest veteran rank a troop may reach (see progression.js).
+  // Gold buys the room; keeping men alive across fights is what fills it, which is what
+  // puts attrition and gold on the same axis for the first time. Stage 0 is free and is
+  // what every campaign starts with, so this list is the PURCHASABLE stages only and its
+  // length is BANNER_MAX. Priced against the audit's finding 3 (a 7-body party pays 45 g):
+  // stage 1 is roughly three parties, stage 2 roughly nine.
+  bannerCosts: [150, 400],
   // Odds-word bands: above `oddsStronger` they outmatch you, below `oddsFavored` you are
   // favoured, between is an even fight. Retuning these retunes every odds label at once
   // (party pill, camp prompt, hover panel, pre-battle brief, party badge) — see oddsWord().

@@ -1,0 +1,246 @@
+{
+  "label": "after",
+  "generated": "2026-08-27T06:06:54.040Z",
+  "fixtures": {
+    "roam": {
+      "braceSpeed": 130,
+      "braceBonus": 1.8,
+      "types": {
+        "bandit": {
+          "samples": 17103,
+          "rawMedian": 5.4,
+          "rawP90": 51.9,
+          "rawMax": 107.6,
+          "closingMedian": -0.5,
+          "closingP90": 6.7,
+          "closingMax": 90.3,
+          "recentMedian": 73.5,
+          "recentP90": 99.3,
+          "recentMax": 134.8,
+          "latchedPct": 0,
+          "rawOverBracePct": 0,
+          "closingOverBracePct": 0,
+          "recentOverBracePct": 0.8,
+          "catchAt": {
+            "40": 1.8,
+            "50": 1.2,
+            "60": 0.8,
+            "70": 0.6,
+            "80": 0.4,
+            "90": 0.1,
+            "100": 0,
+            "120": 0
+          },
+          "catchAtLatched": {
+            "40": 89.1,
+            "50": 87,
+            "60": 86.6,
+            "70": 74.9,
+            "80": 32.9,
+            "90": 28,
+            "100": 10,
+            "110": 4.6,
+            "120": 3.2,
+            "140": 0
+          }
+        },
+        "wolf": {
+          "samples": 4181,
+          "rawMedian": 7.4,
+          "rawP90": 64.7,
+          "rawMax": 178.2,
+          "closingMedian": -0.2,
+          "closingP90": 19.2,
+          "closingMax": 132.7,
+          "recentMedian": 74.9,
+          "recentP90": 131.9,
+          "recentMax": 205.2,
+          "latchedPct": 35.4,
+          "rawOverBracePct": 1,
+          "closingOverBracePct": 0.1,
+          "recentOverBracePct": 11.3,
+          "catchAt": {
+            "40": 5.3,
+            "50": 3.6,
+            "60": 2.7,
+            "70": 1.9,
+            "80": 1.4,
+            "90": 0.9,
+            "100": 0.6,
+            "120": 0.2
+          },
+          "catchAtLatched": {
+            "40": 84.9,
+            "50": 84.7,
+            "60": 84.5,
+            "70": 84.4,
+            "80": 43.7,
+            "90": 29.3,
+            "100": 27.7,
+            "110": 19.7,
+            "120": 16.5,
+            "140": 5.6
+          }
+        },
+        "raider": {
+          "samples": 1169,
+          "rawMedian": 76.9,
+          "rawP90": 124.9,
+          "rawMax": 191.6,
+          "closingMedian": -61,
+          "closingP90": -1.3,
+          "closingMax": 37.7,
+          "recentMedian": 145.6,
+          "recentP90": 190.4,
+          "recentMax": 191.6,
+          "latchedPct": 0,
+          "rawOverBracePct": 8,
+          "closingOverBracePct": 0,
+          "recentOverBracePct": 62.5,
+          "catchAt": {
+            "40": 0.1,
+            "50": 0,
+            "60": 0,
+            "70": 0,
+            "80": 0,
+            "90": 0,
+            "100": 0,
+            "120": 0
+          },
+          "catchAtLatched": {
+            "40": 98,
+            "50": 97.7,
+            "60": 97.7,
+            "70": 91.5,
+            "80": 89,
+            "90": 82,
+            "100": 63,
+            "110": 63,
+            "120": 62.9,
+            "140": 58.5
+          }
+        }
+      }
+    },
+    "heavy": {
+      "braceSpeed": 130,
+      "braceBonus": 1.8,
+      "types": {
+        "bandit": {
+          "samples": 35315,
+          "rawMedian": 2.8,
+          "rawP90": 44.7,
+          "rawMax": 105.4,
+          "closingMedian": -0.1,
+          "closingP90": 7.3,
+          "closingMax": 90.1,
+          "recentMedian": 72.3,
+          "recentP90": 92,
+          "recentMax": 129.8,
+          "latchedPct": 0.6,
+          "rawOverBracePct": 0,
+          "closingOverBracePct": 0,
+          "recentOverBracePct": 0,
+          "catchAt": {
+            "40": 2.2,
+            "50": 1.5,
+            "60": 0.9,
+            "70": 0.7,
+            "80": 0.4,
+            "90": 0.1,
+            "100": 0,
+            "120": 0
+          },
+          "catchAtLatched": {
+            "40": 86.1,
+            "50": 85.7,
+            "60": 84.2,
+            "70": 66.5,
+            "80": 23.5,
+            "90": 15.7,
+            "100": 4.5,
+            "110": 2.6,
+            "120": 1.6,
+            "140": 0
+          }
+        },
+        "brute": {
+          "samples": 23928,
+          "rawMedian": 2,
+          "rawP90": 44.5,
+          "rawMax": 120.1,
+          "closingMedian": -0.6,
+          "closingP90": 0,
+          "closingMax": 68.3,
+          "recentMedian": 72.3,
+          "recentP90": 93.6,
+          "recentMax": 145.3,
+          "latchedPct": 2.6,
+          "rawOverBracePct": 0,
+          "closingOverBracePct": 0,
+          "recentOverBracePct": 2.2,
+          "catchAt": {
+            "40": 0.6,
+            "50": 0.4,
+            "60": 0.2,
+            "70": 0.1,
+            "80": 0,
+            "90": 0,
+            "100": 0,
+            "120": 0
+          },
+          "catchAtLatched": {
+            "40": 86.3,
+            "50": 85.5,
+            "60": 83.6,
+            "70": 72.2,
+            "80": 30.7,
+            "90": 15.1,
+            "100": 9.3,
+            "110": 4.8,
+            "120": 4.1,
+            "140": 1.5
+          }
+        },
+        "wolf": {
+          "samples": 7563,
+          "rawMedian": 0.5,
+          "rawP90": 109.6,
+          "rawMax": 240.4,
+          "closingMedian": 0,
+          "closingP90": 3.1,
+          "closingMax": 225.3,
+          "recentMedian": 72.3,
+          "recentP90": 181.5,
+          "recentMax": 249.3,
+          "latchedPct": 24,
+          "rawOverBracePct": 9.7,
+          "closingOverBracePct": 3,
+          "recentOverBracePct": 13.3,
+          "catchAt": {
+            "40": 5.9,
+            "50": 5.6,
+            "60": 5.2,
+            "70": 4.9,
+            "80": 4.5,
+            "90": 4.2,
+            "100": 3.8,
+            "120": 3.3
+          },
+          "catchAtLatched": {
+            "40": 70.1,
+            "50": 69.7,
+            "60": 69.6,
+            "70": 69.6,
+            "80": 17.5,
+            "90": 15.2,
+            "100": 13.8,
+            "110": 13.6,
+            "120": 13.5,
+            "140": 13.2
+          }
+        }
+      }
+    }
+  }
+}

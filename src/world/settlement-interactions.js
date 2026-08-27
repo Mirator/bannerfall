@@ -3,14 +3,15 @@
 // the toast line that reports it. Also the post-victory bookkeeping for a razed
 // camp (campVictoryExtra) and the stronghold-assault request with its objective
 // descriptor (Milestone 025).
-import { PAL, WORLD, UNIT_TYPES, BALANCE } from '../data.js?v=r1fcd6454285e';
-import { dist2 } from '../engine.js?v=r1fcd6454285e';
-import { ACTIONS } from '../input-actions.js?v=r1fcd6454285e';
+import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp } from '../data.js?v=r0a1bd3998320';
+import { perkMods, bannerCost, recruitTroop } from '../progression.js?v=r0a1bd3998320';
+import { dist2 } from '../engine.js?v=r0a1bd3998320';
+import { ACTIONS } from '../input-actions.js?v=r0a1bd3998320';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP,
   encounterObjective, strongholdModifiers, strongholdStateId, strongholdAdvantageLines,
   settlementRecord, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r1fcd6454285e';
+} from '../region.js?v=r0a1bd3998320';
 
 const P = PAL.world;
 
@@ -51,13 +52,28 @@ export function recruit(world, type) {
   const s = world.nearSettlement();
   const d = UNIT_TYPES[type];
   const cost = world.costAt(s, type);
-  if (world.save.troops.length >= world.save.armyCap) { world.say('Army is at capacity'); return; }
+  // Plan 029: the cap counts PLACES IN THE COLUMN, not bodies — a knight is two, which is
+  // the audit's own fix for "knights only" being strictly optimal per slot. The refusal
+  // names the real reason, because "Army is at capacity" while the bar reads 11/12 would
+  // read as a bug rather than as a rule.
+  const slots = d.slots ?? 1;
+  if (armySlots(world.save.troops) + slots > world.save.armyCap) {
+    world.say(slots > 1
+      ? `No room — a ${d.name.toLowerCase()} takes ${slots} places in the column`
+      : 'Army is at capacity');
+    return;
+  }
   if (world.save.gold < cost) { world.say('Not enough gold'); return; }
   world.save.gold -= cost;
   if (world.save.stats) world.save.stats.goldSpent += cost;
-  world.save.troops.push({ type });
+  // The Veteran Cadre perk: men who join a banner with a reputation are not raw. It makes
+  // replacing a dead veteran cheaper, never free — a rank-1 recruit is still three battles
+  // behind an Elite. `recruitTroop` is the single seam (the specialization grant uses the
+  // same one), so the perk cannot apply at this door and miss another.
+  const troop = recruitTroop(world.save, type);
+  world.save.troops.push(troop);
   world.game.sfx.coin();
-  world.say(`${d.name} joined your warband`);
+  world.say(`${d.name} joined your warband${troop.vet ? ' — blooded already' : ''}`);
   world.particles.ring(world.hero.x, world.hero.y, 30, P.cream, 0.4, 3);
 }
 
@@ -78,7 +94,8 @@ export function updateSettlementInteractions(world, inp) {
   if (s) {
     const pressedService = inp.pressedAction(ACTIONS.RECRUIT_SPEAR) || inp.pressedAction(ACTIONS.WORLD_PRIMARY) ||
       (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) || inp.pressedAction(ACTIONS.HEAL) ||
-      (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY));
+      (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY)) ||
+      (s.kind === 'town' && inp.pressedAction(ACTIONS.UPGRADE_BANNER));
     if (world.isSettlementOccupied(s)) {
       if (pressedService) world.say(`${s.name} is occupied — drive off the raiders to restore its service`);
     } else {
@@ -88,7 +105,12 @@ export function updateSettlementInteractions(world, inp) {
       if (inp.pressedAction(ACTIONS.HEAL)) {
         const healCost = healCostAt(world, s);
         const heroHurt = world.save.heroHp < world.save.heroMaxHp;
-        const troopsHurt = world.save.troops.some(t => t.hp != null && t.hp < UNIT_TYPES[t.type].hp);
+        // Plan 029: a veteran's full health is his RANKED maximum, so "already rested"
+        // must compare against that or a wounded Elite would be told he is fine. The
+        // Drillyard perk's threshold shift is passed for the same reason the save
+        // validator takes it — the game grants rank with it applied.
+        const earlier = perkMods(world.save.perks).rankEarlier;
+        const troopsHurt = world.save.troops.some(t => t.hp != null && t.hp < troopMaxHp(t, earlier));
         if (!heroHurt && !troopsHurt) world.say('Already rested');
         else if (world.save.gold < healCost) world.say('Not enough gold');
         else {
@@ -108,6 +130,10 @@ export function updateSettlementInteractions(world, inp) {
           world.game.sfx.coin(); world.say(`Army capacity is now ${world.save.armyCap}`);
         } else world.say(`Need ${cost} gold`);
       }
+      // Plan 029: the banner. A town service like the army cap, and deliberately the same
+      // shape — one press, one price, one refusal message. World.upgradeBanner() owns the
+      // rules so the prompt's price tag and the charge can never disagree.
+      if (s.kind === 'town' && inp.pressedAction(ACTIONS.UPGRADE_BANNER)) world.upgradeBanner();
     }
     // Milestone 025 Slice B: claiming neutral ground. G at the gates of an
     // unoccupied, unowned settlement brings it under the banner without a fight —

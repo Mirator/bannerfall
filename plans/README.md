@@ -44,6 +44,7 @@ conditions, and update its status row when done.
 | 026 | The first real audio pass | P1 | L | 001-025 | DONE |
 | 027 | Give the enemy a commander, so the player's orders have something to answer | P0 | L | 019, 024 | STOPPED on its own condition — shipped as structure, see plan |
 | 028 | Rebase the encounter generator on measured combat power | P0 | L | 020, 021, 027 | DONE — premise corrected by measurement, see plan |
+| 029 | Unit identity, and something to build between fights | P0 | XL | 019, 021, 027, 028 | DONE — one self-inflicted regression measured and closed inside the slice, see plan |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).

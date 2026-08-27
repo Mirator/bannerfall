@@ -1,10 +1,10 @@
 // What a hit does and how a fight ends: damage application on both sides, arrow spawning,
 // and the win/loss/retreat resolution. Separated from the AI phases that decide to swing
 // and from the tick loop that orders them.
-import { BALANCE } from '../data.js?v=r1fcd6454285e';
-import { len } from '../engine.js?v=r1fcd6454285e';
-import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r1fcd6454285e';
-import { objectiveVictory } from './objectives.js?v=r1fcd6454285e';
+import { BALANCE } from '../data.js?v=r0a1bd3998320';
+import { len } from '../engine.js?v=r0a1bd3998320';
+import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r0a1bd3998320';
+import { objectiveVictory } from './objectives.js?v=r0a1bd3998320';
 
 export function damageEnemy(battle, e, dmg, kx, ky, source) {
   const P = battle.palette;
@@ -13,6 +13,8 @@ export function damageEnemy(battle, e, dmg, kx, ky, source) {
   // path below — a squad the enemy commander sent forward is running with its shields down
   // too. This is what makes committing a decision with a price rather than a free tempo
   // gain, and it is the player's reward for punishing a charge instead of meeting it.
+  // The enemy always pays the CONSTANT: `battle.chargeExposure` is the player's, and the
+  // Warhorn perk must not also make the enemy's charges safer.
   if (battle.enemyStance(e) === 'charge' || (e.exposedT || 0) > 0) dmg *= CHARGE_EXPOSURE;
   e.hp -= dmg;
   e.flash = 0.12;
@@ -51,7 +53,12 @@ export function damageFriendly(battle, f, isHero, dmg, from) {
   // CHARGE_RECOVER seconds after the order changes, because reading the live stance let a
   // player tap HOLD for one tick mid-swing and take a charge's speed for none of its cost
   // (measured strictly better on both time and losses).
-  if (!isHero && (battle.squadStance(f) === 'charge' || (f.exposedT || 0) > 0)) dmg *= CHARGE_EXPOSURE;
+  // Plan 029: `battle.chargeExposure` is CHARGE_EXPOSURE unless the Warhorn perk has
+  // lowered it, and a squad inside the Warlord rally window has its shields back up for
+  // the rally's duration — the two perks that make a charge cost less, both conditional
+  // on the player having ordered or pressed something.
+  if (!isHero && (f.rallyT || 0) <= 0 &&
+      (battle.squadStance(f) === 'charge' || (f.exposedT || 0) > 0)) dmg *= battle.chargeExposure;
   f.hp -= dmg;
   if (isHero) {
     f.hurtT = 0.25;
@@ -93,14 +100,29 @@ export function damageFriendly(battle, f, isHero, dmg, from) {
   }
 }
 
-export function fireArrow(battle, sx, sy, tx, ty, friendly, dmg, speed, srcType, spread = BOW_SPREAD) {
+export function fireArrow(battle, sx, sy, tx, ty, friendly, dmg, speed, srcType, spread = BOW_SPREAD, bonusVs = null) {
   const d = Math.max(1, len(tx - sx, ty - sy));
   // slight inaccuracy
   const off = (battle.simRng() - 0.5) * d * spread;
   const a = Math.atan2(ty - sy, tx - sx) + Math.PI / 2;
   tx += Math.cos(a) * off; ty += Math.sin(a) * off;
-  battle.projectiles.push({ sx, sy, tx, ty, t: 0, T: d / speed, friendly, dmg, srcType });
+  // Plan 029: `bonusVs` rides along and is resolved at the landing (see
+  // arrowDamageAgainst), never folded into `dmg` here — an arrow hits whoever is nearest
+  // where it lands, not necessarily the body it was aimed at.
+  battle.projectiles.push({ sx, sy, tx, ty, t: 0, T: d / speed, friendly, dmg, srcType, bonusVs });
   battle.game.sfx.bow();
+}
+
+// The damage one landed arrow actually does to the body it found. The declared per-type
+// counter in UNIT_TYPES is the source; `battle.bruteBonus` lets the Bodkin Points perk
+// deepen the archer's without the unit table needing to know perks exist.
+export function arrowDamageAgainst(battle, projectile, targetType) {
+  const table = projectile.bonusVs;
+  if (!table || !targetType) return projectile.dmg;
+  const declared = table[targetType];
+  if (declared == null) return projectile.dmg;
+  const mul = targetType === 'brute' && battle.bruteBonus != null ? battle.bruteBonus : declared;
+  return projectile.dmg * mul;
 }
 
 export function endBattle(battle, victory, retreated) {

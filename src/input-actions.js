@@ -7,6 +7,10 @@ export const ACTIONS = Object.freeze({
   // — KeyE already recruits archers inside the same radius, and a claim must never be
   // one mis-tap away from a purchase.
   CLAIM: 'claim',
+  // Plan 029: raise the banner at a town (B). Its own action rather than a mode on
+  // EXPAND_ARMY, because both are town purchases and a mis-tap must not spend 400 gold on
+  // the wrong one.
+  UPGRADE_BANNER: 'upgradeBanner',
   CONFIRM: 'confirm', MENU_UP: 'menuUp', MENU_DOWN: 'menuDown', MENU_BACK: 'menuBack',
   CONTINUE_RUN: 'continueRun', NEW_HARD_RUN: 'newHardRun', PAUSE: 'pause', MUTE: 'mute', ABANDON_RUN: 'abandonRun',
   // Plan 021: cancel a pre-battle brief. Not WORLD_PRIMARY (the same held KeyE that
@@ -24,6 +28,7 @@ export const DEFAULT_BINDINGS = Object.freeze({
   [ACTIONS.SQUAD_CYCLE]: ['Tab'],
   [ACTIONS.RECRUIT_SPEAR]: ['KeyQ'], [ACTIONS.WORLD_PRIMARY]: ['KeyE'], [ACTIONS.RECRUIT_KNIGHT]: ['KeyR'],
   [ACTIONS.HEAL]: ['KeyF'], [ACTIONS.EXPAND_ARMY]: ['KeyT'], [ACTIONS.CLAIM]: ['KeyG'],
+  [ACTIONS.UPGRADE_BANNER]: ['KeyB'],
   [ACTIONS.CONFIRM]: ['Enter'], [ACTIONS.MENU_UP]: ['KeyW', 'ArrowUp'], [ACTIONS.MENU_DOWN]: ['KeyS', 'ArrowDown'],
   [ACTIONS.MENU_BACK]: ['Escape'], [ACTIONS.CONTINUE_RUN]: ['KeyC'], [ACTIONS.NEW_HARD_RUN]: ['KeyH'],
   [ACTIONS.PAUSE]: ['Escape', 'KeyP'], [ACTIONS.MUTE]: ['KeyM'], [ACTIONS.ABANDON_RUN]: ['KeyR'],

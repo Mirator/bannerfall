@@ -6,16 +6,62 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r1fcd6454285e';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r1fcd6454285e';
-import { ACTIONS } from '../input-actions.js?v=r1fcd6454285e';
+import { HERO } from '../data.js?v=r0a1bd3998320';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r0a1bd3998320';
+import { ACTIONS } from '../input-actions.js?v=r0a1bd3998320';
 import {
-  BRACE_SPEED, BRACE_BONUS, BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
+  BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
+  BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
-  CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T,
-} from './constants.js?v=r1fcd6454285e';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r1fcd6454285e';
+  CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
+} from './constants.js?v=r0a1bd3998320';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r0a1bd3998320';
+
+// ---------------------------------------------------------------- Plan 029: the rush latch
+// The single predicate both sides' brace reads, and the single place it is written.
+//
+// `commanded` is the speed the movement branch is steering this body toward BEFORE terrain
+// scaling — terrain is excluded on purpose, so a bandit strolling down a road (92 x 1.14)
+// is not mistaken for a charge. A body counts as rushing when that speed is at or above
+// BRACE_SPEED (inherently fast: wolf 158, knight 175) or above BRACE_CHARGE_MUL times its
+// own walk (ordered forward: charge x1.15, bloodlust x1.3).
+//
+// Called ONLY from the branch that is actually closing on a hostile, never from a retreat,
+// a kite or a recoil: "rushing" means running AT someone. The memory decays everywhere else
+// so a body that stops charging stops being braced against a moment later.
+function markRush(unit, commanded) {
+  if (commanded >= BRACE_SPEED || commanded > unit.d.speed * BRACE_CHARGE_MUL) {
+    unit.rushT = BRACE_MEMORY;
+  }
+}
+function decayRush(unit, dt) {
+  if (unit.rushT > 0) unit.rushT = Math.max(0, unit.rushT - dt);
+}
+// What a set line is entitled to against this body, right now.
+function braceMul(battle, target) {
+  return (target.rushT || 0) > 0 ? battle.braceBonus : 1;
+}
+// Plan 029: a declared per-type counter (UNIT_TYPES[x].bonusVs), not a special case on a
+// type name. `battle.bruteBonus` lets the Bodkin Points perk deepen the archer's without
+// the unit table having to know perks exist.
+//
+// It pays only under STEADY AIM — the squad on HOLD. That gate was added after
+// measurement, not before: shipped unconditionally, the counter raised the camp-raid IDLE
+// win rate from 70.8% to 78.3%, undoing Plan 028's entire gain on that fixture. Camp
+// garrisons are the brute-heavy fights, so an always-on anti-brute bonus is a large real
+// power gain handed to a player who gives no orders — which is exactly the "the game plays
+// itself" defect the phase-4 audit named and this plan's own perk rule forbids. Behind
+// steady aim it is the same role, bought with a decision: a bow line that stands still has
+// time to pick the gap in the armour.
+function bonusVersus(battle, attacker, targetType, steady) {
+  if (!steady) return 1;
+  const table = attacker.d.bonusVs;
+  if (!table || !targetType) return 1;
+  const declared = table[targetType];
+  if (declared == null) return 1;
+  return targetType === 'brute' && battle.bruteBonus != null ? battle.bruteBonus : declared;
+}
 
 // Phase 4c: local obstacle avoidance ("tangent steering"). Casts a ray of length LOOKAHEAD
 // from (ux,uy) along the unit's desired heading (dirX,dirY, already a unit vector) toward its
@@ -292,6 +338,24 @@ export function updateHeroPhase(battle, dt, inp, h, ax) {
     h.vx = Math.cos(a) * HERO.dashSpeed; h.vy = Math.sin(a) * HERO.dashSpeed;
     sfx.dash();
     battle.particles.ring(h.x, h.y, 26, P.cream, 0.3, 3);
+    // Plan 029, the Warlord perk. The rally is granted at the START of the dash, to the
+    // troops already around the commander — the one perk that makes the hero's own input
+    // matter to the warband rather than only to the man in front of him. It buys two
+    // things for RALLY_R seconds: shields up (damageFriendly skips charge exposure) and
+    // charge speed whatever the squad's order. `battle.rally` is 0 unless the perk is
+    // taken, so this loop costs one comparison in every other campaign.
+    if (battle.rally > 0) {
+      let rallied = 0;
+      for (const t of battle.troops) {
+        if (dist2(t.x, t.y, h.x, h.y) > RALLY_R * RALLY_R) continue;
+        t.rallyT = battle.rally;
+        rallied++;
+      }
+      if (rallied > 0) {
+        battle.commandFlash = { text: 'RALLY!', t: 0.8 };
+        battle.game.sfx.horn(196);
+      }
+    }
   }
 
 }
@@ -304,10 +368,17 @@ export function updateTroopPhase(battle, dt, h) {
     if (t.flash > 0) t.flash -= dt;
     if (t.lunge > 0) t.lunge -= dt * 5;
     let goal = null, engage = null;
-    // exposure is refreshed while charging and decays after the order changes
+    // Exposure is refreshed while charging and decays after the order changes.
+    // `battle.chargeRecover` is CHARGE_RECOVER unless the Quick Release perk has zeroed
+    // it: charging itself still costs (damageFriendly reads the live stance), so what the
+    // perk removes is only the LINGER after the order is taken back.
+    // Plan 029: `t.rallyT` is the Warlord perk's dash rally — see damageFriendly and the
+    // movement tail below for the two things it buys.
     const squadStanceNow = battle.squadStance(t);
-    if (squadStanceNow === 'charge') t.exposedT = CHARGE_RECOVER;
+    if (t.rallyT > 0) t.rallyT = Math.max(0, t.rallyT - dt);
+    if (squadStanceNow === 'charge') t.exposedT = battle.chargeRecover;
     else if (t.exposedT > 0) t.exposedT = Math.max(0, t.exposedT - dt);
+    decayRush(t, dt);
 
     // troops always defend the commander: any enemy near the hero is fair game
     const heroThreat = battle.nearestEnemy(battle.hero.x, battle.hero.y, 90);
@@ -397,11 +468,19 @@ export function updateTroopPhase(battle, dt, h) {
       const advancingBow = t.d.ranged && stance === 'charge' && d > wantR;
       if (t.cd <= 0 && !advancingBow && d < (t.d.ranged ? t.d.range : t.d.range + engage.d.radius + 4)) {
         // A set line receives a charge: melee holding position hit harder against anything
-        // closing at speed (wolves sprint at 158, a brute commits at 55). This is what makes
-        // HOLD the answer to a pack instead of a strictly slower FOLLOW.
-        const closingFast = stance === 'hold' && !t.d.ranged &&
-          len(engage.vx, engage.vy) > BRACE_SPEED;
-        const dmg = t.d.dmg * (closingFast ? BRACE_BONUS : 1);
+        // that CAME IN AT A RUSH. Plan 029 rebuilt this — the old form read the target's
+        // velocity at the instant of the swing, and measured, a body inside spear reach has
+        // already braked (median closing speed NEGATIVE for every type), so it fired on
+        // 0-6% of contacts. It reads the latched rush memory now; see markRush and the
+        // BRACE_SPEED block in constants.js for the whole measurement.
+        //
+        // Two multipliers here — the body's rank (a veteran hits harder) and the brace (an
+        // order) — because they are both known at the moment of the swing. The third, the
+        // declared per-type counter, is applied where the blow LANDS: immediately below for
+        // a melee strike, and at the arrow's landing for a shot, since an arrow resolves
+        // against whoever is nearest where it falls rather than the body it was aimed at.
+        const braced = stance === 'hold' && !t.d.ranged ? braceMul(battle, engage) : 1;
+        const dmg = t.d.dmg * (t.vetMul || 1) * braced;
         if (engage.isObjective) {
           // Guards are structures: arrows and blades chip them directly (a palisade
           // has no hit-flash target for a projectile's proximity check, so ranged
@@ -417,16 +496,21 @@ export function updateTroopPhase(battle, dt, h) {
           if (battle.hasLineOfSight(t.x, t.y - 12, engage.x, engage.y)) {
             if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
             t.cd = t.d.cooldown;
-            // Archers standing still shoot straighter than archers walking.
-            const spread = stance === 'hold' ? BOW_SPREAD_BRACED : BOW_SPREAD;
-            battle.fireArrow(t.x, t.y - 12, engage.x, engage.y, true, dmg, t.d.projSpeed, null, spread);
+            // Archers standing still shoot straighter than archers walking. Plan 029: the
+            // Steady Hands perk tightens the braced grouping further; `battle.bowSpreadBraced`
+            // is BOW_SPREAD_BRACED unless it has been taken.
+            const spread = stance === 'hold' ? battle.bowSpreadBraced : BOW_SPREAD;
+            // The counter rides on the arrow only when it was loosed from a SET line — see
+            // bonusVersus for the measurement that put that gate here.
+            battle.fireArrow(t.x, t.y - 12, engage.x, engage.y, true, dmg, t.d.projSpeed, null, spread,
+              stance === 'hold' ? t.d.bonusVs : null);
             t.blindT = 0;
           }
         } else {
           if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
           t.cd = t.d.cooldown;
           t.lunge = 1;
-          battle.damageEnemy(engage, dmg,
+          battle.damageEnemy(engage, dmg * bonusVersus(battle, t, engage.type, stance === 'hold'),
             Math.cos(t.facing) * 85, Math.sin(t.facing) * 85, 'troop');
         }
       }
@@ -445,8 +529,21 @@ export function updateTroopPhase(battle, dt, h) {
           dirX = battle._steerScratch.x; dirY = battle._steerScratch.y;
         }
         // Phase 4a: terrain zones (road/wood/scrub/ford) scale movement speed.
-        const sp = t.d.speed * (stance === 'charge' ? 1.15 : 1) * clamp(d / 40, 0.5, 1.6) *
-          battle.terrainSpeedAt(t.x, t.y);
+        // `battle.chargeSpeedMul` was a hardcoded 1.15 here before Plan 029; it reads the
+        // shared constant now (the enemy path already did) so the Hammer and Anvil perk can
+        // raise BOTH sides' understanding of what a charge is from one place, and a rallied
+        // squad (Warlord) moves at charge speed for the rally's duration whatever its order.
+        const rushing = stance === 'charge' || t.rallyT > 0;
+        const commanded = t.d.speed * (rushing ? battle.chargeSpeedMul : 1);
+        // The rush latch: set only here, and only while actually CLOSING on the hostile —
+        // the heading guard mirrors the enemy side's (updateEnemyPhase), because a kiting
+        // archer runs at charge speed AWAY from its target and latching him hands a set
+        // line the brace bonus against a body in full retreat, which is exactly what
+        // markRush's contract ("never from a retreat, a kite or a recoil") forbids.
+        // Walking back to a hold anchor is likewise not a charge. Terrain is applied
+        // after the latch, never inside it.
+        if (engage && dirX * (engage.x - t.x) + dirY * (engage.y - t.y) > 0) markRush(t, commanded);
+        const sp = commanded * clamp(d / 40, 0.5, 1.6) * battle.terrainSpeedAt(t.x, t.y);
         t.vx = lerp(t.vx, dirX * sp, 1 - Math.exp(-8 * dt));
         t.vy = lerp(t.vy, dirY * sp, 1 - Math.exp(-8 * dt));
         if (!engage) t.facing = angLerp(t.facing, Math.atan2(dirY, dirX), 1 - Math.exp(-6 * dt));
@@ -492,8 +589,11 @@ export function updateEnemyPhase(battle, dt, h) {
     // Charge exposure, mirroring the troop path exactly: men running at the enemy have
     // their shields down, and it lingers CHARGE_RECOVER seconds after the order changes so
     // a one-tick order flick cannot buy the speed for none of the cost.
+    // The enemy keeps the battle CONSTANT rather than the perk-modified value: a perk is
+    // the player's, and letting one shorten the enemy's own recovery would be a gift.
     if (stance === 'charge') e.exposedT = CHARGE_RECOVER;
     else if (e.exposedT > 0) e.exposedT = Math.max(0, e.exposedT - dt);
+    decayRush(e, dt);
     // wolves earn their name: they hunt the backline (nearest ranged troop)
     let tgt;
     if (e.type === 'wolf') {
@@ -535,12 +635,21 @@ export function updateEnemyPhase(battle, dt, h) {
         } else {
           e.lunge = 1;
           if (d < e.d.range + 16) {
-            // A set line receives a charge, mirroring the player's brace. Deliberately NOT
-            // extended to a slam: BRACE_BONUS on an AoE is a different mechanic from
-            // bracing against one man, and a 1.8x brute slam is a lethality change, which
-            // is exactly what the audit measured and rejected.
-            const closingFast = stance === 'hold' && len(to.vx, to.vy) > BRACE_SPEED;
-            battle.damageFriendly(to, tgt.isHero, e.d.dmg * (closingFast ? BRACE_BONUS : 1), e);
+            // A set line receives a charge, mirroring the player's brace on exactly the
+            // same latch (Plan 029) — for TROOPS. The HERO keeps the pre-029 live-velocity
+            // read: nothing ever writes rushT on him (he takes no orders), and he is the
+            // one body for which the instant read measured reliably — at speed 315 / dash
+            // 760 he is moving faster than BRACE_SPEED whenever he is moving at all, with
+            // none of the braked-in-reach problem the troop measurement found. Dropping
+            // him from the predicate entirely (as the first rebuild did) silently deleted
+            // the 1.8x a holding line has always dealt a hero riding into it.
+            // Deliberately NOT extended to a slam: BRACE_BONUS on an AoE is a different
+            // mechanic from bracing against one man, and a 1.8x brute slam is a lethality
+            // change, which is exactly what the audit measured and rejected. The enemy
+            // uses the CONSTANT bonus, never the player's Set Spears perk value.
+            const braced = stance === 'hold' &&
+              ((to.rushT || 0) > 0 || (tgt.isHero && len(to.vx, to.vy) > BRACE_SPEED)) ? BRACE_BONUS : 1;
+            battle.damageFriendly(to, tgt.isHero, e.d.dmg * braced, e);
             if (!tgt.isHero) { to.vx += Math.cos(e.facing) * 85; to.vy += Math.sin(e.facing) * 85; }
             // Hit and run: a stalking wolf that has bitten breaks off rather than staying
             // in reach of the spear line. Only ever set while its squad is holding, so a
@@ -665,6 +774,12 @@ export function updateEnemyPhase(battle, dt, h) {
             gdx = battle._steerScratch.x; gdy = battle._steerScratch.y;
           }
         }
+        // Plan 029, the rush latch. Only this branch can set it — the kite branch above is
+        // moving AWAY and standGround is not moving at all — and only when the heading
+        // actually points at the target, so a stalking wolf backing off or a recoiling one
+        // breaking away does not count as charging the man it just bit. Terrain is excluded
+        // from the commanded speed: crossing a road is not a charge.
+        if (gd > 0 && gdx * (to.x - e.x) + gdy * (to.y - e.y) > 0) markRush(e, e.d.speed * speedMul);
         e.vx = lerp(e.vx, gdx * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
         e.vy = lerp(e.vy, gdy * (e.d.speed * speedMul * terrainMul), 1 - Math.exp(-6 * dt));
       } else { e.vx *= 0.85; e.vy *= 0.85; }

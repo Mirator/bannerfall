@@ -34,8 +34,16 @@ const FIXTURES = {
     seed: 11,
   },
   // the only fixture with a brute, so the slam AoE that CHARGE exposure interacts with is
-  // actually measured. HOLD wins here through slam avoidance, NOT through bracing: a brute
-  // moves at 55 and can never reach BRACE_SPEED.
+  // actually measured.
+  //
+  // Plan 029 changed what HOLD means here, and the old note ("HOLD wins through slam
+  // avoidance, NOT bracing: a brute moves at 55 and can never reach BRACE_SPEED") is now
+  // wrong in both halves. A brute ORDERED forward by the enemy commander's `commit`
+  // doctrine does latch the rush memory, so a braced line can punish it; and HOLD is also
+  // what arms the archers' anti-brute counter, which is deliberately gated behind steady
+  // aim rather than being free (see bonusVersus in ai-phases.js for the 7.5 points of idle
+  // camp-raid win rate the ungated version handed away). This fixture is therefore the one
+  // that measures whether HOLD is a real answer to a heavy body rather than a slower FOLLOW.
   brute: {
     troops: [...rep('spear', 4), ...rep('archer', 3), ...rep('knight', 1)],
     enemies: [...rep('brute', 1), ...rep('bandit', 3), ...rep('wolf', 2)],
@@ -259,6 +267,20 @@ test.describe('stance balance', () => {
     // a margin of -5.3 +/- 2.8 points AGAINST commanding. This is not a tie and not noise,
     // it is a measured loss, so the annotation stays and the assertion keeps reporting it
     // honestly. See `critiques/encounter-power-comparison.md`.
+    //
+    // Plan 029 (unit identity and progression) is the FOURTH attempt and the closest so
+    // far, and it still does not overturn the finding. It rebuilt the brace so that it
+    // actually fires (measured, the old rule fired on 0-6% of contacts because it read the
+    // target's velocity at the instant of the swing, when a body in spear reach has already
+    // braked) and gave the archer an anti-brute counter gated behind steady aim. Both make
+    // HOLD worth pressing, and the numbers moved accordingly on this exact fixture: over
+    // 120 raids per policy, holdLine went from 35.0% to 51.7% and split from 36.7% to
+    // 45.0%, while idle went from 70.8% to 69.2%. The best deliberate policy is now within
+    // ONE POINT of pressing nothing (69% idle against 68% chargeAll on the run recorded in
+    // `critiques/progression-comparison.md`) where Plan 028 measured a 5.3-point deficit.
+    // One point behind is still behind, `toBeGreaterThan` is still a strict inequality, and
+    // flipping an annotation on a margin inside the harness's own run-to-run drift is the
+    // exact mistake Plan 019 had to retract. The annotation stays.
     test.fail();
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked

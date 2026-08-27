@@ -28,6 +28,7 @@ const EXPECTED_QA_NAMES = [
   'perf_smoke_200_half_second_steps',
   'world_no_party_freezes_at_rivers',
   'enemy_command_squads_orders_and_stall_override',
+  'progression_veterancy_banner_ceiling_and_brace_latch',
 ];
 
 async function waitForQaResult(page) {

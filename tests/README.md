@@ -321,11 +321,21 @@ Run the focused schema coverage with:
 npx playwright test tests/e2e/save-schema.spec.js
 ```
 
-The focused schema suite covers v0/v1/v2 migration (including the version-2 ->
-3 settlements default), current-version round trips, zero-seed preservation,
-battle maximum-HP propagation, malformed fixtures (including malformed
-settlement entries and a party occupying an unknown settlement), and
-save-slot clearing. Run it together with campaign coverage after changing
+The focused schema suite covers v0/v1/v2/v3/v4 migration (including the version-2 ->
+3 settlements default and the version-4 -> 5 progression default), current-version
+round trips, zero-seed preservation, battle maximum-HP propagation, malformed fixtures
+(including malformed settlement entries and a party occupying an unknown settlement), and
+save-slot clearing.
+
+Three Plan 029 (v5) properties have their own fixtures, because each is a rule rather than
+a shape: a v4 campaign migrates with empty progression and unblooded troops (and its
+already-banked captures are re-derived into the perk choices it never had the chance to
+make); a pre-v5 shape carrying `perks`, `banner` or a troop `vet` is REJECTED, matching how
+a pre-v4 party carrying `raid` is; and a v4 knight army that no longer fits the new slot
+arithmetic is GRANDFATHERED — its cap is widened rather than the save refused, because
+deleting a legitimate campaign for a rule that postdates it is the worse failure. A
+veteran's persisted hit points are bounded by his RANKED maximum, so
+`{ type: 'spear', vet: 3, hp: 112 }` must load and `hp: 113` must not. Run it together with campaign coverage after changing
 `src/save.js`, `src/world.js`, or `src/battle.js`:
 
 ```text
@@ -574,7 +584,10 @@ errors, weaken assertions, or raise performance budgets to make CI green.
 | Retreat restores the engaged party minus actual dead enemy types | browser E2E | pass |
 | Hard-mode defeat retains exactly one fallback squire | browser E2E | pass |
 | Final stronghold victory enters the victory scene and clears the run save | browser E2E | pass |
-| v3 -> v4 migration, malformed v4 rejection, reload idempotency | browser E2E | pass (`tests/e2e/save-schema.spec.js`) |
+| v3 -> v4 and v4 -> v5 migration, malformed rejection, reload idempotency | browser E2E | pass (`tests/e2e/save-schema.spec.js`) |
+| Veterancy earned in a won battle survives the save write and a reload | browser E2E | pass (`tests/e2e/campaign-persistence.spec.js`) |
+| The banner ceiling stops veterancy accruing, and raising it lets a man resume | browser E2E | pass (`tests/e2e/campaign-persistence.spec.js`) |
+| Perk choice modal, deferral without loss, tier gates, banner gold sink | browser E2E | pass (`tests/e2e/world-screens.spec.js`) |
 | Regional model (power ladder, modifiers, specializations, objective mapping) | Node-level E2E | pass (`tests/e2e/region.spec.js`) |
 | Objective placement and every terminal battle path | browser E2E | pass (`tests/e2e/battle-objectives.spec.js`) |
 | Capture/occupation/reclaim, specialization effects, raids, defenses, power states, summary | browser E2E | pass (`tests/e2e/regional-campaign.spec.js`) |
