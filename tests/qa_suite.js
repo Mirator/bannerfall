@@ -1,5 +1,6 @@
 // Bannerfall QA regression suite — browser module against window.game / window.__g.
-import { BALANCE, HERO, UNIT_TYPES, WORLD } from '../src/data.js';
+import { BALANCE, HERO, UNIT_TYPES, WORLD, playerStrength, rankOf } from '../src/data.js';
+import { awardVeterancy } from '../src/progression.js';
 //
 // It preserves the historical window.runQaSuite / window.__qaResult browser
 // globals while remaining importable by the automated Playwright runner.
@@ -41,6 +42,19 @@ function runQaSuiteImpl() {
     }
   }
   function assert(cond, msg) { if (!cond) throw new Error(msg); }
+
+  // Plan 029 helpers, named so the progression record reads as prose rather than as
+  // repeated calls into two modules.
+  const DATA = { playerStrength };
+  const RANKS = { rankOf };
+  // Award `n` victories to a body under a given banner stage and return its final `vet`.
+  // The ceiling is enforced where the number is WRITTEN, so this is the only honest way
+  // to ask "how far can this banner take a man".
+  const awardMany = (troop, bannerStage, n) => {
+    let vet = troop.vet || 0;
+    for (let i = 0; i < n; i++) vet = awardVeterancy(vet, bannerStage);
+    return vet;
+  };
 
   const COST = Object.fromEntries(Object.entries(UNIT_TYPES).map(([type, unit]) => [type, unit.cost]));
   const HEAL_COST = BALANCE.healCost;
@@ -439,6 +453,29 @@ function runQaSuiteImpl() {
     assert(save.troops.length === 1, 'recruit with insufficient gold should not add a troop');
     assert(G.scene.msg === 'Not enough gold', 'expected gold-short refusal message, got: ' + G.scene.msg);
 
+    // Plan 029: the cap counts PLACES IN THE COLUMN, and a knight takes two. This is the
+    // audit's fix for "army composition is solved: knights only" — the knight was strictly
+    // best per slot, so it is charged as what it is worth. With one place left in the
+    // column a spearman still fits and a knight does not, and the refusal says which.
+    save.armyCap = ARMY_CAP_BASE;
+    save.gold = 1000;
+    save.troops = Array.from({ length: ARMY_CAP_BASE - 1 }, () => ({ type: 'spear' }));
+    const goldBeforeKnight = save.gold;
+    G.scene.recruit('knight');
+    assert(save.gold === goldBeforeKnight, 'a knight with one place left should not be charged');
+    assert(save.troops.length === ARMY_CAP_BASE - 1, 'a knight should not fit in one place');
+    assert(/2 places in the column/.test(G.scene.msg || ''),
+      'expected a slot-cost refusal naming the knight, got: ' + G.scene.msg);
+    G.scene.recruit('spear');
+    assert(save.troops.length === ARMY_CAP_BASE, 'a spearman should still fit in the last place');
+    // ...and two free places take exactly one knight, not two.
+    save.troops = Array.from({ length: ARMY_CAP_BASE - 2 }, () => ({ type: 'spear' }));
+    G.scene.recruit('knight');
+    assert(save.troops.length === ARMY_CAP_BASE - 1, 'a knight should fit in two free places');
+    G.scene.recruit('spear');
+    assert(save.troops.length === ARMY_CAP_BASE - 1,
+      'the column is full at ' + ARMY_CAP_BASE + ' places: ' + (ARMY_CAP_BASE - 2) + ' spears + one knight');
+
     // interactive-path parity: real KeyQ handler near a settlement
     G.scene.hero.x = SETTLEMENT_ASHFORD.x; G.scene.hero.y = SETTLEMENT_ASHFORD.y;
     save.gold = 100; save.troops = [];
@@ -447,7 +484,8 @@ function runQaSuiteImpl() {
     assert(save.gold === 100 - SETTLEMENT_ASHFORD.spearCost,
       'interactive KeyQ recruit at Ashford expected gold ' + (100 - SETTLEMENT_ASHFORD.spearCost) + ', got ' + save.gold);
     assert(save.troops.length === 1, 'interactive KeyQ recruit expected 1 troop, got ' + save.troops.length);
-    return 'recruit cost/cap/gold refusals correct; interactive KeyQ path matches direct recruit() call';
+    return 'recruit cost/cap/gold refusals correct; a knight costs two places in the column; ' +
+      'interactive KeyQ path matches direct recruit() call';
   });
 
   // ======================================================================
@@ -848,9 +886,16 @@ function runQaSuiteImpl() {
     scene.parties.length = 0;
     scene.hero.x = 200; scene.hero.y = 200; // far from every settlement, and from the fixture party
     scene.grace = 0;
+    // Plan 029: the comp is filled to a WEIGHT bar rather than to a body count derived
+    // from one. `Math.ceil(mine * 1.6)` bandits happened to clear the 1.3x threshold at
+    // the pre-029 tuning and stopped clearing it the moment the spearman was retuned —
+    // a fixture that encodes a stale damage ratio instead of the property it is testing.
+    // The property is unchanged: the party must exceed the party AI's own outmatch bar.
+    const comp = [];
+    while (comp.length < 40 && scene.strength(comp) <= mine * 1.45) comp.push('bandit');
     const party = {
       camp: 'c1', x: target.x, y: target.y, vx: 0, vy: 0, facing: 0, bob: 0,
-      comp: Array.from({ length: Math.ceil(mine * 1.6) }, () => 'bandit'),
+      comp,
       home: { x: CAMP_C1.x, y: CAMP_C1.y }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
       occupying: null, raid: null, mood: 'chase', chaseT: 25, chaseHoldT: BALANCE.raidBreakOffT,
     };
@@ -1149,6 +1194,106 @@ function runQaSuiteImpl() {
     }
     return 'enemy squads start neutral, stay silent through deploy, diverge under command ' +
       'identically across two runs, and collapse to the press under bloodlust';
+  });
+
+  // ======================================================================
+  // 27. Plan 029: veterancy, the banner ceiling, and the brace that actually fires
+  // ======================================================================
+  record('progression_veterancy_banner_ceiling_and_brace_latch', () => {
+    // ---- veterancy is battles WON and walked out of, and only that.
+    g.scenario('world');
+    let save = G.scene.save;
+    save.troops = [{ type: 'spear' }, { type: 'spear' }];
+    save.banner = 0;
+    const before = save.troops.map(t => t.vet || 0);
+    assert(before.every(v => v === 0), 'a fresh warband must start unblooded');
+    G.scene.startBattle(['bandit'], 'VET AWARD CHECK', null, 'road');
+    assert(g.scene() === 'battle', 'startBattle did not enter a battle');
+    G.scene.endBattle(true);
+    g.step(3);
+    assert(g.scene() === 'world', 'did not return to world after the victory');
+    save = G.scene.save;
+    assert(save.troops.every(t => t.vet === 1),
+      'every survivor of a won battle earns one battle of experience, got ' +
+      JSON.stringify(save.troops.map(t => t.vet)));
+
+    // A retreat does not: "ride in, ride out" must not be a training montage.
+    const vetBeforeRetreat = save.troops.map(t => t.vet || 0);
+    G.scene.startBattle(['bandit'], 'VET RETREAT CHECK', null, 'road');
+    G.scene.endBattle(false, true);
+    g.step(3);
+    save = G.scene.save;
+    assert(JSON.stringify(save.troops.map(t => t.vet || 0)) === JSON.stringify(vetBeforeRetreat),
+      'a retreat awarded veterancy: ' + JSON.stringify(save.troops.map(t => t.vet)));
+
+    // ---- the banner is a CEILING, enforced where the number is written.
+    // At stage 0 a man may reach Veteran and no further, so `vet` stops accruing at the
+    // last value that still maps to rank 1 rather than being clamped when it is read —
+    // which is what keeps playerStrength(troops) a one-argument function.
+    const capped = awardMany({ type: 'spear', vet: 0 }, 0, 30);
+    assert(RANKS.rankOf(capped) === 1,
+      'at banner stage 0 a man must cap at Veteran, reached rank ' + RANKS.rankOf(capped));
+    const raised = awardMany({ type: 'spear', vet: capped }, 1, 30);
+    assert(RANKS.rankOf(raised) === 2,
+      'raising the banner one stage must let a capped man reach Elite, reached rank ' + RANKS.rankOf(raised));
+    assert(raised > capped, 'raising the banner did not let a capped man resume earning');
+
+    // ---- a rank is worth something, and the map PRICES it. Tier honesty (Plan 028)
+    // depends on the generator reading a warband's real strength, not its base types.
+    const plain = DATA.playerStrength([{ type: 'spear' }, { type: 'spear' }]);
+    const blooded = DATA.playerStrength([{ type: 'spear', vet: 12 }, { type: 'spear', vet: 12 }]);
+    assert(blooded > plain * 1.05,
+      'playerStrength ignores veterancy: ' + plain.toFixed(3) + ' vs ' + blooded.toFixed(3));
+
+    // ---- the brace fires on a LATCH over COMMANDED locomotion, not on velocity at the
+    // swing. Plan 019's rule read the target's speed at the moment of the blow; measured
+    // (critiques/progression-baseline.md), a body inside spear reach has already braked —
+    // the median CLOSING speed is negative for every type — so it fired on 0-6% of
+    // contacts and 0% for bandits and brutes. Latching the fastest recent VELOCITY does
+    // not fix it either: knockback (+= cos * 85) dominates that distribution.
+    //
+    // Both clauses of the replacement are driven directly, by pinning the enemy stance so
+    // the property under test is the predicate rather than the commander's timing.
+    // Both sides are collected, because the predicate is deliberately ONE function used by
+    // both (Plan 027's symmetry rule) — the player's knights are what an enemy line braces
+    // against, exactly as the enemy's brutes are what the player's braces against.
+    const latchRun = (stance) => {
+      g.scenario('battle_big');
+      const b = G.scene;
+      let guardTicks = 0;
+      while (b.state === 'intro' && guardTicks++ < 50) g.step(0.1);
+      b.deployT = 0;
+      const seen = Object.create(null);
+      // Long enough for the two lines to actually MEET on FOLLOW: the hero is idle, so the
+      // warband holds formation around him and it is the enemy that closes the ground. A
+      // four-second window measured the knight still 563 units out and proved nothing.
+      for (let i = 0; i < 140 && b.state !== 'end'; i++) {
+        for (const type of Object.keys(b.enemySquads)) b.enemySquads[type].stance = stance;
+        b.issueCommand(stance);
+        g.step(0.1);
+        for (const e of b.enemies) if (e.rushT > 0) seen['enemy_' + e.type] = true;
+        for (const t of b.troops) if (t.rushT > 0) seen['troop_' + t.type] = true;
+      }
+      return seen;
+    };
+    // Walking: only an inherently fast body qualifies. A knight is 175 and a wolf 158; a
+    // bandit at 92, a brute at 55 and a spearman at 105 are walking into the other line,
+    // and a set line is entitled to nothing extra for that.
+    const walking = latchRun('follow');
+    assert(walking.troop_knight, 'a knight closing at 175 never latched the rush memory on FOLLOW');
+    assert(!walking.troop_spear, 'a WALKING spearman (105) must not read as a charge');
+    assert(!walking.enemy_bandit, 'a WALKING bandit (92) must not read as a charge');
+    assert(!walking.enemy_brute, 'a WALKING brute (55) must not read as a charge');
+    // Ordered forward: an order is what finally makes a bandit, a brute and a spearman
+    // something a braced line is entitled to punish. This is the specific claim Plan 019
+    // had to retract, and Plan 029 re-measured before making it again.
+    const charging = latchRun('charge');
+    assert(charging.enemy_bandit, 'a CHARGING bandit never latched the rush memory');
+    assert(charging.enemy_brute, 'a CHARGING brute never latched the rush memory');
+    assert(charging.troop_spear, 'a CHARGING spearman never latched the rush memory');
+    return 'veterancy awards on victory only, the banner caps and then releases it, ' +
+      'playerStrength prices a rank, and the brace latch separates a walk from a charge ' +
+      'for every enemy body';
   });
 
   const passed = results.filter(r => r.ok).length;

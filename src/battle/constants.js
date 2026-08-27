@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r1fcd6454285e';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r0a1bd3998320';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -19,16 +19,57 @@ export const SQUAD_LABELS = Object.freeze({ spear: 'SPEARS', archer: 'BOWS', kni
 // squad for the commander to address, for the same reason SQUAD_TYPES above holds.
 export const ENEMY_SQUAD_TYPES = Object.freeze(Object.keys(ENEMY_TYPES));
 
-// Stance trade-offs. A braced melee line hits harder against anything closing faster than
-// BRACE_SPEED, and a standing bow line shoots tighter than a walking one. See plans/019 for
-// measured effects.
+// Stance trade-offs. A braced melee line hits harder against anything that CAME IN AT A
+// RUSH, and a standing bow line shoots tighter than a walking one. See plans/019 for the
+// original mechanic and plans/029 for the rebuild.
 //
-// BRACE_SPEED only ever catches wolves (158). Bandits are 92, raiders 82 and brutes 55, so
-// nothing else in the roster can trigger it: this is a wolf counter, not a general
-// anti-charge rule. HOLD does still beat CHARGE against brutes, but through slam avoidance
-// and charge exposure rather than bracing. Do not describe it as a brute counter.
-export const BRACE_SPEED = 120;
+// ---- Why the brace reads a latch and not a speed (plans/029, measured)
+// Until Plan 029 the test was `len(target.vx, target.vy) > BRACE_SPEED` evaluated at the
+// instant of the swing, and it essentially never fired. Measured over 24 fights on two
+// fixtures (critiques/progression-baseline.md), sampling every enemy inside a holding
+// melee troop's strike reach: the MEDIAN closing speed is NEGATIVE for every body on both
+// fixtures — by the time anything is in spear reach it has braked to wind up its own blow
+// and separation is pushing it back out. The bonus fired on 0.1% of bandit contacts, 0% of
+// brute contacts and 2.5-6.1% of wolf contacts. That is not a threshold that needs
+// lowering; it is the wrong instant.
+//
+// Latching the fastest speed seen in the last second does not fix it either, and that was
+// measured before it was designed in: the latched peak clusters around 72-79 for EVERY
+// body, brutes (base speed 55) included, because the `+= cos * 85` knockback impulse every
+// landed hit applies is larger than most bodies' locomotion. A rule keyed anywhere in that
+// band would mean "I hit it, therefore it charged me".
+//
+// So the latch is on COMMANDED LOCOMOTION WHILE APPROACHING A HOSTILE — the speed the AI's
+// movement branch is steering toward, set only when the unit actually has an approach goal.
+// Knockback cannot enter it, because knockback is not a commanded speed.
+//
+// ---- What counts as a rush: two clauses, because bodies have different natural speeds
+//   * at or above BRACE_SPEED — an inherently fast body. 130 sits above every walking body
+//     in the game (bandit 92, raider 82, brute 55, spear 105, archer 95) and below the two
+//     that are cavalry in all but name: the wolf (158) and the knight (175).
+//   * or above BRACE_CHARGE_MUL times its OWN walking speed — a body that was ORDERED
+//     forward. `charge` is x1.15 and bloodlust x1.3, so both qualify and a walk never does.
+// Terrain multipliers are deliberately excluded from the comparison: a bandit strolling
+// down a road (92 x 1.14 = 105) is not charging anybody.
+//
+// The rule is one predicate used by BOTH sides, which is Plan 027's symmetry requirement.
+// It therefore catches, for the player's braced line: wolves always, and bandits, raiders
+// and brutes once the enemy commander orders `commit` or the stall clock arms bloodlust.
+// And for the enemy's: the player's knights always, and his spears and bows only under a
+// CHARGE order — so charging into a set line is a real trade rather than a free tempo gain.
+export const BRACE_SPEED = 130;
+export const BRACE_CHARGE_MUL = 1.10;
+// How long a rush is remembered after the body stops. Long enough that a spearman's 1.05s
+// cooldown still lands the receiving blow on the man who ran at him; short enough that a
+// body standing in the scrum trading hits stops counting as a charge after the first
+// exchange. It is the receiving blow that is braced, never a permanent buff — which is
+// also why a hit-and-run wolf keeps earning it and a brute in a grind does not.
+export const BRACE_MEMORY = 1.6;
 export const BRACE_BONUS = 1.8;
+// How far from the hero the Warlord perk's dash rally reaches (plans/029). Wider than the
+// hero's own swing (86) because a rally is an order, not a blow, and narrower than the
+// FOLLOW formation's own spread so it rewards riding INTO the line rather than past it.
+export const RALLY_R = 240;
 export const BOW_SPREAD = 0.12;
 export const BOW_SPREAD_BRACED = 0.05;
 // Men running at the enemy have their shields down and their formation open. This is what

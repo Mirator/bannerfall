@@ -113,14 +113,18 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
     const stored = JSON.parse(localStorage.getItem('bf_save_test'));
     return {
       spec: w.save.settlements.find(s => s.id === 'ashford').spec,
-      screenOpen: !!w.screen,
+      screenKind: w.screen && w.screen.kind,
       troopCount: w.save.troops.length,
       goldEarned: w.save.stats.goldEarned,
       persistedSpec: stored.settlements.find(s => s.id === 'ashford').spec,
     };
   });
   expect(chosen.spec).toBe('barracks');
-  expect(chosen.screenOpen).toBe(false);
+  // Plan 029: committing the specialization closes the SPEC screen, and the perk choice
+  // that same capture earned opens behind it on the next tick. One modal at a time, in a
+  // queue — the assertion is that the spec choice is done, not that nothing follows it.
+  expect(chosen.screenKind).not.toBe('spec');
+  expect(chosen.screenKind).toBe('perk');
   expect(chosen.troopCount).toBe(before.troops + Math.min(2, before.cap - before.troops));
   expect(chosen.goldEarned).toBe(0); // barracks grants men, not gold
   expect(chosen.persistedSpec).toBe('barracks');
@@ -159,11 +163,13 @@ test('dismissing the spec choice does not lose it — G at the gates reopens it'
     const w = window.__g.scene;
     return {
       spec: w.save.settlements.find(s => s.id === 'ashford').spec,
-      screenOpen: !!w.screen,
+      screenKind: w.screen && w.screen.kind,
     };
   });
   expect(committed.spec).toBe('barracks');
-  expect(committed.screenOpen).toBe(false);
+  // Plan 029: the perk choice the capture earned queues behind the spec screen and opens
+  // the tick it closes — the exact expected state, not merely "no longer the spec screen".
+  expect(committed.screenKind).toBe('perk');
   assertNoRuntimeErrors(runtimeErrors);
 });
 
@@ -206,6 +212,13 @@ test('capturing a second settlement while a first choice is still outstanding do
   expect(bothPending.captures).toBe(2);
 
   await tickAction(page, 'confirm'); // commit brindle's choice
+  // Plan 029: two captures have earned two perk choices, which queue behind the spec
+  // modals. Take them both so the world is modal-free before the reopen is tested — the
+  // property under test is that ashford's SPEC choice survived, not the perk ordering.
+  await tickAction(page, 'confirm');
+  await tickAction(page, 'confirm');
+  expect(await page.evaluate(() => window.__g.scene.screen && window.__g.scene.screen.kind))
+    .toBe(null);
 
   // Return to ashford's gates: G still reopens its own, still-outstanding choice.
   await page.evaluate(({ x, y }) => {
@@ -307,6 +320,11 @@ test('an occupier suspends a holding and winning it back restores service withou
     rec.spec = 'barracks';
     rec.occupied = true; // the occupier's seizure, as a loaded save would carry it
     w.save.stats.captures = 1;
+    // Plan 029: a v5 campaign with one capture has already been OFFERED its perk, so the
+    // fixture takes one. Without it the derived perk count (captures 1 > perks 0) would
+    // correctly raise a choice on the next World and the test would be measuring that
+    // instead of the reclaim it is about.
+    w.save.perks = ['setSpears'];
     w.parties.length = 0;
     w.parties.push({
       camp: 'c1', x, y, vx: 0, vy: 0, facing: 0, bob: 0,
@@ -370,7 +388,7 @@ test('an occupier suspends a holding and winning it back restores service withou
       scene: window.__g.sceneName,
       owner: rec.owner, spec: rec.spec, occupied: rec.occupied,
       captures: w.save.stats.captures,
-      screenOpen: !!w.screen,
+      screenKind: w.screen && w.screen.kind,
       cost: w.costAt({ id: 'ashford' }, 'spear'),
     };
   });
@@ -379,7 +397,9 @@ test('an occupier suspends a holding and winning it back restores service withou
   expect(reclaimed.spec).toBe('barracks'); // the permanent choice survived
   expect(reclaimed.occupied).toBe(false);
   expect(reclaimed.captures).toBe(1); // a reclaim never re-counts
-  expect(reclaimed.screenOpen).toBe(false); // and never re-opens the spec choice
+  // A reclaim re-opens NEITHER choice: the spec is permanent, and Plan 029's perk points
+  // are derived from stats.captures, which a reclaim deliberately does not increment.
+  expect(reclaimed.screenKind).toBe(null);
   expect(reclaimed.cost).toBe(SPECIALIZATIONS.barracks.effect.spearCost); // service resumed
   assertNoRuntimeErrors(runtimeErrors);
 });

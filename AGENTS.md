@@ -71,6 +71,7 @@ Which focused coverage a change owes, beyond the required `npm test` gate:
 | any persisted field, migration or validation | `npx playwright test tests/e2e/save-schema.spec.js` |
 | persistence, battle result, save, party AI, strongholds | `npx playwright test tests/e2e/campaign-persistence.spec.js` |
 | stance constants in `src/battle/constants.js` | `npx playwright test tests/e2e/stance-balance.spec.js` |
+| `src/progression.js`, `UNIT_TYPES`, the army-cap rule | `npx playwright test tests/e2e/world-screens.spec.js tests/e2e/qa.spec.js`, then re-fit the power metric |
 | the regional model in `src/region.js` | `npx playwright test tests/e2e/region.spec.js` |
 | battle objectives (`src/battle/objectives.js`, terminal paths) | `npx playwright test tests/e2e/battle-objectives.spec.js` |
 | capture/claim, specialization, raids, defenses, stronghold power | `npx playwright test tests/e2e/regional-campaign.spec.js` |
@@ -219,6 +220,26 @@ stays out of the save. Stance trade-offs live in named constants in
 `src/battle/constants.js` (brace bonus, bow spread, charge exposure, no-death stall) —
 tune those, not scattered literals, and re-run `tests/e2e/stance-balance.spec.js`. The
 phases that read them are in `src/battle/ai-phases.js`.
+
+**The brace reads a latch over COMMANDED locomotion, never a velocity (Plan 029).** This
+cost two measurements and both are load-bearing:
+
+- Reading the target's speed at the instant of the swing does not work, and the pre-029
+  rule did exactly that. Measured over 24 fights on two fixtures, the MEDIAN closing speed
+  of an enemy inside a holding spearman's strike reach is NEGATIVE for every body type — it
+  has already braked to wind up its own blow and separation is pushing it back out. The
+  bonus fired on 0.1% of bandit contacts and 0% of brute contacts.
+- Latching the fastest recent VELOCITY does not work either. The latched peak clusters
+  around 72-79 for every body, brutes (base speed 55) included, because the `+= cos * 85`
+  knockback impulse every landed hit applies is larger than most bodies' locomotion. Any
+  rule keyed in that band means "I hit it, therefore it charged me".
+
+So `markRush(unit, commanded)` in `ai-phases.js` is the single writer and it is called ONLY
+from the branch that is steering toward a hostile, with the commanded speed BEFORE terrain
+scaling. `BRACE_SPEED` (130) is the "inherently fast body" clause — wolf 158, knight 175 —
+and `BRACE_CHARGE_MUL` (1.10) is the "was ordered forward" clause. Terrain is excluded on
+purpose: a bandit on a road (92 x 1.14) is not charging anybody. One predicate, both sides,
+per Plan 027's symmetry rule. Do not re-add an instantaneous-speed test.
 
 Enemy command (Plan 027) mirrors that structure on the other side. `Battle.enemySquads`
 holds one squad per `ENEMY_TYPES` key with the same three stance names, membership derived
@@ -409,14 +430,35 @@ a reload/Continue assertion.
 
 Any save-field change must deliberately increment or migrate the schema in
 `src/save.js`, update both fresh-save defaults and validation, and add legacy,
-current, and malformed fixtures. The current save schema is version 4;
-unversioned (v0), version-1, version-2, and version-3 saves migrate
+current, and malformed fixtures. The current save schema is version 5;
+unversioned (v0), version-1, version-2, version-3 and version-4 saves migrate
 deterministically, including deriving a missing legacy roaming-party `home`
 from its canonical camp and defaulting `save.settlements` to every settlement
 unoccupied and neutral (v0-v2) or carrying its v3 owner forward (v3). Current
 version parties must have a finite valid `home`, settlement records must carry
 their `owner` (and `spec` once chosen — the choice is permanent for the run),
 and accepted saves must be safe for immediate world/battle construction.
+
+`buildV1` takes the DECLARED version, not a single `legacy` boolean, and asks three
+separate questions off it — `legacy` (older than current at all: missing fields take
+defaults), `preV4` (settlement ownership and party raid intent did not exist yet) and
+`preV5` (perks, the banner and troop veterancy did not exist yet). Plan 029 had to split
+these: version 4 is a legacy shape now and legitimately carries the ownership and raid
+fields that v3 must be refused for, so one boolean would refuse every real v4 campaign.
+Keep that split, and keep the established refusal pattern — a shape that predates a field
+and carries it anyway is REJECTED, never silently migrated.
+
+Two v5 rules that are easy to get wrong:
+
+- **A troop's hp bound is his RANKED maximum**, `troopMaxHp(troop)`, which the validator
+  and `Battle.spawnTroop` both read. Two formulas here means a saved veteran that fails to
+  load.
+- **The v4 army-cap migration GRANDFATHERS rather than refuses.** A legitimate v4 campaign
+  could hold twelve knights inside a cap of twelve; under the new slot arithmetic that is
+  24 places, and refusing the save would delete a real campaign for a rule that did not
+  exist when it was written. The cap is widened to fit what the player already has, and the
+  slot cost then binds every future recruit. A CURRENT save whose cap does not cover its own
+  column is malformed, not old, and is refused.
 Preserve `bf_save`/`bf_save_test` isolation.
 Run `npx playwright test tests/e2e/save-schema.spec.js` and
 `npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
@@ -549,7 +591,54 @@ Five things about it are load-bearing and each cost a measurement:
 
 Retuning any of `UNIT_TYPES`, `ENEMY_TYPES` or `HERO` invalidates the fit. It
 does not invalidate the FORMULA — the square law and the cadence rule stand —
-but the multipliers are empirical and must be re-measured.
+but the multipliers are empirical and must be re-measured. Plan 029 retuned
+`UNIT_TYPES` and did exactly that; `critiques/progression-comparison.md` carries the
+re-fit and the prediction quality before and after.
+
+**A troop's RANK is part of its fighting weight (Plan 029).** `playerStrength` reads
+`t.vet` and scales that body's dps and hp by the rank multiplier, which is the same shape
+`POWER_EFFICIENCY` uses, so a veteran scales his contribution linearly and the metric needs
+no second concept. This is not decoration: without it the generator would keep sizing
+fights against a warband's BASE types while the player's real warband outgrew them, and
+tier honesty — Plan 028's entire deliverable — would rot silently across a run. The
+`vetMid`/`vetLate` rosters in `scripts/zz-tier-calibrate.mjs` exist to catch that
+regression. `playerStrength(troops)` deliberately keeps its one-argument signature: the
+banner's rank ceiling is enforced where `vet` is WRITTEN (`awardVeterancy`), never where it
+is read, so no caller has to be handed the banner stage to ask how strong a warband is.
+
+## Progression (Plan 029)
+
+`src/progression.js` is the pure, data-driven home for the hero's PERKS, the BANNER stage
+and the milestone arithmetic — the same contract `region.js` holds, imports `data.js` only.
+The veteran rank TABLE itself lives in `data.js`, beside the rest of the balance tuning,
+because `playerStrength` has to price it and `data.js` is the module that imports nothing.
+
+Four rules constrain changes here:
+
+- **Perk points are DERIVED, never counted.** `perkPointsEarned(save)` is razed linked camps
+  plus `stats.captures`, compared against `save.perks.length`. That is what makes the award
+  idempotent across a reload, a defeat, a re-entry and a mid-battle refresh — there are four
+  seams that can raise a milestone and an event counter would double-award or lose one at
+  every single one. Do not add a `perkPoints` field to the save.
+- **Every perk must strengthen DECIDING, not idling.** Each of the nine either amplifies an
+  order's effect, removes an order's cost, or rewards an input the player has to press. A
+  flat aura on a troop standing in the blob would reward exactly the behaviour Plans 027 and
+  028 spent two slices measuring as already too strong.
+- **Perk effects are folded ONCE, in the `Battle` constructor.** `battle.braceBonus`,
+  `bowSpreadBraced`, `chargeExposure`, `chargeRecover`, `chargeSpeedMul`, `bruteBonus`,
+  `rally` and `rankEarlier` each default to the shipped constant, so a phase reads one
+  number whether or not a perk is taken and `progression.js` stays off the per-tick import
+  graph. The ENEMY always reads the raw constants: a perk is the player's, and letting one
+  shorten the enemy's recovery or soften its charges would be a gift.
+- **The banner buys a CEILING, not a bonus.** Each stage raises the highest rank a troop may
+  reach. Gold buys the room; keeping men alive across fights is what fills it. That is what
+  puts attrition and gold on the same axis, and it is the version of "banner upgrades" that
+  does not become the aura the rule above forbids.
+
+Army capacity counts PLACES IN THE COLUMN, not bodies: `UNIT_TYPES[type].slots` (knight 2)
+through the single `armySlots(troops)` in `data.js`. Every cap read goes through it — the
+recruit refusal, the HUD, the save validator, the specialization's troop grant. Counting
+`troops.length` against `armyCap` anywhere is the bug that function exists to prevent.
 
 Regional conquest (Milestone 025): the campaign's spine is now one region with
 a named stronghold (Wolfsjaw). `src/region.js` is the single data-driven home

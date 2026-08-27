@@ -2,7 +2,7 @@
 // on the field. Presentation only — every function takes the Battle instance, reads it,
 // and draws. Nothing here mutates simulation state (see AGENTS.md: presentation may read
 // simulation, never the reverse).
-import { TAU, rrect, shade } from '../engine.js?v=r1fcd6454285e';
+import { TAU, rrect, shade } from '../engine.js?v=r0a1bd3998320';
 
 // Stance glyphs, shared by every squad row: an arrow to follow, crossed swords to
 // charge, a heater shield to hold. Drawn at native scale so they read at 1x.
@@ -215,6 +215,22 @@ export function drawTroop(battle, ctx, t) {
     ctx.beginPath(); ctx.moveTo(t.x + 8, t.y - 18); ctx.lineTo(t.x + 8, t.y - 42); ctx.stroke();
     ctx.fillStyle = P.friend;
     ctx.beginPath(); ctx.moveTo(t.x + 8, t.y - 42); ctx.lineTo(t.x + 21, t.y - 37); ctx.lineTo(t.x + 8, t.y - 32); ctx.closePath(); ctx.fill();
+  }
+  // Plan 029: veteran chevrons, one per rank, above the man's head. Losing a body has to
+  // read as losing SOMETHING, and it cannot if every body looks identical. Drawn in the
+  // hero colour so a rank chevron is never mistaken for the pale squad pennant, and small
+  // enough that a full line of Elites does not become a hedge of marks.
+  if (t.rank > 0) {
+    const top = t.d.mounted ? -34 : -26;
+    ctx.strokeStyle = P.hero; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i < t.rank; i++) {
+      const cy = t.y + top - i * 4;
+      ctx.moveTo(t.x - 4, cy);
+      ctx.lineTo(t.x, cy - 3);
+      ctx.lineTo(t.x + 4, cy);
+    }
+    ctx.stroke();
   }
 }
 

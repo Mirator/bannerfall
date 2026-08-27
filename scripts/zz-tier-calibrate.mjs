@@ -21,10 +21,21 @@ const label = argOf('--label', 'cal');
 const DT = 1 / 60;
 const BASE = 'http://127.0.0.1:8474';
 
+// A roster entry is a type string, or [type, vet] for a blooded body (Plan 029). The
+// veteran rosters are the whole reason this harness had to be re-run: if the generator's
+// player-power reading did not account for a troop's actual RANK it would keep sizing
+// fights against base types while the player's real warband outgrew them, and Plan 028's
+// tier honesty would rot silently across a run. `vetMid` is the same eight bodies as `mid`
+// with every man a Veteran; `vetLate` is `late` under a stage-2 banner with Elites and a
+// Champion in it — roughly what a campaign looks like by the stronghold assault.
 const ROSTERS = {
   fresh: ['spear', 'spear', 'spear', 'spear'],
   mid: ['spear', 'spear', 'spear', 'spear', 'archer', 'archer', 'archer', 'knight'],
   late: ['spear', 'spear', 'spear', 'spear', 'archer', 'archer', 'archer', 'knight', 'knight'],
+  vetMid: [['spear', 3], ['spear', 3], ['spear', 3], ['spear', 3],
+    ['archer', 3], ['archer', 3], ['archer', 3], ['knight', 3]],
+  vetLate: [['spear', 12], ['spear', 12], ['spear', 7], ['spear', 7],
+    ['archer', 7], ['archer', 7], ['archer', 7], ['knight', 12], ['knight', 7]],
 };
 const BANDS = [0.55, 0.70, 0.80, 0.90, 1.00, 1.10, 1.15, 1.30, 1.50, 1.70];
 
@@ -42,7 +53,8 @@ const calibration = await page.evaluate(async ({ rosters, bands, seeds, dt }) =>
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const out = [];
   for (const [name, types] of Object.entries(rosters)) {
-    const troops = types.map(type => ({ type }));
+    const troops = types.map(entry => (Array.isArray(entry)
+      ? { type: entry[0], vet: entry[1] } : { type: entry }));
     const mine = playerStrength(troops);
     for (const band of bands) {
       let wins = 0, resolved = 0, lost = 0, secs = 0, ratioSum = 0, bodies = 0;
@@ -59,7 +71,11 @@ const calibration = await page.evaluate(async ({ rosters, bands, seeds, dt }) =>
         game.update = () => {};
         try {
           game.startBattle({
-            troops: troops.map(t => ({ type: t.type })),
+            // `vet` MUST be forwarded. Dropping it sized every fight against a ranked
+            // warband and then fielded raw recruits in it, which read as the rank
+            // multiplier being worth nothing at all — a harness bug that looked exactly
+            // like a balance finding.
+            troops: troops.map(t => ({ type: t.type, vet: t.vet || 0 })),
             enemies: comp.map(type => ({ type })),
             seed: s * 101 + Math.round(band * 100),
             title: 'TIER CALIBRATION', arena: 'road', biome: 'rose',

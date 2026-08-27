@@ -14,19 +14,26 @@
 // has to come from the real thing. The logistic intercept is pinned at zero throughout, so
 // a fitted ratio of 1.00 is a measured coin flip rather than something calibrated later.
 //
-// Usage: node scripts/zz-power-fit3.mjs [--rolledWeight 4] [--holdout]
+// Usage: node scripts/zz-power-fit3.mjs [--rolledWeight 4] [--grid FILE] [--rolled FILE]
+//
+// Plan 029 re-fit this against retuned units (spear 12/1.05, archer 13/2.2 with an
+// anti-brute counter). The unit table below MUST match src/data.js — the fit is only
+// meaningful if the raw dps x hp product it corrects is the shipped one. The two grid
+// paths are arguments so a re-fit does not have to overwrite the Plan 028 measurement it
+// is supposed to be compared against.
 import { readFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const argOf = (n, d) => (args.includes(n) ? Number(args[args.indexOf(n) + 1]) : d);
+const strOf = (n, d) => (args.includes(n) ? args[args.indexOf(n) + 1] : d);
 const ROLLED_W = argOf('--rolledWeight', 4);
 
-const g1 = JSON.parse(readFileSync('scripts/zz-power-grid.json', 'utf8'));
-const g2 = JSON.parse(readFileSync('scripts/zz-power-rolled.json', 'utf8'));
+const g1 = JSON.parse(readFileSync(strOf('--grid', 'scripts/zz-power-grid.json'), 'utf8'));
+const g2 = JSON.parse(readFileSync(strOf('--rolled', 'scripts/zz-power-rolled.json'), 'utf8'));
 
 const UNIT = {
-  spear: { hp: 100, dmg: 10, cooldown: 1.05 },
-  archer: { hp: 60, dmg: 10, cooldown: 1.7 },
+  spear: { hp: 100, dmg: 12, cooldown: 1.05 },
+  archer: { hp: 60, dmg: 13, cooldown: 2.2 },
   knight: { hp: 170, dmg: 15, cooldown: 0.95 },
 };
 const ENEMY = {
@@ -135,7 +142,7 @@ crossingTable(f.L, 'fitted');
 // ---- candidate rounded tables ----------------------------------------------------------
 if (process.argv.includes('--round')) {
   const round = (v, s) => Math.round(v / s) * s;
-  for (const step of [0.05, 0.1]) {
+  for (const step of [0.01, 0.05, 0.1]) {
     const L = { spear: 1, hero: 1 };
     for (const k of NAMES) L[k] = round(f.L[k], step);
     console.log(`\nrounded to ${step}:`, Object.entries(L).map(([k, v]) => `${k}=${v.toFixed(2)}`).join(' '));

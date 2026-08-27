@@ -1,20 +1,26 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
-import { PAL, WORLD, HERO, BALANCE, enemyStrength, playerStrength, rollComposition } from './data.js?v=r1fcd6454285e';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r1fcd6454285e';
-import { SAVE_VERSION } from './save.js?v=r1fcd6454285e';
+import {
+  PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
+} from './data.js?v=r0a1bd3998320';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r0a1bd3998320';
+import { SAVE_VERSION } from './save.js?v=r0a1bd3998320';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=r1fcd6454285e';
-import { buildAftermathModel, buildSpecModel } from './world-screens.js?v=r1fcd6454285e';
-import { drawScene } from './world/render-scene.js?v=r1fcd6454285e';
+} from './region.js?v=r0a1bd3998320';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r0a1bd3998320';
+import {
+  PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
+  recruitTroop,
+} from './progression.js?v=r0a1bd3998320';
+import { drawScene } from './world/render-scene.js?v=r0a1bd3998320';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r1fcd6454285e';
+} from './world/battle-transition.js?v=r0a1bd3998320';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -25,13 +31,13 @@ import {
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
   updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=r1fcd6454285e';
+} from './world/settlement-interactions.js?v=r0a1bd3998320';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r1fcd6454285e';
-import { WORLD_ART } from './world/visual-style.js?v=r1fcd6454285e';
+} from './world/terrain.js?v=r0a1bd3998320';
+import { WORLD_ART } from './world/visual-style.js?v=r0a1bd3998320';
 
 const P = PAL.world;
 
@@ -91,6 +97,12 @@ export class World {
       stats: { won: 0, kills: 0, lost: 0, playT: 0, battlesLost: 0, goldEarned: 0, goldSpent: 0, captures: 0 },
       hard: !!game.hardNext,
       battleCount: 0,
+      // Plan 029: a fresh campaign has taken no perks and flies the plain banner. Perk
+      // POINTS are not here on purpose — they are derived from razed camps and captures
+      // (progression.js perkPointsEarned), so there is no counter that can drift from the
+      // campaign it describes.
+      perks: [],
+      banner: 0,
     };
     game.hardNext = false;
     game.testSeed = null;
@@ -102,6 +114,11 @@ export class World {
       const stats = this.save.stats = this.save.stats || { won: 0, kills: 0, lost: 0, playT: 0 };
       for (const k of ['battlesLost', 'goldEarned', 'goldSpent', 'captures']) stats[k] = stats[k] || 0;
     }
+    // Plan 029: the same normalization for the progression fields, for the same reason —
+    // a v4 save migrates with both present, but a hand-built fixture may not, and every
+    // read below (`save.perks.length`, `save.banner`) must be able to assume the shape.
+    if (!Array.isArray(this.save.perks)) this.save.perks = [];
+    if (!Number.isInteger(this.save.banner)) this.save.banner = 0;
 
     // Milestone 025 Slice B/E: a queued one-time specialization choice rides on the
     // Game like pendingAftermath — never on `save`, so no schema version is spent and
@@ -143,6 +160,12 @@ export class World {
     if (this.pendingSpecChoice && !this.screen) {
       this.openSpecChoice(this.pendingSpecChoice);
     }
+    // Plan 029: a perk choice is DERIVED, not queued, so it needs no Game-level pointer
+    // and cannot be lost by a reload — the milestone that earned it is already persisted.
+    // It waits behind an aftermath or a spec choice and is re-offered on the next World
+    // otherwise, which is also how a v4 campaign that migrates in with two captures
+    // already banked collects the two choices it never had the chance to make.
+    if (!this.screen && !this.save.won) this.offerPerkChoice();
 
     // scenery uses a fixed authored seed: it is static map input, not a campaign
     // stream, so changing effects can never perturb collision geometry.
@@ -536,7 +559,9 @@ export class World {
     return st && st.garrison ? this.strength(st.garrison) : null;
   }
   myStrength() {
-    return playerStrength(this.save.troops);
+    // The Drillyard shift rides along: the battle grants rank with it applied, so the
+    // generator must price the warband that will actually deploy (see playerStrength).
+    return playerStrength(this.save.troops, perkMods(this.save.perks).rankEarlier);
   }
 
   // Army-cap upgrade price: rises by a step per +2 already bought. The charge site and the
@@ -947,6 +972,11 @@ export class World {
     // Explicit persistence checkpoint at the moment ownership changes (milestone
     // contract): scene is still `world`, so persistRun() writes a coherent map.
     this.game.persistRun();
+    // Plan 029: a peaceful claim is the ONE milestone that does not pass through a battle,
+    // so it is the one that cannot rely on the next World's constructor to notice it. It
+    // no-ops while the spec choice this claim just raised is on screen; chooseSpec() asks
+    // again the moment that closes.
+    this.offerPerkChoice();
     return true;
   }
 
@@ -994,8 +1024,12 @@ export class World {
     }
     if (imm.grantTroops) {
       for (let i = 0; i < imm.grantTroops.count; i++) {
-        if (this.save.troops.length >= this.save.armyCap) break; // the cap still rules
-        this.save.troops.push({ type: imm.grantTroops.type });
+        // The cap still rules, and (Plan 029) it counts places in the column.
+        const slots = UNIT_TYPES[imm.grantTroops.type]?.slots ?? 1;
+        if (armySlots(this.save.troops) + slots > this.save.armyCap) break;
+        // A granted man is a recruit like any other: the Veteran Cadre perk bloodies him
+        // exactly as it does one bought at the gates (recruitTroop is the single seam).
+        this.save.troops.push(recruitTroop(this.save, imm.grantTroops.type));
       }
     }
     if (imm.scout) {
@@ -1005,10 +1039,69 @@ export class World {
     this.game.sfx.coin();
     this.particles.ring(this.hero.x, this.hero.y, 40, P.hero, 0.5, 3);
     this.game.persistRun(); // the permanent choice checkpoints immediately
+    // A capture raises both a specialization choice and (Plan 029) a perk point. They
+    // queue rather than stack: the perk screen opens on the tick the spec screen closes.
+    this.offerPerkChoice();
   }
 
   dismissSpecChoice() {
     this.screen = null; // the choice stays queued — G at the gates reopens it
+  }
+
+  // ---------------------------------------------------------------- Plan 029: perks
+  // The perk choice is DERIVED from persisted milestones rather than queued by an event
+  // (progression.js perkChoiceDue), so this is safe to call from every seam that can move
+  // a milestone: a razed camp, a captured settlement, a claimed one, and the World
+  // constructor. It opens nothing while another modal is up — the constructor and the
+  // aftermath's dismissal both re-ask, so a choice can be deferred but never lost.
+  offerPerkChoice() {
+    if (this.screen) return false;
+    if (!perkChoiceDue(this.save)) return false;
+    const options = availablePerks(this.save);
+    if (options.length === 0) return false; // every perk taken: the milestone pays nothing
+    this.screen = buildPerkModel(this.save);
+    this.game.invalidate();
+    return true;
+  }
+
+  // Commit a perk. Permanent for the run, like a specialization: the only way to unpick
+  // one is to start a campaign. Checkpoints immediately, for the same reason the spec
+  // choice does — a permanent decision must survive the refresh that follows it.
+  choosePerk(id) {
+    this.screen = null;
+    if (!isValidPerk(id)) return false;
+    if (this.save.perks.includes(id)) return false;
+    if (!perkChoiceDue(this.save)) return false;
+    this.save.perks.push(id);
+    this.say(`${PERKS[id].name} — ${PERKS[id].text}`, 3.5);
+    this.game.sfx.horn(220);
+    this.particles.ring(this.hero.x, this.hero.y, 44, P.hero, 0.6, 4);
+    this.game.persistRun();
+    return true;
+  }
+
+  // X on the perk screen. The point is NOT spent — perkChoiceDue still reports it, so the
+  // next World (or the next milestone) offers the choice again. There is no way to lose one.
+  dismissPerkChoice() {
+    this.screen = null;
+  }
+
+  // ---------------------------------------------------------------- Plan 029: the banner
+  // The gold sink. Each stage raises the highest veteran rank a troop may reach; gold buys
+  // the room, keeping men alive fills it. Refusals say what is wrong, matching every other
+  // settlement service.
+  upgradeBanner() {
+    const cost = bannerCost(this.save.banner);
+    if (cost == null) { this.say('Your banner already flies as high as it can'); return false; }
+    if (this.save.gold < cost) { this.say(`Need ${cost} gold to raise the banner`); return false; }
+    this.save.gold -= cost;
+    this.save.stats.goldSpent += cost;
+    this.save.banner += 1;
+    this.game.sfx.coin();
+    this.say(`The banner rises — your men may now become ${bannerLabel(this.save.banner)}s`, 3.2);
+    this.particles.ring(this.hero.x, this.hero.y, 40, P.hero, 0.5, 3);
+    this.game.persistRun();
+    return true;
   }
 
   // Watchtower scouting: reveal camp garrisons within the tower's radius. Runs as a

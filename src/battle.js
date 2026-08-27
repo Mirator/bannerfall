@@ -1,33 +1,41 @@
 // Battle scene — the Thronefall bar: readable, punchy, simple.
-import { BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength } from './data.js?v=r1fcd6454285e';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r1fcd6454285e';
-import { SpatialGrid } from './battle/spatial-index.js?v=r1fcd6454285e';
-import { ACTIONS } from './input-actions.js?v=r1fcd6454285e';
-import { BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP } from './battle/constants.js?v=r1fcd6454285e';
+import {
+  BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
+  troopMaxHp,
+} from './data.js?v=r0a1bd3998320';
+import { perkMods } from './progression.js?v=r0a1bd3998320';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r0a1bd3998320';
+import { SpatialGrid } from './battle/spatial-index.js?v=r0a1bd3998320';
+import { ACTIONS } from './input-actions.js?v=r0a1bd3998320';
+import {
+  BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
+  BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
+} from './battle/constants.js?v=r0a1bd3998320';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=r1fcd6454285e';
-import { drawScene, drawProps } from './battle/render-scene.js?v=r1fcd6454285e';
+} from './battle/terrain.js?v=r0a1bd3998320';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r0a1bd3998320';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=r1fcd6454285e';
+} from './battle/separation.js?v=r0a1bd3998320';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=r1fcd6454285e';
+} from './battle/ai-phases.js?v=r0a1bd3998320';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
-} from './battle/combat.js?v=r1fcd6454285e';
+  arrowDamageAgainst as arrowDamage,
+} from './battle/combat.js?v=r0a1bd3998320';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=r1fcd6454285e';
+} from './battle/objectives.js?v=r0a1bd3998320';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
-} from './battle/enemy-command.js?v=r1fcd6454285e';
+} from './battle/enemy-command.js?v=r0a1bd3998320';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -58,6 +66,23 @@ export class Battle {
     this.state = 'intro';
     this.stateT = 0;
     this.freeze = 0;               // hit-stop timer
+    // Plan 029: the hero's perks, folded ONCE into the four battle numbers they can move
+    // plus the two the phases read directly. Resolving them here rather than in the phases
+    // keeps `progression.js` off the per-tick import graph entirely — only this module
+    // imports it — and means a phase reads one number whether or not a perk is taken.
+    // Every one of these defaults to the shipped constant, so a campaign with no perks
+    // behaves exactly as it did before this plan.
+    const mods = perkMods(setup.perks);
+    this.perks = setup.perks ? [...setup.perks] : [];
+    this.perkMods = mods;
+    this.braceBonus = mods.braceBonus ?? BRACE_BONUS;
+    this.bowSpreadBraced = BOW_SPREAD_BRACED * mods.bowSpreadBracedMul;
+    this.chargeExposure = mods.chargeExposure ?? CHARGE_EXPOSURE;
+    this.chargeRecover = mods.chargeRecover ?? CHARGE_RECOVER;
+    this.chargeSpeedMul = mods.chargeSpeedMul ?? CHARGE_SPEED_MUL;
+    this.bruteBonus = mods.bruteBonus;   // null keeps UNIT_TYPES' own declared value
+    this.rally = mods.rally;             // 0 unless Warlord is taken
+    this.rankEarlier = mods.rankEarlier; // Drillyard: thresholds arrive one battle sooner
     // Squads are derived from unit type, never assigned: a recruit's role IS his squad,
     // so `save.troops` stays `{type, hp}` and no save-schema version is spent here.
     // `this.command` remains the all-squads aggregate that the QA and input-action
@@ -246,7 +271,7 @@ export class Battle {
 
     // troops
     this.troops = [];
-    (setup.troops || []).forEach((t, i) => this.spawnTroop(t.type, t.hp));
+    (setup.troops || []).forEach((t, i) => this.spawnTroop(t.type, t.hp, t.vet));
     // enemies spawn AHEAD along your approach; ambushes pincer from ahead and behind
     this.enemies = [];
     const ecx = enemyCx, ecy = enemyCy;
@@ -271,7 +296,7 @@ export class Battle {
     this._enemyAnchorScratch = { x: 0, y: 0 };
     // strengths on the same scale the map uses (world.js's strength()/myStrength()) — for the defeat diagnosis
     this.enemyStrength = enemyStrength(setup.enemies);
-    this.playerStrength = playerStrength(setup.troops);
+    this.playerStrength = playerStrength(setup.troops, this.rankEarlier);
     this.kills = 0;
     this.deadEnemyTypes = [];   // exactly which enemy types died — not just how many
     this.lastAction = 0;      // sim time of the last hit dealt or taken
@@ -285,8 +310,17 @@ export class Battle {
     this.assignSlots();
   }
 
-  spawnTroop(type, hp) {
+  // Plan 029: `vet` is the persisted battles-won count. Rank is derived here and folded
+  // into ONE multiplier that scales hit points and damage alike — the same shape
+  // POWER_EFFICIENCY uses, which is what lets playerStrength() price a veteran without a
+  // second concept. `rankEarlier` is the Drillyard perk, resolved on the instance.
+  spawnTroop(type, hp, vet) {
     const d = UNIT_TYPES[type];
+    const rank = rankOf(vet, this.rankEarlier);
+    const mul = rankMul(rank);
+    // troopMaxHp is the ONE formula for the ranked ceiling — the save validator reads the
+    // same function, so a veteran's battle hit points can never fail its load bound.
+    const maxHp = troopMaxHp({ type, vet }, this.rankEarlier);
     // Spawn behind the hero relative to the approach axis, not always to the west — on a
     // 'W' approach the old fixed-west offset spawned troops between the hero and the enemy.
     // Exactly two simRng() draws, in this order, so downstream RNG consumers are unperturbed.
@@ -296,9 +330,17 @@ export class Battle {
       type, team: 'friendly', d,
       x: this.hero.x - this.adx * back - this.ady * side,
       y: this.hero.y - this.ady * back - this.adx * side,
-      vx: 0, vy: 0, hp: hp != null ? hp : d.hp, maxHp: d.hp, cd: this.simRng() * d.cooldown,
+      // A wounded veteran keeps the hit points he rode in with; an unwounded one is topped
+      // up to his RANKED maximum, which is the same bound the save validator enforces.
+      vx: 0, vy: 0, hp: hp != null ? Math.min(hp, maxHp) : maxHp, maxHp,
+      cd: this.simRng() * d.cooldown,
+      vet: vet || 0, rank, vetMul: mul,
       facing: 0, slot: null, target: null, lunge: 0, bob: this.fxRng() * TAU, holdX: null, holdY: null, flash: 0,
       exposedT: 0,
+      // Plan 029: seconds left on this body's "came in at a rush" latch (the brace read)
+      // and on the Warlord rally window. Both stay 0 for a body that never charges and a
+      // campaign with no perks.
+      rushT: 0, rallyT: 0,
       // Phase 5: seconds this unit's engaged target has been out of line of sight. Only a
       // ranged unit ever accumulates it; a melee unit's copy simply stays at 0 forever.
       blindT: 0,
@@ -316,6 +358,9 @@ export class Battle {
       exposedT: 0, eslot: null,
       // Plan 027: seconds a stalking wolf is still breaking off after a bite (hit and run).
       recoilT: 0,
+      // Plan 029: the same rush latch the player's bodies carry — the brace predicate is
+      // one function used by both sides, so both sides need the field.
+      rushT: 0,
     });
   }
 
@@ -454,7 +499,10 @@ export class Battle {
           victory: this.victory, retreated: this.retreated, loot: this.loot || 0, kills: this.kills,
           heroHp: Math.max(1, this.hero.hp),
           lost: this.startTroops - this.troops.length,
-          survivors: this.troops.map(t => ({ type: t.type, hp: t.hp })),
+          // Plan 029: `vet` rides out with the man who earned it. The INCREMENT is not
+          // applied here — battle-transition.js owns it, because only the world knows
+          // whether this was a victory and what the banner's ceiling is.
+          survivors: this.troops.map(t => ({ type: t.type, hp: t.hp, vet: t.vet || 0 })),
           deadTypes: this.deadEnemyTypes.slice(),
         };
         this.setup.onEnd && this.setup.onEnd(result);
@@ -519,7 +567,9 @@ export class Battle {
         this.particles.dust(hx, hy, P.groundShade, 1, this.fxRng);
         if (p.friendly) {
           const e = this.nearestEnemy(hx, hy, 16);
-          if (e) this.damageEnemy(e, p.dmg, 0, 0, 'troop');
+          // Plan 029: the shooter's declared counter is resolved against the body the
+          // arrow actually found, not the one it was aimed at.
+          if (e) this.damageEnemy(e, arrowDamage(this, p, e.type), 0, 0, 'troop');
         } else if (dist2(hx, hy, h.x, h.y) < 16 * 16 && h.iframesT <= 0) {
           this.damageFriendly(h, true, p.dmg, { x: hx, y: hy, type: p.srcType });
         } else {
@@ -645,8 +695,13 @@ export class Battle {
   }
 
   // `spread` is forwarded as-is so combat.js keeps ownership of its BOW_SPREAD default.
-  fireArrow(sx, sy, tx, ty, friendly, dmg, speed, srcType, spread) {
-    spawnArrow(this, sx, sy, tx, ty, friendly, dmg, speed, srcType, spread);
+  // Plan 029: `bonusVs` is the shooter's declared per-type counter table, carried ON the
+  // arrow rather than folded into `dmg` at the moment it is loosed. An arrow resolves
+  // against whoever is nearest where it lands, which is not necessarily the body it was
+  // aimed at, so baking an anti-brute multiplier in at fire time would pay it out on a
+  // bandit standing next to the brute.
+  fireArrow(sx, sy, tx, ty, friendly, dmg, speed, srcType, spread, bonusVs) {
+    spawnArrow(this, sx, sy, tx, ty, friendly, dmg, speed, srcType, spread, bonusVs);
   }
 
   endBattle(victory, retreated) {

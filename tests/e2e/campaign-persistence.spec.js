@@ -124,9 +124,14 @@ test('current-schema player save round-trips through Continue', async ({ page })
     save.heroHp = 87;
     save.heroMaxHp = 140;
     save.hard = true;
-    // Milestone 025: current-schema stats carry the campaign-summary counters.
-    save.stats = { won: 2, kills: 19, lost: 3, playT: 47, battlesLost: 1, goldEarned: 300, goldSpent: 120, captures: 0 };
-    save.troops = [{ type: 'spear' }, { type: 'archer' }, { type: 'knight' }];
+    // Milestone 025: current-schema stats carry the campaign-summary counters. The two
+    // captures back the two perks below — the validator refuses perks no milestone earned.
+    save.stats = { won: 2, kills: 19, lost: 3, playT: 47, battlesLost: 1, goldEarned: 300, goldSpent: 120, captures: 2 };
+    // Plan 029: a blooded roster under a stage-1 banner — the spearman is a Veteran and
+    // the knight an Elite, which is the highest that banner can teach.
+    save.troops = [{ type: 'spear', vet: 4 }, { type: 'archer' }, { type: 'knight', vet: 7 }];
+    save.perks = ['setSpears', 'warhorn'];
+    save.banner = 1;
     world.hero.x = 1711;
     world.hero.y = 944;
     save.x = world.hero.x;
@@ -160,6 +165,11 @@ test('current-schema player save round-trips through Continue', async ({ page })
       troops: save.troops.map(t => t.type),
       hero: { x: window.__g.scene.hero.x, y: window.__g.scene.hero.y },
       parties: save.parties.map(p => ({ camp: p.camp, x: p.x, y: p.y, comp: p.comp, waryT: p.waryT })),
+      // Plan 029 (v5): the persistent progression fields round-trip alongside everything
+      // else. This save has taken a perk and raised its banner one stage.
+      perks: save.perks,
+      banner: save.banner,
+      vets: save.troops.map(t => t.vet || 0),
       version: save.version,
       storedVersion: JSON.parse(localStorage.getItem('bf_save')).version,
     };
@@ -169,14 +179,87 @@ test('current-schema player save round-trips through Continue', async ({ page })
     heroHp: 87,
     heroMaxHp: 140,
     hard: true,
-    stats: { won: 2, kills: 19, lost: 3, playT: expect.any(Number), battlesLost: 1, goldEarned: 300, goldSpent: 120, captures: 0 },
+    stats: { won: 2, kills: 19, lost: 3, playT: expect.any(Number), battlesLost: 1, goldEarned: 300, goldSpent: 120, captures: 2 },
     troops: ['spear', 'archer', 'knight'],
     hero: { x: 1711, y: 944 },
     parties: [{ camp: 'c1', x: 1811, y: 984, comp: ['bandit', 'wolf'], waryT: 8 }],
-    version: 4,
-    storedVersion: 4,
+    perks: ['setSpears', 'warhorn'],
+    banner: 1,
+    vets: [4, 0, 7],
+    version: 5,
+    storedVersion: 5,
   });
   expect(restored.stats.playT).toBeGreaterThanOrEqual(47);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+// Plan 029: the whole point of veterancy is that it OUTLIVES the fight that earned it.
+// Driven through the real result path (World.startBattle -> endBattle -> onEnd) and the
+// real save write, then reloaded, because a rank that survives in memory but not on disk
+// would make attrition meaningless exactly where the plan claims it finally matters.
+test('veterancy earned in a won battle survives the save write and a reload', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, { seed: 929 });
+
+  const earned = await page.evaluate(async () => {
+    const world = window.__g.scene;
+    world.save.troops = [{ type: 'spear' }, { type: 'spear', vet: 2 }];
+    world.save.banner = 0;
+    world.startBattle(['bandit'], 'VETERANCY PERSISTENCE', null, 'road');
+    const battle = window.__g.scene;
+    battle.endBattle(true);
+    for (let i = 0; i < 240 && window.__g.sceneName !== 'world'; i++) window.__g.update(1 / 60);
+    await window.__g.saves.flush();
+    return {
+      scene: window.__g.sceneName,
+      inMemory: window.__g.scene.save.troops.map(t => t.vet || 0),
+      stored: JSON.parse(localStorage.getItem('bf_save')).troops.map(t => t.vet || 0),
+    };
+  });
+  expect(earned.scene).toBe('world');
+  // The already-blooded man reaches Veteran (rank 1 at three battles); the raw recruit is
+  // one battle in. Neither is clamped — stage 0 tops out AT Veteran, not below it.
+  expect(earned.inMemory).toEqual([1, 3]);
+  expect(earned.stored).toEqual([1, 3]);
+
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => window.__g.sceneName === 'world');
+  const afterReload = await page.evaluate(async () => {
+    const { rankOf } = await import('/src/data.js');
+    return window.__g.scene.save.troops.map(t => ({ vet: t.vet || 0, rank: rankOf(t.vet) }));
+  });
+  expect(afterReload).toEqual([{ vet: 1, rank: 0 }, { vet: 3, rank: 1 }]);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('the banner ceiling stops veterancy accruing, and raising it lets a man resume', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, { seed: 930 });
+
+  const capped = await page.evaluate(() => {
+    const world = window.__g.scene;
+    // Already at the last value that maps to Veteran under a stage-0 banner.
+    world.save.troops = [{ type: 'spear', vet: 6 }];
+    world.save.banner = 0;
+    const winOne = () => {
+      window.__g.scene.startBattle(['bandit'], 'BANNER CEILING', null, 'road');
+      window.__g.scene.endBattle(true);
+      for (let i = 0; i < 240 && window.__g.sceneName !== 'world'; i++) window.__g.update(1 / 60);
+    };
+    winOne(); winOne();
+    const heldAt = window.__g.scene.save.troops[0].vet;
+    window.__g.scene.save.banner = 1; // the town purchase, applied directly
+    winOne();
+    return { heldAt, afterBanner: window.__g.scene.save.troops[0].vet };
+  });
+  // Two more victories bought nothing: the man had learned everything this banner teaches.
+  expect(capped.heldAt).toBe(6);
+  // Raising it lets him resume from exactly where he stopped, rather than starting over.
+  expect(capped.afterBanner).toBe(7);
   assertNoRuntimeErrors(runtimeErrors);
 });
 
@@ -349,7 +432,7 @@ test('AUDIT-05 battle entry persists a coherent transaction', async ({ page }) =
   });
   assertNoRuntimeErrors(runtimeErrors);
   expect(snapshot.scene).toBe('battle');
-  expect(snapshot.memory.version).toBe(4);
+  expect(snapshot.memory.version).toBe(5);
   expect(snapshot.stored.version).toBe(snapshot.memory.version);
   expect(snapshot.stored.x).toBe(snapshot.memory.x);
   expect(snapshot.stored.y).toBe(snapshot.memory.y);

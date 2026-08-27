@@ -12,13 +12,14 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r1fcd6454285e';
-import { dist2, clamp } from '../engine.js?v=r1fcd6454285e';
-import { ACTIONS } from '../input-actions.js?v=r1fcd6454285e';
-import { buildBriefModel } from '../world-screens.js?v=r1fcd6454285e';
-import { sampleBattlefield } from './battlefield-brief.js?v=r1fcd6454285e';
-import { FIELD } from '../battle/constants.js?v=r1fcd6454285e';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r1fcd6454285e';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r0a1bd3998320';
+import { dist2, clamp } from '../engine.js?v=r0a1bd3998320';
+import { ACTIONS } from '../input-actions.js?v=r0a1bd3998320';
+import { buildBriefModel } from '../world-screens.js?v=r0a1bd3998320';
+import { sampleBattlefield } from './battlefield-brief.js?v=r0a1bd3998320';
+import { FIELD } from '../battle/constants.js?v=r0a1bd3998320';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r0a1bd3998320';
+import { awardVeterancy, perkMods } from '../progression.js?v=r0a1bd3998320';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -37,7 +38,10 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
   const approach = world.pendingApproach || 'E';
   const battleSeed = (Math.abs(world.hero.x * 31 + world.hero.y * 17) | 0) + 7;
   world.game.startBattle({
-    troops: save.troops.map(t => ({ type: t.type, hp: t.hp })),
+    // Plan 029: `vet` rides in with the man, and the hero's perks ride in with the fight.
+    // Both are read-only inputs to Battle — it never writes either back.
+    troops: save.troops.map(t => ({ type: t.type, hp: t.hp, vet: t.vet || 0 })),
+    perks: (save.perks || []).slice(),
     enemies: comp.map(c => ({ type: c })),
     seed: battleSeed,
     title,
@@ -135,7 +139,16 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
       }
       if (result.victory) {
         save.gold += result.loot;
-        save.troops = result.survivors;
+        // Plan 029: veterancy is battles WON and walked out of. Awarded here and only
+        // here — a retreat and a defeat deliberately do not count, because "ride in, ride
+        // out" would otherwise be a training montage. awardVeterancy() refuses the point
+        // whenever taking it would push the body past what this banner can teach, so the
+        // ceiling is enforced where the number is written rather than where it is read;
+        // that is what lets playerStrength(troops) keep its Plan 028 signature.
+        const earlier = perkMods(save.perks).rankEarlier;
+        save.troops = result.survivors.map(t => ({
+          ...t, vet: awardVeterancy(t.vet, save.banner, earlier),
+        }));
         save.heroHp = Math.min(save.heroMaxHp, result.heroHp + 20);
         save.toast = null;
         onWinExtra && onWinExtra(); // camp raids set their own toast (razed count, remnants)
@@ -319,6 +332,9 @@ export function updateWorldScreens(world, inp) {
       // opens on the same tick the aftermath clears, so the capture flow never shows
       // two modals at once and never loses the prompt.
       if (world.pendingSpecChoice) world.openSpecChoice(world.pendingSpecChoice);
+      // Plan 029: and a perk choice behind THAT. Same one-modal-at-a-time discipline;
+      // offerPerkChoice() no-ops while a screen is up and is re-asked by chooseSpec().
+      else world.offerPerkChoice();
       return true;
     }
     return true;
@@ -348,6 +364,33 @@ export function updateWorldScreens(world, inp) {
     }
     if (inp.pressedAction(ACTIONS.CONFIRM)) { world.chooseSpec(options[world.screen.index].id); return true; }
     if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.dismissSpecChoice(); return true; }
+    return true;
+  }
+  // Plan 029: the perk choice, on exactly the specialization modal's machinery — same
+  // world.screen field, same navigation actions, same click-a-row resolution. A world
+  // modal genuinely pauses the campaign (AGENTS.md), and reusing this is what buys that
+  // for free rather than inventing a second pause.
+  if (world.screen.kind === 'perk') {
+    const options = world.screen.options;
+    if (inp.pressedAction(ACTIONS.MENU_UP)) {
+      world.screen.index = (world.screen.index + options.length - 1) % options.length;
+      world.game.invalidate();
+      return true;
+    }
+    if (inp.pressedAction(ACTIONS.MENU_DOWN)) {
+      world.screen.index = (world.screen.index + 1) % options.length;
+      world.game.invalidate();
+      return true;
+    }
+    if (clickedRect(btn.perk)) {
+      const rows = btn.perk.rows || [];
+      const i = rows.findIndex(r => inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h);
+      if (i >= 0 && options[i]) { world.screen.index = i; world.choosePerk(options[i].id); return true; }
+    }
+    if (inp.pressedAction(ACTIONS.CONFIRM)) { world.choosePerk(options[world.screen.index].id); return true; }
+    // X defers rather than spends: perkChoiceDue() still reports the point, so the next
+    // World offers it again. There is no way to lose one.
+    if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.dismissPerkChoice(); return true; }
     return true;
   }
   return false;

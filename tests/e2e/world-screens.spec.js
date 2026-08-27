@@ -225,3 +225,143 @@ test('the aftermath reports per-side casualties, loot, and post-regen hero HP', 
   expect(Array.isArray(result.playerLosses)).toBe(true);
   expect(runtimeErrors).toEqual([]);
 });
+
+// ---------------------------------------------------------------- Plan 029: the perk choice
+// The perk screen rides on the same world-scene modal machinery Plan 021 built for the
+// brief and Milestone 025 reused for the specialization choice. These tests assert the
+// three properties that machinery is supposed to buy for free, plus the one rule that is
+// this plan's own: a milestone's choice can be DEFERRED but never lost, because the point
+// is derived from persisted state rather than held in a counter.
+test('a milestone opens the perk choice as a world modal that genuinely pauses the campaign', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const opened = await page.evaluate(() => {
+    window.game.scenario('world', { seed: 515151 });
+    const world = window.__g.scene;
+    world.save.perks = [];
+    world.save.stats.captures = 1; // one settlement taken: one perk earned
+    const raised = world.offerPerkChoice();
+    const before = { grace: world.grace, msgT: world.msgT };
+    window.game.keepAwake(true);
+    window.game.step(0.5); // half a second of world ticks with the modal up
+    return {
+      raised,
+      kind: world.screen && world.screen.kind,
+      options: world.screen ? world.screen.options.map(o => o.id) : null,
+      blocking: world.isBlocking(),
+      graceFrozen: world.grace === before.grace,
+      sceneName: window.__g.sceneName,
+    };
+  });
+  expect(opened.raised).toBe(true);
+  expect(opened.kind).toBe('perk');
+  expect(opened.sceneName).toBe('world'); // a modal, not a scene change
+  expect(opened.blocking).toBe(true);
+  expect(opened.graceFrozen).toBe(true);
+  // Only the first tier is on offer with nothing taken — the gate is 0/2/4 perks held.
+  expect(opened.options).toEqual(['setSpears', 'steadyHands', 'warhorn']);
+  expect(runtimeErrors).toEqual([]);
+});
+
+test('a perk is committed permanently, and a dismissed choice is deferred rather than lost', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const result = await page.evaluate(async () => {
+    const { perkChoiceDue } = await import('/src/progression.js');
+    window.game.scenario('world', { seed: 515152 });
+    const world = window.__g.scene;
+    world.save.perks = [];
+    world.save.stats.captures = 1;
+    world.offerPerkChoice();
+
+    // X defers. The point is still owed, because it is derived from the capture.
+    world.dismissPerkChoice();
+    const afterDismiss = {
+      screen: world.screen,
+      perks: world.save.perks.slice(),
+      stillDue: perkChoiceDue(world.save),
+      reopened: world.offerPerkChoice(),
+      kind: world.screen && world.screen.kind,
+    };
+
+    // ENTER commits. The point is spent, and a second offer finds nothing owed.
+    world.choosePerk('steadyHands');
+    const afterChoose = {
+      screen: world.screen,
+      perks: world.save.perks.slice(),
+      stillDue: perkChoiceDue(world.save),
+      reopened: world.offerPerkChoice(),
+    };
+
+    // Taking the same perk twice is not something the screen can produce, and the commit
+    // path refuses it rather than trusting the caller.
+    world.save.stats.captures = 2;
+    const duplicate = world.choosePerk('steadyHands');
+    return { afterDismiss, afterChoose, duplicate, finalPerks: world.save.perks.slice() };
+  });
+  expect(result.afterDismiss.screen).toBe(null);
+  expect(result.afterDismiss.perks).toEqual([]);
+  expect(result.afterDismiss.stillDue).toBe(true);
+  expect(result.afterDismiss.reopened).toBe(true);
+  expect(result.afterDismiss.kind).toBe('perk');
+
+  expect(result.afterChoose.screen).toBe(null);
+  expect(result.afterChoose.perks).toEqual(['steadyHands']);
+  expect(result.afterChoose.stillDue).toBe(false);
+  expect(result.afterChoose.reopened).toBe(false);
+
+  expect(result.duplicate).toBe(false);
+  expect(result.finalPerks).toEqual(['steadyHands']);
+  expect(runtimeErrors).toEqual([]);
+});
+
+test('the perk tiers gate on how many are already held', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const tiers = await page.evaluate(async () => {
+    const { availablePerks, PERKS } = await import('/src/progression.js');
+    const at = (taken) => availablePerks({ perks: taken }).map(p => PERKS[p.id].tier);
+    return {
+      none: at([]),
+      two: at(['setSpears', 'steadyHands']),
+      four: at(['setSpears', 'steadyHands', 'warhorn', 'hammerAnvil']),
+    };
+  });
+  expect(new Set(tiers.none)).toEqual(new Set([1]));
+  expect(new Set(tiers.two)).toEqual(new Set([1, 2]));
+  // All three of tier 1 are taken by this point, so tier 1 is simply exhausted — the gate
+  // opens later tiers, it never re-offers a perk already held.
+  expect(new Set(tiers.four)).toEqual(new Set([2, 3]));
+  expect(runtimeErrors).toEqual([]);
+});
+
+test('the banner is a real gold sink with a stated price and a top stage', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const result = await page.evaluate(async () => {
+    const { BALANCE } = await import('/src/data.js');
+    window.game.scenario('world', { seed: 515153 });
+    const world = window.__g.scene;
+    world.save.banner = 0;
+    world.save.gold = BALANCE.bannerCosts[0] - 1;
+    const short = { ok: world.upgradeBanner(), gold: world.save.gold, msg: world.msg };
+    world.save.gold = 10000;
+    const spent = [];
+    for (let i = 0; i <= BALANCE.bannerCosts.length; i++) {
+      const before = world.save.gold;
+      const ok = world.upgradeBanner();
+      spent.push({ ok, cost: before - world.save.gold, stage: world.save.banner });
+    }
+    return { short, spent, costs: BALANCE.bannerCosts, goldSpent: world.save.stats.goldSpent };
+  });
+  expect(result.short.ok).toBe(false);
+  expect(result.short.gold).toBe(result.costs[0] - 1); // a refused purchase charges nothing
+  expect(result.short.msg).toContain('gold');
+  // Each stage charges exactly what the table quotes, and the last attempt finds nothing
+  // left to buy rather than charging for a stage that does not exist.
+  expect(result.spent.slice(0, result.costs.length).map(s => s.cost)).toEqual(result.costs);
+  expect(result.spent[result.costs.length]).toMatchObject({ ok: false, cost: 0 });
+  expect(result.spent[result.costs.length - 1].stage).toBe(result.costs.length);
+  expect(result.goldSpent).toBe(result.costs.reduce((a, b) => a + b, 0));
+  expect(runtimeErrors).toEqual([]);
+});

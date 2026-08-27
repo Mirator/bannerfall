@@ -621,3 +621,90 @@ wireframe, with an independent subagent quality review after every implementatio
   baselines' party fixtures changed body count, but all 20 comparisons passed inside the
   suite's existing tolerance with no diff artifacts, so nothing was recaptured and nothing
   was left stale.
+
+## Plan 029 - unit identity, and something to build between fights
+
+Two halves of one slice, in that order because progression multiplies whatever a unit is
+worth: ranking up three interchangeable bodies is three times nothing. Baselines measured on
+`7de3bb5` before any src edit (`critiques/progression-baseline.md`); before/after in
+`critiques/progression-comparison.md`.
+
+- The brace was not a weak mechanic, it was a dead one. Sampling every enemy inside a holding
+  spearman's strike reach over 24 fights: the MEDIAN closing speed is NEGATIVE for every enemy
+  type on both fixtures, because by the time anything is in reach it has braked to wind up its
+  own blow and separation is pushing it back out. The bonus fired on 0.1% of bandit contacts
+  and 0% of brute contacts. Plan 019 had already had to retract a brute-counter claim over this
+  and the constants file called it a wolf counter; measured, it was a wolf counter about one
+  contact in fifty.
+- The obvious repair was measured before it was designed in, and it fails too. Latching the
+  fastest speed seen in the last second gives a median latched peak of 73 for bandits, 75 for
+  wolves and 72.9 for brutes - whose base speed is 55. That is not locomotion, it is the
+  `+= cos * 85` knockback impulse every landed hit applies. A rule keyed anywhere in the 40-90
+  band would have meant "I hit it, therefore it charged me".
+- What shipped instead latches COMMANDED locomotion while approaching a hostile, before terrain
+  scaling, with two clauses: at or above BRACE_SPEED (130 - a wolf at 158 or a knight at 175) or
+  above 1.10x its own walk (a body ordered forward: charge 1.15, bloodlust 1.3). One predicate,
+  both sides, per Plan 027's symmetry rule. It now fires on 24-35% of wolf contacts against
+  2.5-6.1% before, and on 2.6% of brute contacts against 0%.
+- Spear and archer stopped sharing a damage number, which was the audit's literal complaint.
+  Spear is 12 at cadence 1.05 and owns the brace; archer is 13 at cadence 2.2 with a declared
+  `bonusVs: { brute: 2.0 }`. A knight costs two places in the column, through one `armySlots()`
+  that every cap read goes through - the recruit refusal, the HUD, the save validator and the
+  specialization's troop grant.
+- This slice introduced an AFK-farm regression and the sweep caught it. The first complete build
+  measured idle camp raids at 78.3% against the 70.8% baseline, undoing Plan 028's whole gain on
+  that fixture. The cause was the archer's counter shipped unconditionally: camp garrisons are
+  the brute-heavy fights, so a free doubling against brutes is a large real power gain handed to
+  a player pressing nothing. Gating it behind steady aim returned the number to 70.8% digit for
+  digit over the same 120 raids. It is also the better design and is this plan's own perk rule
+  applied to unit identity - the archer keeps the role and buys it with an order.
+- Progression is one integer per troop and two fields per save. `vet` counts battles WON and
+  walked out of; rank is derived and never stored. Nine perks in three tiers, each of which
+  amplifies an order, removes an order's cost, or rewards a pressed input - never a flat aura,
+  which would reward exactly the behaviour Plans 027 and 028 spent two slices measuring as
+  already too strong. Perk POINTS are derived from razed camps plus captures rather than
+  counted, so the award is idempotent across a reload, a defeat and a re-entry. The banner is
+  the gold sink and buys a CEILING on rank rather than a bonus.
+- SAVE_VERSION 4 -> 5. A single `legacy` boolean could not survive a second version: v4 is a
+  legacy shape now and legitimately carries the ownership and raid fields v3 must be refused
+  for, so `buildV1` takes the declared version and derives legacy/preV4/preV5. The v4 army-cap
+  migration grandfathers rather than refuses - twelve knights inside a cap of twelve is the
+  audit's own "solved" army and 24 places under the new arithmetic, and deleting a legitimate
+  campaign for a rule that postdates it is the worse failure.
+- The Drillyard perk would have written saves the validator refused. Found by reading: the perk
+  shifts every rank threshold, so a body legitimately reaches rank 2 at `vet` 6, while the
+  validator computed its hit-point bound at shift 0 and would have capped it at the Veteran
+  maximum. Whatever grants a rank must bound it. It has a fixture now.
+- The power metric was re-fitted, because Plan 028 documents that retuning UNIT_TYPES
+  invalidates it. 2328 fresh battles, same method: 89.7% of decisive matchups called correctly
+  against headcount's 84.6%, 93.5% against 85.8% on the ladders, and a tie on rolled
+  compositions (82.0 against 82.3) which is stated rather than hidden. The fit had to be run
+  twice - the first was measured against the ungated archer and priced the brute at 1.74 instead
+  of 2.00.
+- A harness bug looked exactly like a balance finding and nearly went in the report as one. The
+  tier calibration's first veteran run showed a Champion-heavy warband winning 16.7% of even
+  fights against an unblooded one's 66.7%. `zz-tier-calibrate.mjs` was building its battle
+  roster with `troops.map(t => ({ type: t.type }))` and dropping `vet`, so every veteran roster
+  was SIZED as veterans and FIELDED as recruits. Corrected, a blooded mid warband delivers 55.6%
+  where the same eight bodies unblooded deliver 55.5%.
+- Veterancy is priced right at mid progression and over-credited at the top: vetLate wins 72.2%
+  of its even fights against unblooded late's 44.4%. The square law credits per-body quality
+  linearly and a real fight rewards fewer-tougher bodies superlinearly. Fitting the rank credit
+  against a ranked-roster grid is the correct fix and is the top follow-up; at 12 seeds a cell
+  the data cannot support inventing an exponent, and doing so is the mistake three previous
+  plans declined to make.
+- HOLD stopped being a trap. Over 120 organic camp raids it went from 35.0% to 51.7% and split
+  from 36.7% to 45.0%, while idle went 70.8% to 69.2%. The best deliberate policy is now 0.9
+  points behind pressing nothing where Plan 028 measured 5.3. The `@sweep` annotation STAYS: one
+  point behind is behind, the assertion is a strict inequality, and a margin inside the harness's
+  own run-to-run drift is exactly what Plan 019 had to retract. Fourth attempt, closest yet.
+- Gold matters through the whole opening now. Over 6 campaign openings of 14 fights each under a
+  spend-what-you-have policy, mean earned 918 g against mean spent 863 g, gold held never runs
+  away, and the first banner stage is only reached around fight 10-14 - where the audit found
+  gold "stops being a resource after about four fights". The caveat is honest: the army-cap
+  upgrade is what keeps the curve binding, not the banner, and a player who stops expanding the
+  column will bank gold.
+- Two visual baselines are stale and were deliberately left so: `world-brief-party.png` (3%) and
+  `world-brief-camp-withdraw.png` (4%). The brief panel legitimately grew two roster lines
+  (veterans, perks) and 40px of height. Baselines are captured only through the pinned-Linux CI
+  workflow, so they are listed rather than recaptured, and the 1.5% cap was not touched.
