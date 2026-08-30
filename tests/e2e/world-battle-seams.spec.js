@@ -9,7 +9,7 @@ test('world and battle expose ordered simulation seams', async ({ page }) => {
     const world = window.__g.scene;
     const worldPhases = [
       'updateHeroMovement', 'updateWorldClock', 'updateSettlementInteractions',
-      'updateCampInteraction', 'updateParties', 'updatePartySpawns', 'updateCameraAndEffects',
+      'updateSiteInteraction', 'updateParties', 'updatePartySpawns', 'updateCameraAndEffects',
     ];
     // Plan 023: the FULL pipeline only runs while the hero rides, so spin the horse past
     // BALANCE.worldWakeSpeed before wrapping. A real held input rather than keepAwake(),
@@ -70,7 +70,7 @@ test('world and battle expose ordered simulation seams', async ({ page }) => {
     worldPhases: true,
     worldOrder: [
       'updateHeroMovement', 'updateWorldClock', 'updateSettlementInteractions',
-      'updateCampInteraction', 'updateParties', 'updatePartySpawns', 'updateCameraAndEffects',
+      'updateSiteInteraction', 'updateParties', 'updatePartySpawns', 'updateCameraAndEffects',
     ],
     rodeAwake: true,
     battlePhases: true,
@@ -111,7 +111,7 @@ test('a world-scene modal blocks every other world phase for the tick', async ({
     // so an open brief freezes `world.time` and the freeze cue too, not just the simulation.
     const worldPhases = [
       'updateHeroMovement', 'updateWorldClock', 'updateSettlementInteractions',
-      'updateCampInteraction', 'updateParties', 'updatePartySpawns', 'updateCameraAndEffects',
+      'updateSiteInteraction', 'updateParties', 'updatePartySpawns', 'updateCameraAndEffects',
     ];
     const worldOrder = [];
     for (const name of worldPhases) {
@@ -136,7 +136,7 @@ test('a stopped hero freezes every dt-driven world phase', async ({ page }) => {
     const world = window.__g.scene;
     const worldPhases = [
       'updateHeroMovement', 'updateWorldClock', 'updateSettlementInteractions',
-      'updateCampInteraction', 'enforceBeatableFloor', 'updateParties',
+      'updateSiteInteraction', 'enforceBeatableFloor', 'updateParties',
       'updatePartySpawns', 'updateCameraAndEffects',
     ];
     const worldOrder = [];
@@ -155,7 +155,7 @@ test('a stopped hero freezes every dt-driven world phase', async ({ page }) => {
   // timer — the beatable floor, spawns, the camera and particles — must NOT appear.
   expect(result.worldOrder).toEqual([
     'updateHeroMovement', 'updateWorldClock', 'updateSettlementInteractions',
-    'updateCampInteraction', 'updateParties',
+    'updateSiteInteraction', 'updateParties',
   ]);
   expect(result.flowing).toBe(false);
   expect(result.frozen).toBe(true);

@@ -12,14 +12,15 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r0a1bd3998320';
-import { dist2, clamp } from '../engine.js?v=r0a1bd3998320';
-import { ACTIONS } from '../input-actions.js?v=r0a1bd3998320';
-import { buildBriefModel } from '../world-screens.js?v=r0a1bd3998320';
-import { sampleBattlefield } from './battlefield-brief.js?v=r0a1bd3998320';
-import { FIELD } from '../battle/constants.js?v=r0a1bd3998320';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r0a1bd3998320';
-import { awardVeterancy, perkMods } from '../progression.js?v=r0a1bd3998320';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r70b613c6e5cd';
+import { dist2, clamp } from '../engine.js?v=r70b613c6e5cd';
+import { ACTIONS } from '../input-actions.js?v=r70b613c6e5cd';
+import { buildBriefModel } from '../world-screens.js?v=r70b613c6e5cd';
+import { sampleBattlefield } from './battlefield-brief.js?v=r70b613c6e5cd';
+import { FIELD } from '../battle/constants.js?v=r70b613c6e5cd';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r70b613c6e5cd';
+import { awardVeterancy, perkMods } from '../progression.js?v=r70b613c6e5cd';
+import { performSiteAction } from './site-menu.js?v=r70b613c6e5cd';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -308,6 +309,42 @@ export function confirmBrief(world) {
 // a screen is handled by the callers (requestBattle()'s two call sites already `return
 // true` right after calling it); this method only ever handles a screen that is
 // ALREADY open, so returning true unconditionally on that branch is correct.
+// The spec, perk and site panels are three instances of one interaction: a vertical list
+// with a selected `index`, moved by the menu actions and committable by ENTER or by
+// clicking a row. This resolves the INPUT for all three. Their draw code stays separate on
+// purpose — the visual baselines pin the spec and perk panels' pixels, and a shared painter
+// would put that at risk for no behavioural gain.
+//
+// Returns the id of a row to commit, 'dismiss' for X, or null if the press was navigation
+// (or nothing at all). `key` names the block drawn by the panel, whose `rows` are the
+// individual option rects.
+function resolveChoiceInput(world, inp, btn, key, options) {
+  const block = btn[key];
+  if (inp.pressedAction(ACTIONS.MENU_UP)) {
+    world.screen.index = (world.screen.index + options.length - 1) % options.length;
+    world.game.invalidate();
+    return null;
+  }
+  if (inp.pressedAction(ACTIONS.MENU_DOWN)) {
+    world.screen.index = (world.screen.index + 1) % options.length;
+    world.game.invalidate();
+    return null;
+  }
+  // The panels return one merged block whose `rows` are the option rects (it has no single
+  // `index`) — resolve the clicked row explicitly and keep keyboard/pointer selection
+  // consistent.
+  if (block && inp.mouse.clicked &&
+      inp.mouse.x >= block.x && inp.mouse.x <= block.x + block.w &&
+      inp.mouse.y >= block.y && inp.mouse.y <= block.y + block.h) {
+    const rows = block.rows || [];
+    const i = rows.findIndex(r => inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h);
+    if (i >= 0 && options[i]) { world.screen.index = i; return options[i].id; }
+  }
+  if (inp.pressedAction(ACTIONS.CONFIRM)) return options[world.screen.index].id;
+  if (inp.pressedAction(ACTIONS.WITHDRAW)) return 'dismiss';
+  return null;
+}
+
 export function updateWorldScreens(world, inp) {
   if (!world.screen) return false;
   const btn = world.screenButtons || {};
@@ -340,30 +377,12 @@ export function updateWorldScreens(world, inp) {
     return true;
   }
   if (world.screen.kind === 'spec') {
-    // Permanent choice: navigate with the menu actions, commit with CONFIRM.
-    // Dismissing (X) keeps the settlement owned but unchosen — G at its gates
-    // reopens the prompt later.
-    const options = world.screen.options;
-    if (inp.pressedAction(ACTIONS.MENU_UP)) {
-      world.screen.index = (world.screen.index + options.length - 1) % options.length;
-      world.game.invalidate();
-      return true;
-    }
-    if (inp.pressedAction(ACTIONS.MENU_DOWN)) {
-      world.screen.index = (world.screen.index + 1) % options.length;
-      world.game.invalidate();
-      return true;
-    }
-    // drawSpecPanel returns one merged block whose `rows` are the individual option
-    // rects (it has no single `index`) — resolve the clicked row explicitly and keep
-    // keyboard/pointer selection consistent.
-    if (clickedRect(btn.spec)) {
-      const rows = btn.spec.rows || [];
-      const i = rows.findIndex(r => inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h);
-      if (i >= 0 && options[i]) { world.screen.index = i; world.chooseSpec(options[i].id); return true; }
-    }
-    if (inp.pressedAction(ACTIONS.CONFIRM)) { world.chooseSpec(options[world.screen.index].id); return true; }
-    if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.dismissSpecChoice(); return true; }
+    // Permanent choice: navigate with the menu actions, commit with CONFIRM. Dismissing (X)
+    // keeps the settlement owned but unchosen — the site menu at its gates reopens the
+    // prompt later.
+    const picked = resolveChoiceInput(world, inp, btn, 'spec', world.screen.options);
+    if (picked === 'dismiss') world.dismissSpecChoice();
+    else if (picked) world.chooseSpec(picked);
     return true;
   }
   // Plan 029: the perk choice, on exactly the specialization modal's machinery — same
@@ -371,26 +390,32 @@ export function updateWorldScreens(world, inp) {
   // modal genuinely pauses the campaign (AGENTS.md), and reusing this is what buys that
   // for free rather than inventing a second pause.
   if (world.screen.kind === 'perk') {
-    const options = world.screen.options;
-    if (inp.pressedAction(ACTIONS.MENU_UP)) {
-      world.screen.index = (world.screen.index + options.length - 1) % options.length;
-      world.game.invalidate();
-      return true;
-    }
-    if (inp.pressedAction(ACTIONS.MENU_DOWN)) {
-      world.screen.index = (world.screen.index + 1) % options.length;
-      world.game.invalidate();
-      return true;
-    }
-    if (clickedRect(btn.perk)) {
-      const rows = btn.perk.rows || [];
-      const i = rows.findIndex(r => inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h);
-      if (i >= 0 && options[i]) { world.screen.index = i; world.choosePerk(options[i].id); return true; }
-    }
-    if (inp.pressedAction(ACTIONS.CONFIRM)) { world.choosePerk(options[world.screen.index].id); return true; }
+    const picked = resolveChoiceInput(world, inp, btn, 'perk', world.screen.options);
     // X defers rather than spends: perkChoiceDue() still reports the point, so the next
     // World offers it again. There is no way to lose one.
-    if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.dismissPerkChoice(); return true; }
+    if (picked === 'dismiss') world.dismissPerkChoice();
+    else if (picked) world.choosePerk(picked);
+    return true;
+  }
+  // Plan 030: the site menu, on the same machinery. It differs from spec/perk in one way
+  // that matters — committing a row does NOT close it. performSiteAction rebuilds the model
+  // from the save, so gold, column room and prices re-derive and a second spearman is one
+  // more ENTER, not another walk up to the gates. The rows that raise a modal of their own
+  // (claim, choose-a-calling, raid, storm) close or replace it from inside that call.
+  if (world.screen.kind === 'site') {
+    if (clickedRect(btn.leave)) { world.screen = null; world.game.invalidate(); return true; }
+    const rows = world.screen.rows;
+    if (!rows.length) {
+      // An occupied settlement offers no rows: the only way out is out.
+      if (inp.pressedAction(ACTIONS.WITHDRAW) || inp.pressedAction(ACTIONS.CONFIRM)) {
+        world.screen = null;
+        world.game.invalidate();
+      }
+      return true;
+    }
+    const picked = resolveChoiceInput(world, inp, btn, 'site', rows);
+    if (picked === 'dismiss') { world.screen = null; world.game.invalidate(); }
+    else if (picked) performSiteAction(world, picked);
     return true;
   }
   return false;

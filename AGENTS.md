@@ -86,7 +86,7 @@ Scene module layout: the two scene classes are split across `src/battle/` and
 small targeting/stance helpers; `battle/{constants,combat,ai-phases,separation,
 render-units,render-scene,hud}.js` hold the rest. `world.js` keeps construction,
 the tick pipeline, party AI and the cheap per-tick terrain predicates;
-`world/{terrain,settlement-interactions,battle-transition,render-scene,
+`world/{terrain,settlement-interactions,site-menu,battle-transition,render-scene,
 render-actors}.js` hold the rest. Extracted functions take the scene instance as
 their first argument (`drawScene(world, ctx)`), the pattern `battle/spatial-index.js`
 and `persistence/save-repository.js` already use — composition with explicit
@@ -115,13 +115,14 @@ body it forwards to.
 
 Simulation ownership: `World.update()` is the ordered campaign pipeline.
 `updateWorldScreens()` (Plan 021) runs FIRST and returns `true` whenever a
-world-scene modal — the pre-battle brief or the post-battle aftermath — is
-open, pre-empting every phase below it for that tick, the same pre-empt idiom
-`updateCampInteraction()` already uses. It must never fall through in the same
+world-scene modal — the pre-battle brief, the post-battle aftermath, the
+specialization or perk choice, or (Plan 030) the site menu — is open,
+pre-empting every phase below it for that tick, the same pre-empt idiom
+`updateSiteInteraction()` already uses. It must never fall through in the same
 tick a screen opens, or that tick's opening keypress is still in `pressed` and
 instantly resolves the screen it just opened. After the gate: hero
-movement/terrain runs first, settlement and scouting interactions run second,
-camp assault input runs third, roaming-party AI owns navigation and encounter
+movement/terrain runs first, passive settlement/camp scouting runs second, the
+site-menu press runs third, roaming-party AI owns navigation and encounter
 handoff, then party spawning and camera/effects maintenance finish the tick.
 Keep campaign arrays (`parties`, `save.troops`, `save.camps`) and their timers in
 those world phases; do not add a second map snapshot boundary.
@@ -138,6 +139,30 @@ deliberately NOT gated, because a save write is durability rather than simulatio
 and while frozen it rewrites identical bytes. All three freezes (modal,
 stopped-hero, and the `playT` gate) are deliberate and covered by tests, not
 incidental side effects to "fix".
+
+Plan 030: the campaign map has ONE verb. `WORLD_PRIMARY` (E) next to a village,
+a town, a bandit camp or the stronghold opens the site menu — a `world.screen` of
+kind `'site'` — and every service is a row in it, chosen with the menu actions and
+committed with `CONFIRM`. There are no per-service hotkeys; `RECRUIT_SPEAR`,
+`RECRUIT_KNIGHT`, `HEAL`, `EXPAND_ARMY`, `CLAIM` and `UPGRADE_BANNER` were deleted
+from the action layer rather than left bound, so adding a service means adding a
+row, never a key. `world/site-menu.js` owns the model (which rows exist, what they
+cost, why one is refused) and the dispatch; the RULES stay in the method each row
+calls — `World.recruit()`, `restAndHeal()`, `expandArmy()`, `World.upgradeBanner()`,
+`World.claimSettlement()` — so a row's price tag and its charge cannot disagree, and
+a refused row still commits so that method's own refusal is what the player reads.
+
+Two consequences are deliberate. Committing a row rebuilds the model from the save
+rather than patching it, so the purse and every price re-derive and a repeat purchase
+is one more `CONFIRM`. And the rows that raise a modal of their own — claim, choose-a-
+calling, raid, storm — must close or replace the site menu BEFORE calling into it:
+`queueSpecChoice()` and `offerPerkChoice()` both no-op while a screen is open, so
+claiming from inside an open menu would silently swallow the prompt it earns.
+
+Every world modal panel declares its own `ctx.textBaseline`. It used to arrive by
+accident — `drawHud()` sets `'middle'` for the resource chip and never reset it, and
+all four panels inherited that — which made their vertical text placement a hidden
+dependency on the HUD. Do not remove those declarations.
 
 Plan 023: the campaign world is alive ONLY while the hero rides.
 `World.timeFlowing()` — realized hero speed at or above `BALANCE.worldWakeSpeed`

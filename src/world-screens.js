@@ -6,14 +6,14 @@
 import {
   PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS,
   weightText, armySlots, rankOf, rankName,
-} from './data.js?v=r0a1bd3998320';
-import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r0a1bd3998320';
-import { clamp, rrect } from './engine.js?v=r0a1bd3998320';
-import { SQUAD_LABELS } from './battle/constants.js?v=r0a1bd3998320';
+} from './data.js?v=r70b613c6e5cd';
+import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r70b613c6e5cd';
+import { clamp, rrect } from './engine.js?v=r70b613c6e5cd';
+import { SQUAD_LABELS } from './battle/constants.js?v=r70b613c6e5cd';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=r0a1bd3998320';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r0a1bd3998320';
+} from './region.js?v=r70b613c6e5cd';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r70b613c6e5cd';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
@@ -281,6 +281,11 @@ function buildObjectiveBriefLines(objective) {
 export function drawBriefPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // The vertical placement below is measured from a MIDDLE baseline. It used to arrive here
+  // by accident — drawHud() sets textBaseline 'middle' for the resource chip and never reset
+  // it, so every world modal silently inherited it and would have shifted the moment the HUD
+  // stopped leaking. Declared explicitly instead (Plan 030).
+  ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(21,22,46,0.72)';
   ctx.fillRect(0, 0, W, H);
   // Milestone 025: objective/stronghold lines grow the panel instead of squeezing
@@ -420,6 +425,7 @@ export function buildSpecModel(settlement, save) {
 export function drawSpecPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.textBaseline = 'middle'; // see drawBriefPanel: declared, not inherited from drawHud
   ctx.fillStyle = 'rgba(21,22,46,0.72)';
   ctx.fillRect(0, 0, W, H);
   const pw = Math.min(640, W - 60), rowH = 64, headH = 108, footH = 56;
@@ -494,6 +500,7 @@ export function buildPerkModel(save) {
 export function drawPerkPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.textBaseline = 'middle'; // see drawBriefPanel: declared, not inherited from drawHud
   ctx.fillStyle = 'rgba(21,22,46,0.72)';
   ctx.fillRect(0, 0, W, H);
   const pw = Math.min(660, W - 60), rowH = 64, headH = 112, footH = 56;
@@ -540,6 +547,100 @@ export function drawPerkPanel(ctx, cam, model) {
   ctx.textBaseline = 'alphabetic';
   const first = rects[0];
   return { perk: { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects } };
+}
+
+// ---------------------------------------------------------------- site menu
+// Plan 030: the one modal behind every map interaction. Same chrome as the specialization
+// and perk panels above — deliberately, so the campaign has one modal language — with two
+// additions the others do not need: the purse in the header (the HUD chip is under the
+// scrim) and a notice line in the footer carrying whatever the last committed row said.
+//
+// The model is built in world/site-menu.js; this function only draws it and returns the
+// rects updateWorldScreens() hit-tests against.
+export function drawSitePanel(ctx, cam, model) {
+  const W = cam.w, H = cam.h;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.textBaseline = 'alphabetic'; // this panel's offsets are measured from the text baseline
+  ctx.fillStyle = 'rgba(21,22,46,0.72)';
+  ctx.fillRect(0, 0, W, H);
+  // The panel must fit the canvas, which is window.innerHeight and can be well under 700
+  // on a laptop or a half-height window. A town sells seven things, so the rows shrink
+  // before the panel overflows and the footer is anchored to the panel's own bottom edge —
+  // otherwise the LEAVE button lands off-canvas and a mouse-only player has no way out.
+  // drawBriefPanel clamps for the same reason.
+  const pw = Math.min(640, W - 60), gap = 6, headH = 122, footH = 78;
+  const n = Math.max(1, model.rows.length);
+  const maxPh = H - 32;
+  const rowH = Math.max(34, Math.min(52, Math.floor((maxPh - headH - footH) / n) - gap));
+  const ph = Math.min(headH + n * (rowH + gap) + footH, maxPh);
+  const px = W / 2 - pw / 2, py = Math.max(16, H / 2 - ph / 2);
+  ctx.fillStyle = P.ink;
+  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
+  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+
+  ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = P.cream;
+  ctx.font = '900 24px Inter, system-ui, sans-serif';
+  ctx.fillText(model.title, W / 2, py + 36);
+  ctx.font = '700 13px Inter, system-ui, sans-serif';
+  ctx.fillStyle = P.hero;
+  ctx.fillText(model.subtitle, W / 2, py + 58);
+  // The purse, in the same glyph order the HUD chip uses, so the two never read as
+  // different numbers for the same thing.
+  const purse = model.purse;
+  ctx.font = '700 14px Inter, system-ui, sans-serif';
+  ctx.fillStyle = P.cream;
+  ctx.fillText(`⛃ ${purse.gold}    ⚔ ${purse.slots}/${purse.cap}    ♥ ${purse.hp}/${purse.maxHp}`, W / 2, py + 84);
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#9BA3BF';
+  ctx.fillText(model.rows.length ? '↑↓ choose · ENTER do it · X leave' : 'X leave', W / 2, py + 104);
+
+  const rects = [];
+  model.rows.forEach((row, i) => {
+    const y = py + headH + i * (rowH + gap);
+    const selected = i === model.index;
+    // A refused row still draws, still selects and still commits: the service method owns
+    // the refusal and says it in the notice line, which is what keeps `enabled` from ever
+    // drifting away from the actual rule.
+    ctx.globalAlpha = row.enabled ? 1 : 0.55;
+    ctx.fillStyle = selected ? P.cream : '#26304F';
+    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.fill();
+    ctx.strokeStyle = selected ? P.hero : '#3A4A72'; ctx.lineWidth = selected ? 3 : 1.5;
+    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = selected ? P.ink : P.cream;
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
+    // Proportional to rowH so a shrunk row keeps both lines inside it. At the full 52px
+    // these round to the same y + 21 / y + 39 the baselines were captured at.
+    ctx.fillText(row.label, px + 44, Math.round(y + rowH * 0.40));
+    ctx.font = '600 12px Inter, system-ui, sans-serif';
+    ctx.fillStyle = selected ? '#3A4A72' : '#B9C2DC';
+    ctx.fillText(row.enabled ? row.detail : `${row.detail}  ·  ${row.disabledReason}`,
+      px + 44, Math.round(y + rowH * 0.75));
+    ctx.globalAlpha = 1;
+    rects.push({ x: px + 24, y, w: pw - 48, h: rowH });
+  });
+
+  // Anchored to the panel, not to the row count: the notice and the LEAVE button stay on
+  // canvas even when `ph` had to be clamped.
+  const footTop = py + ph - footH;
+  ctx.textAlign = 'center';
+  if (model.notice) {
+    ctx.font = '700 13px Inter, system-ui, sans-serif';
+    ctx.fillStyle = P.hero;
+    ctx.fillText(model.notice, W / 2, footTop + 18);
+  }
+  const leave = { x: W / 2 - 60, y: footTop + 30, w: 120, h: 34 };
+  drawButton(ctx, leave, 'LEAVE  (X)', false);
+  ctx.textBaseline = 'alphabetic';
+  const first = rects[0];
+  return {
+    leave,
+    site: first
+      ? { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects }
+      : null,
+  };
 }
 
 // ---------------------------------------------------------------- campaign summary
@@ -615,6 +716,7 @@ export function buildAftermathModel(payload) {
 export function drawAftermathPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.textBaseline = 'middle'; // see drawBriefPanel: declared, not inherited from drawHud
   ctx.fillStyle = 'rgba(21,22,46,0.78)';
   ctx.fillRect(0, 0, W, H);
   const pw = Math.min(680, W - 60), ph = Math.min(440, H - 60);

@@ -1,17 +1,16 @@
-// What the player can do while standing next to something: recruit and heal in a
-// settlement, buy army cap in a town, raid a camp, claim a neutral settlement, and
-// the toast line that reports it. Also the post-victory bookkeeping for a razed
-// camp (campVictoryExtra) and the stronghold-assault request with its objective
-// descriptor (Milestone 025).
-import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp } from '../data.js?v=r0a1bd3998320';
-import { perkMods, bannerCost, recruitTroop } from '../progression.js?v=r0a1bd3998320';
-import { dist2 } from '../engine.js?v=r0a1bd3998320';
-import { ACTIONS } from '../input-actions.js?v=r0a1bd3998320';
-import {
-  REGION, SPECIALIZATIONS, OWNERSHIP,
-  encounterObjective, strongholdModifiers, strongholdStateId, strongholdAdvantageLines,
-  settlementRecord, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r0a1bd3998320';
+// The settlement services themselves: local prices, recruiting, resting, buying column
+// room, and the toast line that reports each one. Also the passive camp scouting that runs
+// just by riding near, and the post-victory bookkeeping for a razed camp
+// (campVictoryExtra).
+//
+// Plan 030 moved the KEYS out. Nothing here reads input any more: every service below is
+// called by a row of the site menu (world/site-menu.js), which is what the one map verb
+// opens. The rules — and their refusal wording — stay here, so the menu's row state and
+// the charge it makes can never disagree.
+import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp } from '../data.js?v=r70b613c6e5cd';
+import { perkMods, recruitTroop } from '../progression.js?v=r70b613c6e5cd';
+import { dist2 } from '../engine.js?v=r70b613c6e5cd';
+import { REGION, SPECIALIZATIONS, OWNERSHIP, settlementRecord } from '../region.js?v=r70b613c6e5cd';
 
 const P = PAL.world;
 
@@ -89,72 +88,47 @@ export function isSettlementOccupied(world, s) {
   return !!(st && st.occupied);
 }
 
-export function updateSettlementInteractions(world, inp) {
+// Rest & heal. Extracted from the old KeyF branch unchanged, refusals included.
+export function restAndHeal(world, s) {
+  const healCost = healCostAt(world, s);
+  const heroHurt = world.save.heroHp < world.save.heroMaxHp;
+  // Plan 029: a veteran's full health is his RANKED maximum, so "already rested" must
+  // compare against that or a wounded Elite would be told he is fine. The Drillyard perk's
+  // threshold shift is passed for the same reason the save validator takes it — the game
+  // grants rank with it applied.
+  const earlier = perkMods(world.save.perks).rankEarlier;
+  const troopsHurt = world.save.troops.some(t => t.hp != null && t.hp < troopMaxHp(t, earlier));
+  if (!heroHurt && !troopsHurt) { world.say('Already rested'); return false; }
+  if (world.save.gold < healCost) { world.say('Not enough gold'); return false; }
+  world.save.gold -= healCost;
+  world.save.stats.goldSpent += healCost;
+  world.save.heroHp = world.save.heroMaxHp;
+  for (const t of world.save.troops) delete t.hp;
+  world.game.sfx.coin();
+  world.say(s.freeHeal ? 'The hot springs of Coldwell mend every wound — free of charge' : 'Warband rested and healed');
+  return true;
+}
+
+// Two more places in the column. A town service, and World.armyCapCost() owns the price so
+// the menu's row and this charge read the same number.
+export function expandArmy(world) {
+  const cost = world.armyCapCost();
+  if (world.save.gold < cost) { world.say(`Need ${cost} gold`); return false; }
+  world.save.gold -= cost;
+  world.save.armyCap += 2;
+  world.save.stats.goldSpent += cost;
+  world.game.sfx.coin();
+  world.say(`Army capacity is now ${world.save.armyCap}`);
+  return true;
+}
+
+// The phase keeps its name and its slot in World.update's order, but all it does now is the
+// passive scouting below and reporting which settlement the hero stands at — the site menu
+// resolves its own target, and the world screens own every press.
+export function updateSettlementInteractions(world) {
   const s = world.nearSettlement();
-  if (s) {
-    const pressedService = inp.pressedAction(ACTIONS.RECRUIT_SPEAR) || inp.pressedAction(ACTIONS.WORLD_PRIMARY) ||
-      (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) || inp.pressedAction(ACTIONS.HEAL) ||
-      (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY)) ||
-      (s.kind === 'town' && inp.pressedAction(ACTIONS.UPGRADE_BANNER));
-    if (world.isSettlementOccupied(s)) {
-      if (pressedService) world.say(`${s.name} is occupied — drive off the raiders to restore its service`);
-    } else {
-      if (inp.pressedAction(ACTIONS.RECRUIT_SPEAR)) world.recruit('spear');
-      if (inp.pressedAction(ACTIONS.WORLD_PRIMARY)) world.recruit('archer');
-      if (s.kind === 'town' && inp.pressedAction(ACTIONS.RECRUIT_KNIGHT)) world.recruit('knight');
-      if (inp.pressedAction(ACTIONS.HEAL)) {
-        const healCost = healCostAt(world, s);
-        const heroHurt = world.save.heroHp < world.save.heroMaxHp;
-        // Plan 029: a veteran's full health is his RANKED maximum, so "already rested"
-        // must compare against that or a wounded Elite would be told he is fine. The
-        // Drillyard perk's threshold shift is passed for the same reason the save
-        // validator takes it — the game grants rank with it applied.
-        const earlier = perkMods(world.save.perks).rankEarlier;
-        const troopsHurt = world.save.troops.some(t => t.hp != null && t.hp < troopMaxHp(t, earlier));
-        if (!heroHurt && !troopsHurt) world.say('Already rested');
-        else if (world.save.gold < healCost) world.say('Not enough gold');
-        else {
-          world.save.gold -= healCost;
-          world.save.stats.goldSpent += healCost;
-          world.save.heroHp = world.save.heroMaxHp;
-          for (const t of world.save.troops) delete t.hp;
-          world.game.sfx.coin();
-          world.say(s.freeHeal ? 'The hot springs of Coldwell mend every wound — free of charge' : 'Warband rested and healed');
-        }
-      }
-      if (s.kind === 'town' && inp.pressedAction(ACTIONS.EXPAND_ARMY)) {
-        const cost = world.armyCapCost();
-        if (world.save.gold >= cost) {
-          world.save.gold -= cost; world.save.armyCap += 2;
-          world.save.stats.goldSpent += cost;
-          world.game.sfx.coin(); world.say(`Army capacity is now ${world.save.armyCap}`);
-        } else world.say(`Need ${cost} gold`);
-      }
-      // Plan 029: the banner. A town service like the army cap, and deliberately the same
-      // shape — one press, one price, one refusal message. World.upgradeBanner() owns the
-      // rules so the prompt's price tag and the charge can never disagree.
-      if (s.kind === 'town' && inp.pressedAction(ACTIONS.UPGRADE_BANNER)) world.upgradeBanner();
-    }
-    // Milestone 025 Slice B: claiming neutral ground. G at the gates of an
-    // unoccupied, unowned settlement brings it under the banner without a fight —
-    // and queues the one-time specialization choice. Occupied land must be won
-    // back by the sword (the retake battle's onWinExtra).
-    if (s && !world.isSettlementOccupied(s) && inp.pressedAction(ACTIONS.CLAIM)) {
-      const rec = settlementRecord(world.save, s.id);
-      if (rec?.owner === OWNERSHIP.NEUTRAL) {
-        if (world.claimSettlement(s)) {
-          world.particles.ring(world.hero.x, world.hero.y, 44, P.hero, 0.6, 4);
-        }
-      } else if (rec?.owner === OWNERSHIP.PLAYER && !rec.spec) {
-        // The choice dismissed with X ("decide later") is not lost — it stays
-        // readable on the settlement's own record, and G at its gates is the
-        // documented way back in (see dismissSpecChoice).
-        world.openSpecChoice(s.id);
-      }
-    }
-  }
-  // Scouting is deliberately after interaction: a newly revealed garrison is visible
-  // to the next phase, but cannot consume the same input as a camp assault.
+  // Scouting stays ahead of the site menu in the tick order: a garrison revealed by riding
+  // close is visible to the menu the same press opens, and it consumes no input of its own.
   for (const c of WORLD.camps) {
     const st = world.save.camps.find(x => x.id === c.id);
     if (st.razed || st.garrison || c.stronghold) continue;
@@ -203,59 +177,4 @@ export function campVictoryExtra(world, camp, st) {
       world.save.toast = `Camp razed (${razedNow}/${REGION.linkedCamps.length})!` + remnantNote;
     }
   };
-}
-
-// Plan 021 decision 8: WORLD_PRIMARY on a camp/stronghold opens the brief instead
-// of committing immediately. `comp` in the descriptor is display-only — an unscouted
-// camp shows unknown in the brief (decision 6) and the real roll happens at confirm.
-//
-// Milestone 025 Slice E: the stronghold is assaultable at ANY power state once
-// found — an early attack is possible but clearly dangerous. Its descriptor carries
-// the Break-the-position objective (guard count already reduced by razed linked
-// camps) plus the power summary the brief renders; the garrison thinning and the
-// reinforcement wave are applied at CONFIRM time in battle-transition.js so an
-// abandoned brief never mutates the fight the player would have faced.
-export function updateCampInteraction(world, inp, settlement) {
-  const camp = world.nearCamp();
-  if (!camp || !inp.pressedAction(ACTIONS.WORLD_PRIMARY) || settlement) return false;
-  const st = world.save.camps.find(c => c.id === camp.id);
-  if (camp.stronghold) {
-    const mods = strongholdModifiers(world.save);
-    // The watchtower's reward is knowledge: with a watchtower held, the hold's
-    // deployment is revealed even before an assault is committed.
-    if (mods.revealDeployment && !st.garrison) st.garrison = world.rollGarrison(camp);
-    const label = STRONGHOLD_POWER_LABELS[mods.stateId];
-    world.requestBattle({
-      campId: camp.id,
-      title: `ASSAULT ON ${camp.name.toUpperCase()}`,
-      subtitle: `${label} — ${strongholdAdvantageLines(mods)[0]}`,
-      arena: 'camp',
-      ambush: false,
-      approach: world.approachTo(camp.x, camp.y),
-      deploy: 4, // YOU are storming THEM — they scramble to arms, not a parade formup
-      comp: st.garrison ? st.garrison.slice() : null,
-      // The razed-camp guard reduction is part of the fight itself, not just the
-      // brief prose: the objective the player must break carries mods.guards, so
-      // "2 defensive guards remain" is literally how many guards stand.
-      objective: { ...encounterObjective('stronghold'), guards: mods.guards },
-      stronghold: { mods, advantages: strongholdAdvantageLines(mods), label },
-      canWithdraw: true, // explicit WORLD_PRIMARY press — always player-initiated
-      partyMeta: { campId: camp.id },
-    });
-    return true;
-  }
-  world.requestBattle({
-    campId: camp.id,
-    title: 'RAID THE CAMP',
-    subtitle: 'Break the position — one of the linked camps feeding Wolfsjaw',
-    arena: 'camp',
-    ambush: false,
-    approach: world.approachTo(camp.x, camp.y),
-    deploy: 4, // YOU are storming THEM — they scramble to arms, not a parade formup
-    comp: st.garrison ? st.garrison.slice() : null,
-    objective: encounterObjective('camp'),
-    canWithdraw: true, // explicit WORLD_PRIMARY press — always player-initiated
-    partyMeta: { campId: camp.id },
-  });
-  return true;
 }

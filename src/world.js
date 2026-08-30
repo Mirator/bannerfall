@@ -1,26 +1,26 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=r0a1bd3998320';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r0a1bd3998320';
-import { SAVE_VERSION } from './save.js?v=r0a1bd3998320';
+} from './data.js?v=r70b613c6e5cd';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r70b613c6e5cd';
+import { SAVE_VERSION } from './save.js?v=r70b613c6e5cd';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=r0a1bd3998320';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r0a1bd3998320';
+} from './region.js?v=r70b613c6e5cd';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r70b613c6e5cd';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=r0a1bd3998320';
-import { drawScene } from './world/render-scene.js?v=r0a1bd3998320';
+} from './progression.js?v=r70b613c6e5cd';
+import { drawScene } from './world/render-scene.js?v=r70b613c6e5cd';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r0a1bd3998320';
+} from './world/battle-transition.js?v=r70b613c6e5cd';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -30,14 +30,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-  updateCampInteraction as campInteraction,
-} from './world/settlement-interactions.js?v=r0a1bd3998320';
+} from './world/settlement-interactions.js?v=r70b613c6e5cd';
+import {
+  updateSiteInteraction as siteInteraction,
+} from './world/site-menu.js?v=r70b613c6e5cd';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r0a1bd3998320';
-import { WORLD_ART } from './world/visual-style.js?v=r0a1bd3998320';
+} from './world/terrain.js?v=r70b613c6e5cd';
+import { WORLD_ART } from './world/visual-style.js?v=r70b613c6e5cd';
 
 const P = PAL.world;
 
@@ -149,7 +151,7 @@ export class World {
     // never on `save` — a refresh mid-aftermath loses the screen, which is correct (the
     // checkpoint is a map snapshot, not a battle). Consumed and cleared exactly once,
     // beside the toast replay above, and only when this world is not the victory ending
-    // (a won stronghold raid's aftermath IS the victory screen — see updateCampInteraction/
+    // (a won stronghold raid's aftermath IS the victory screen — see site-menu.js/
     // startVictory ordering in update()).
     if (game.pendingAftermath && !this.save.won) {
       this.screen = buildAftermathModel(game.pendingAftermath);
@@ -656,7 +658,7 @@ export class World {
   update(dt) {
     const inp = this.game.input, h = this.hero;
     // Plan 021: the brief/aftermath modal phase runs FIRST, mirroring the
-    // updateCampInteraction pre-empt idiom below. Returning true here blocks every other
+    // updateSiteInteraction pre-empt idiom below. Returning true here blocks every other
     // world phase for the tick — hero movement, interactions, party AI (so `grace` freezes
     // for free, since it only decays inside updateParties), and spawns/victory — so a
     // modal genuinely pauses the campaign rather than just visually covering it.
@@ -668,11 +670,11 @@ export class World {
     this.updateHeroMovement(dt, inp, h);
     const flowing = this.updateWorldClock(dt);
     // These two ALWAYS run, and the reason is structural: they are the only world phases
-    // that take no `dt`. They hold no timers — they are the player pressing a key at a
-    // town or a camp, and standing still IS how you recruit, heal, scout and press an
-    // assault. Gating them would freeze the game rather than the world.
-    const settlement = this.updateSettlementInteractions(inp);
-    if (this.updateCampInteraction(inp, settlement)) return;
+    // that take no `dt`. They hold no timers — one is passive scouting, the other is the
+    // player pressing E at a town or a camp, and standing still IS how you recruit, heal,
+    // scout and press an assault. Gating them would freeze the game rather than the world.
+    this.updateSettlementInteractions();
+    if (this.updateSiteInteraction(inp)) return;
 
     // The terminal transition ALWAYS runs. `save.won` is set during the BATTLE, so the
     // returning World's very first tick is what must redirect — and the player is always
@@ -920,7 +922,7 @@ export class World {
         comp: p.comp.slice(),
         objective: occupiedSettlement ? encounterObjective('settlement') : null,
         // Plan 021 decision 5: withdraw is offered only when the player initiated the
-        // fight — an explicit camp/stronghold press (handled in updateCampInteraction)
+        // fight — an explicit camp/stronghold choice (handled in site-menu.js)
         // or running down a fleeing party. An ambush or a mutual skirmish is committed.
         canWithdraw: caughtThem,
         onWinExtra: occupiedSettlement ? () => {
@@ -1292,16 +1294,18 @@ export class World {
     return settlementOccupied(this, s);
   }
 
-  updateSettlementInteractions(inp) {
-    return settlementInteractions(this, inp);
+  updateSettlementInteractions() {
+    return settlementInteractions(this);
   }
 
   campVictoryExtra(camp, st) {
     return campVictoryBookkeeping(this, camp, st);
   }
 
-  updateCampInteraction(inp, settlement) {
-    return campInteraction(this, inp, settlement);
+  // Plan 030: the single map verb. Replaces updateCampInteraction in the order — it now
+  // opens the site menu for a settlement too, so one press means "interact" everywhere.
+  updateSiteInteraction(inp) {
+    return siteInteraction(this, inp);
   }
 
   // Implementations live under src/world/. These stay instance methods because the
