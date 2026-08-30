@@ -2,40 +2,42 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=rdc06e391aa49';
-import { perkMods } from './progression.js?v=rdc06e391aa49';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=rdc06e391aa49';
-import { SpatialGrid } from './battle/spatial-index.js?v=rdc06e391aa49';
-import { ACTIONS } from './input-actions.js?v=rdc06e391aa49';
+} from './data.js?v=ra61468519e7e';
+import { perkMods } from './progression.js?v=ra61468519e7e';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=ra61468519e7e';
+import { SpatialGrid } from './battle/spatial-index.js?v=ra61468519e7e';
+import { ACTIONS } from './input-actions.js?v=ra61468519e7e';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
-} from './battle/constants.js?v=rdc06e391aa49';
+  DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
+} from './battle/constants.js?v=ra61468519e7e';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=rdc06e391aa49';
-import { drawScene, drawProps } from './battle/render-scene.js?v=rdc06e391aa49';
+} from './battle/terrain.js?v=ra61468519e7e';
+import { drawScene, drawProps } from './battle/render-scene.js?v=ra61468519e7e';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=rdc06e391aa49';
+} from './battle/separation.js?v=ra61468519e7e';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=rdc06e391aa49';
+} from './battle/ai-phases.js?v=ra61468519e7e';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=rdc06e391aa49';
+} from './battle/combat.js?v=ra61468519e7e';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=rdc06e391aa49';
+} from './battle/objectives.js?v=ra61468519e7e';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
-} from './battle/enemy-command.js?v=rdc06e391aa49';
+  placeEnemyDeployment as placeEnemyLine,
+} from './battle/enemy-command.js?v=ra61468519e7e';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -302,11 +304,16 @@ export class Battle {
     this.lastAction = 0;      // sim time of the last hit dealt or taken
     this.lastDeath = 0;       // sim time anyone last actually died
     this.bloodlust = false;   // stalemate breaker: survivors stop kiting and close in
-    // deploy window scales with WHO holds the initiative:
-    // mutual field battle = 8s (both sides form up), you storming them = 4s scramble,
-    // you running down a fleeing party = 0 (you caught them), their ambush = 0 (they caught you).
-    this.deployT = setup.ambush ? 0 : (setup.deploy != null ? setup.deploy : 8);
-    this.deployMax = this.deployT || 1; // the HUD bar divides by this, not a hardcoded window length
+    // Plan 033: the timed deploy window is gone. Whether a fight opens with the paused
+    // deployment phase still scales with WHO holds the initiative, read off the same
+    // setup fields: a mutual field battle or you storming them = a deployment phase
+    // (both sides form up before the horn); you running down a fleeing party
+    // (deploy: 0) or their ambush = none — nobody paraded for a fight that started by
+    // being caught.
+    this.deployEnabled = !setup.ambush && (setup.deploy == null || setup.deploy > 0);
+    this.deployArmT = DEPLOY_ARM_T;
+    this.dragUnit = null; // the body under the mouse while placing, deployment phase only
+    if (this.deployEnabled) placeEnemyLine(this);
     this.assignSlots();
   }
 
@@ -485,7 +492,18 @@ export class Battle {
       // Keyed strictly off setup.brief so scenario('battle_*') (never brief-routed) is
       // provably untouched.
       const introDur = this.setup.brief ? 0.6 : 1.1;
-      if (this.stateT > introDur || (this.stateT > 0.6 && this.game.input.pressed.size > 0)) { this.state = 'fight'; this.game.sfx.horn(175); }
+      if (this.stateT > introDur || (this.stateT > 0.6 && this.game.input.pressed.size > 0)) {
+        // Plan 033: a fight with a deployment phase pauses on it; only an ambush or a
+        // caught-fleeing fight (deploy: 0) goes straight to blows.
+        this.state = this.deployEnabled ? 'deploy' : 'fight';
+        this.game.sfx.horn(175);
+      }
+      this.updateCamera(dt);
+      this.particles.update(dt);
+      return true;
+    }
+    if (this.state === 'deploy') {
+      this.updateDeployPhase(dt);
       this.updateCamera(dt);
       this.particles.update(dt);
       return true;
@@ -510,6 +528,68 @@ export class Battle {
       return true;
     }
     return false;
+  }
+
+  // ---------------------------------------------------------------- Plan 033: deployment
+  // The paused placement phase. Runs INSTEAD of the tick pipeline (updateSceneState returns
+  // true out of update()), so nothing here advances battle.time, cooldowns, or any clock —
+  // the pause is structural, not a flag every phase has to honour. Mouse placement reads
+  // the cursor through Camera.toWorld exactly like hero aim does: player input reaching the
+  // simulation is the one sanctioned crossing of the presentation boundary, and toWorld
+  // never includes the render-time shake offset (AGENTS.md).
+  updateDeployPhase(dt) {
+    const inp = this.game.input;
+    if (this.deployArmT > 0) this.deployArmT -= dt;
+    // Squad selection and pre-orders still land here, as they already did during the intro.
+    this.updateCommandPhase(inp);
+    const mw = this.game.camera.toWorld(inp.mouse.x, inp.mouse.y);
+    if (inp.mouse.clicked) {
+      let best = null, bd = DEPLOY_PICK_R * DEPLOY_PICK_R;
+      for (const t of this.troops) {
+        const d = dist2(mw.x, mw.y, t.x, t.y);
+        if (d < bd) { bd = d; best = t; }
+      }
+      if (dist2(mw.x, mw.y, this.hero.x, this.hero.y) < bd) best = this.hero;
+      this.dragUnit = best;
+    }
+    if (!inp.mouse.down) this.dragUnit = null;
+    if (this.dragUnit) {
+      const p = this.clampToDeployZone(mw.x, mw.y);
+      this.dragUnit.x = p.x; this.dragUnit.y = p.y;
+      this.dragUnit.vx = 0; this.dragUnit.vy = 0;
+    }
+    if (this.deployArmT <= 0 && inp.pressedAction(ACTIONS.CONFIRM)) this.confirmDeploy();
+  }
+
+  // The player's deployment ground: his side of the field, up to DEPLOY_NO_MANS short of
+  // the midline along the approach axis. Projection, not rejection — a drag past the
+  // frontier slides along it instead of sticking.
+  clampToDeployZone(x, y) {
+    const cx = this.W / 2, cy = this.H / 2;
+    const s = (x - cx) * this.adx + (y - cy) * this.ady;
+    const over = s + DEPLOY_NO_MANS;
+    if (over > 0) { x -= this.adx * over; y -= this.ady * over; }
+    return { x: clamp(x, 40, this.W - 40), y: clamp(y, 40, this.H - 40) };
+  }
+
+  confirmDeploy() {
+    if (this.state !== 'deploy') return;
+    this.state = 'fight';
+    this.dragUnit = null;
+    // The placed line means something: every troop holds where the player put him until
+    // ordered otherwise. Squads the player already ordered during the phase keep that
+    // order; only the neutral default is promoted, so a deliberate pre-battle CHARGE is
+    // not silently overwritten.
+    for (const t of this.troops) { t.holdX = t.x; t.holdY = t.y; }
+    for (const type of this.mannedSquads()) {
+      const squad = this.squads[type];
+      if (squad.stance !== 'follow') continue;
+      squad.stance = 'hold';
+      squad.holdX = this.hero.x; squad.holdY = this.hero.y;
+    }
+    this.command = this.aggregateStance();
+    this.game.sfx.horn(155);
+    this.commandFlash = { text: 'THEY ADVANCE!', t: 1.0 };
   }
 
   updateActivePhases(dt) {

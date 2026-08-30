@@ -832,3 +832,43 @@ inherited baselines and asserts the plate and text pixel rows are identical, the
 the name is centred within 3px. Verified to fail on the pre-fix renderer. A single-frame
 visual baseline cannot catch this class of bug - it only ever records one of the two
 states.
+
+## Plan 033: the deployment phase (2026-08-30)
+
+The timed deploy window is gone. A non-ambush battle now hands over from the intro to a
+paused `deploy` state: no phases run, no clock advances, and the fight starts on an armed
+CONFIRM (Enter/E, `DEPLOY_ARM_T` 0.35s). The player places his men (hero included) by
+dragging them inside his deployment ground — his side of the field up to `DEPLOY_NO_MANS`
+(220) short of the midline — and squad orders still land during the phase. On confirm,
+every troop's hold anchor is set where he was placed and squads still on the neutral
+`follow` are promoted to HOLD, so the placement survives the first fight tick instead of
+being walked back to formation slots. Squads explicitly ordered during the phase keep
+their order.
+
+The enemy deploys too: a battle with the phase spawns its force already formed (melee
+ranks by the Plan 027 RANK table, raiders behind, wolves on the wings) via
+`placeEnemyDeployment` in `src/battle/enemy-command.js` — pure eslot geometry, no RNG, so
+the simRng draw order is untouched. Ambush and caught-fleeing fights (`deploy: 0`) keep
+the legacy scatter and skip the phase entirely; `battle_bridge` is unchanged. Because the
+force starts formed, the commander's first `form` doctrine is a short march to the muster
+rather than a scatter walking to slots and standing.
+
+Deleted with the window: the frozen-enemies block at the top of `updateEnemyPhase`, the
+four FIRST BLOOD early-outs, the countdown HUD (replaced by the FORM YOUR LINE panel),
+and `deployT`/`deployMax`. Five qa_suite records were updated to the new mechanic (the
+three battle-flow records take the production Enter path; record 26 re-reads its silence
+clause against the paused state; the brace-latch fixture forces `state='fight'` like the
+e2e fixtures). The eight non-ambush battle visual baselines change by design — the 1.5s
+settle frame now shows the paused deployment screen — and are recaptured through the
+Visual baselines workflow.
+
+Measured after landing: npm test 181/181 with the recaptured baselines
+(battle_bridge unchanged — the scatter-path control). The 360-raid sweep now
+crosses the deployment phase through the real CONFIRM press; the first fix
+reused the fixture's cumulative clock for the arm wait and test.fail reported
+green in 2.0s on a thrown guard — re-fixed with a dedicated arm clock. Honest
+numbers (120 raids/policy): idle 67 (was 69.2), chargeAll 52 (was 68), split 35
+(was 45). The orders-vs-idle finding stands, margin widened to fifteen points
+against commanding: a held line at spawn auto-battles as well as a following
+one, and charging a pre-formed enemy is far worse than charging a scatter. The
+test.fail annotation stays; the positional slice (plans/032) is what aims at it.

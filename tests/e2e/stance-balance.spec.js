@@ -167,6 +167,19 @@ async function raidSweep(page, orders, seeds, campIds) {
           let t = 0;
           // orders issued during `intro` are discarded, so wait the banner out first
           while (b.state === 'intro' && t < 3) { real(dt); t += dt; }
+          // Plan 033: production-path battles pause on the deployment phase. Arm CONFIRM
+          // (DEPLOY_ARM_T), then press it — asserted like the two confirms above, so the
+          // sweep can never silently measure a fight that was paused the whole window.
+          // The confirm's hold-promotion is part of what "pressing nothing" now means: an
+          // idle player still sounds the advance, and his placed line holds by default.
+          let armT = 0; // its own clock: `t` already carries the intro wait
+          while (b.state === 'deploy' && armT < 0.5) { real(dt); t += dt; armT += dt; }
+          if (b.state === 'deploy') {
+            game.input.injectKey('Enter', true); real(dt); t += dt; game.input.injectKey('Enter', false);
+          }
+          if (b.state !== 'fight') {
+            throw new Error('the deploy confirm did not start the fight: state=' + b.state);
+          }
           if (orders) for (const [squad, order] of Object.entries(orders)) b.issueCommand(order, squad);
           while (b.state !== 'end' && t < 95) { real(dt); t += dt; }
           totals.runs++;
@@ -289,6 +302,19 @@ test.describe('stance balance', () => {
     // One point behind is still behind, `toBeGreaterThan` is still a strict inequality, and
     // flipping an annotation on a margin inside the harness's own run-to-run drift is the
     // exact mistake Plan 019 had to retract. The annotation stays.
+    //
+    // Plan 033 (the deployment phase) changed what BOTH columns of this sweep mean, and the
+    // finding survived it with a wider margin. "Pressing nothing" now includes the one press
+    // nobody can skip — confirming the deployment — after which the un-ordered warband HOLDS
+    // its placed line instead of following; and the enemy starts formed instead of scattered,
+    // so its assault arrives as one body from the first fight tick. Measured on this exact
+    // fixture (120 raids per policy): idle 67% (was 69.2%), chargeAll 52% (was 68%), split
+    // 35% (was 45%). The idle line barely moved — a held line at spawn is as competent an
+    // auto-battler as a following one — while charging into a pre-formed enemy lost sixteen
+    // points, so the deficit AGAINST commanding widened from one point to fifteen. The
+    // annotation stays, and the mechanism this sweep is waiting for is still positional:
+    // orders need something to buy that the default resolution cannot (see the facing/flank
+    // slice, plans/032).
     test.fail();
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked

@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rdc06e391aa49';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=ra61468519e7e';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -91,9 +91,10 @@ export const STANCE_NOTES = Object.freeze({
 // The enemy commander re-reads the field this often. Two properties fix this number and
 // neither is negotiable without re-checking the other:
 //   * It is the delay before the FIRST decision, and the nine battle visual baselines
-//     settle at 1.5s. Eight carry the default 8s deploy window (no enemy phase runs at
-//     all); `battle_bridge` is an ambush with deploy 0 and reaches 0.4s of live fight
-//     after its 1.1s intro. 0.8s is provably outside every captured frame.
+//     settle at 1.5s. Eight sit paused in the Plan 033 deployment phase at that point
+//     (no phase runs at all until CONFIRM); `battle_bridge` is an ambush with no
+//     deployment phase and reaches 0.4s of live fight after its 1.1s intro. 0.8s is
+//     provably outside every captured frame.
 //   * It is the reaction latency the player feels. Faster reads as clairvoyance, slower
 //     reads as the enemy not noticing.
 export const CMD_TICK = 0.8;
@@ -173,6 +174,21 @@ export const WOLF_ISOLATION_PAD = 70;
 // carry a hardcoded 1.15 in updateTroopPhase; the enemy reads this name, and the value is
 // the same because the mechanic is the same.
 export const CHARGE_SPEED_MUL = 1.15;
+
+// ---------------------------------------------------------------- Plan 033: deployment
+// The paused pre-battle placement phase. The player's deployment ground is everything on
+// his side of the field up to DEPLOY_NO_MANS short of the midline along the approach axis;
+// the enemy's is the mirror. 220 leaves a 440-wide no-man's land between two ENGAGE_GAP
+// (820) spawn lines, so each side has ~190 of forward room plus everything behind it.
+export const DEPLOY_NO_MANS = 220;
+// Mouse pick radius for dragging a body during deployment, in world units. Wider than any
+// unit radius (max 18) so a click near a man grabs him without pixel-hunting.
+export const DEPLOY_PICK_R = 30;
+// CONFIRM arms this long after the phase opens. The deployment screen appears on the tick
+// the intro banner closes, and the intro itself is shortened by any keypress — so a held or
+// buffered E from map travel could otherwise start the fight before the player ever saw the
+// phase. Same arm-before-commit rule the spec/perk modals follow (CHOICE_ARM_T).
+export const DEPLOY_ARM_T = 0.35;
 
 // Battlefield size (Plan 024 Phase 1). 2x each side -> 4x area.
 export const FIELD = Object.freeze({ W: 2500, H: 1760 });

@@ -7,15 +7,15 @@
 // seam a row calls). It owns no drawing — world-screens.js draws the model — and it owns no
 // rules: every row commits through the method that already held the rule, so a row's price
 // tag and its charge cannot disagree.
-import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=rdc06e391aa49';
-import { bannerCost, bannerLabel } from '../progression.js?v=rdc06e391aa49';
-import { ACTIONS } from '../input-actions.js?v=rdc06e391aa49';
+import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=ra61468519e7e';
+import { bannerCost, bannerLabel } from '../progression.js?v=ra61468519e7e';
+import { ACTIONS } from '../input-actions.js?v=ra61468519e7e';
 import {
   OWNERSHIP, SPECIALIZATIONS, REGION,
   encounterObjective, strongholdModifiers, strongholdAdvantageLines, settlementRecord,
   STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=rdc06e391aa49';
-import { restAndHeal, expandArmy } from './settlement-interactions.js?v=rdc06e391aa49';
+} from '../region.js?v=ra61468519e7e';
+import { restAndHeal, expandArmy } from './settlement-interactions.js?v=ra61468519e7e';
 
 const P = PAL.world;
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
@@ -275,7 +275,7 @@ function requestSiteAssault(world, camp) {
       arena: 'camp',
       ambush: false,
       approach: world.approachTo(camp.x, camp.y),
-      deploy: 4, // YOU are storming THEM — they scramble to arms, not a parade formup
+      deploy: 4, // truthy = a deployment phase opens the assault (Plan 033) — you chose this fight
       comp: st.garrison ? st.garrison.slice() : null,
       // The razed-camp guard reduction is part of the fight itself, not just the brief
       // prose: the objective carries mods.guards, so "2 defensive guards remain" is

@@ -1,26 +1,26 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=rdc06e391aa49';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rdc06e391aa49';
-import { SAVE_VERSION } from './save.js?v=rdc06e391aa49';
+} from './data.js?v=ra61468519e7e';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra61468519e7e';
+import { SAVE_VERSION } from './save.js?v=ra61468519e7e';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=rdc06e391aa49';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=rdc06e391aa49';
+} from './region.js?v=ra61468519e7e';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=ra61468519e7e';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=rdc06e391aa49';
-import { drawScene } from './world/render-scene.js?v=rdc06e391aa49';
+} from './progression.js?v=ra61468519e7e';
+import { drawScene } from './world/render-scene.js?v=ra61468519e7e';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rdc06e391aa49';
+} from './world/battle-transition.js?v=ra61468519e7e';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -30,16 +30,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=rdc06e391aa49';
+} from './world/settlement-interactions.js?v=ra61468519e7e';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=rdc06e391aa49';
+} from './world/site-menu.js?v=ra61468519e7e';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rdc06e391aa49';
-import { WORLD_ART } from './world/visual-style.js?v=rdc06e391aa49';
+} from './world/terrain.js?v=ra61468519e7e';
+import { WORLD_ART } from './world/visual-style.js?v=ra61468519e7e';
 
 const P = PAL.world;
 
@@ -918,7 +918,7 @@ export class World {
         arena: null,
         ambush: ambushed,
         approach: this.approachTo(p.x, p.y),
-        deploy: caughtThem ? 0 : undefined, // undefined = mutual 8s formup
+        deploy: caughtThem ? 0 : undefined, // undefined = mutual deployment phase (Plan 033); 0 = none, you caught them
         comp: p.comp.slice(),
         objective: occupiedSettlement ? encounterObjective('settlement') : null,
         // Plan 021 decision 5: withdraw is offered only when the player initiated the

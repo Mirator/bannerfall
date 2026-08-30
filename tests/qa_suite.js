@@ -115,7 +115,15 @@ function runQaSuiteImpl() {
     const startTroops = G.scene.startTroops;
     const maxHp = G.scene.hero.maxHp;
     assert(totalEnemies === 3, 'expected battle_small totalEnemies=3, got ' + totalEnemies);
-    g.tap('Digit2'); // charge
+    g.tap('Digit2'); // charge — lands during the intro, survives the deploy confirm (Plan 033)
+    // Plan 033: a production-path battle pauses on the deployment phase after the intro.
+    // Sound the advance through the real CONFIRM press, past its arm delay.
+    let deployGuard = 0;
+    while (G.scene.state !== 'deploy' && deployGuard++ < 50) g.step(0.1);
+    assert(G.scene.state === 'deploy', 'battle_small should pause on deployment, state=' + G.scene.state);
+    g.step(0.4); // DEPLOY_ARM_T
+    g.tap('Enter');
+    assert(G.scene.state === 'fight', 'CONFIRM should sound the advance, state=' + G.scene.state);
     let sawVictory = false, steps = 0;
     const MAX_STEPS = 300; // up to 150 sim-seconds
     while (steps < MAX_STEPS) {
@@ -171,7 +179,12 @@ function runQaSuiteImpl() {
     g.step(0.5);
     assert(b.state === 'intro', 'the intro banner should still be up 0.5s in, state=' + b.state);
     g.step(0.8);
-    assert(b.state === 'fight', 'the intro should be over 1.3s in, state=' + b.state);
+    // Plan 033: the intro hands over to the paused deployment phase, and the fight starts
+    // on the armed CONFIRM press — the same production path a player takes.
+    assert(b.state === 'deploy', 'the intro should hand over to deployment 1.3s in, state=' + b.state);
+    g.step(0.4); // DEPLOY_ARM_T
+    g.tap('Enter');
+    assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
 
     // Aim is derived from the pointer through the camera, so ask the game where it is
     // aiming and put the target on THAT ray. Re-deriving the camera transform in a test is
@@ -253,7 +266,11 @@ function runQaSuiteImpl() {
     g.scenario('battle_small');
     const b = G.scene, h = b.hero;
     g.step(1.3);
-    assert(b.state === 'fight', 'the intro should be over 1.3s in, state=' + b.state);
+    // Plan 033: past the intro the battle pauses on deployment; confirm through the armed press.
+    assert(b.state === 'deploy', 'the intro should hand over to deployment 1.3s in, state=' + b.state);
+    g.step(0.4); // DEPLOY_ARM_T
+    g.tap('Enter');
+    assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
     assert(b.approach === 'E', 'this record assumes battle_small keeps the default eastern approach, got ' + b.approach);
     // approach E puts your escape edge in the west: inside x < 70, steering left
     const toEdge = () => { h.x = 50; h.y = b.H / 2; };
@@ -1183,23 +1200,26 @@ function runQaSuiteImpl() {
         assert(b.enemySquads[type].stance === 'follow',
           type + ' enemy squad did not start on the neutral order, got ' + b.enemySquads[type].stance);
       }
-      // The deploy window is the player's free setup time and the commander must be silent
-      // through all of it — that silence is also what keeps the battle visual baselines,
-      // which settle at 1.5s, out of reach of any enemy order.
+      // Plan 033: the deployment phase is the player's free setup time, and it pauses the
+      // whole tick pipeline — so the commander is structurally silent through all of it,
+      // which is also what keeps the battle visual baselines, which settle at 1.5s, out of
+      // reach of any enemy order.
       let guard = 0;
       while (G.scene.state === 'intro' && guard++ < 50) g.step(0.1);
+      assert(b.state === 'deploy', 'battle_big should pause on deployment after the intro, state=' + b.state);
       g.step(1.0);
-      assert(b.deployT > 0, 'battle_big should still be inside its deploy window here, deployT=' + b.deployT);
+      assert(b.state === 'deploy', 'nothing but CONFIRM may leave the deployment phase, state=' + b.state);
       assert(b.enemyCmd.doctrine === 'follow',
-        'the commander issued an order during deploy: ' + b.enemyCmd.doctrine);
+        'the commander issued an order during deployment: ' + b.enemyCmd.doctrine);
       for (const type of types) {
-        assert(b.enemySquads[type].stance === 'follow', type + ' took an order during deploy');
+        assert(b.enemySquads[type].stance === 'follow', type + ' took an order during deployment');
       }
       // Past the horn it commands, and the squads genuinely diverge — the bows and the
       // pack hold while the line goes in, which is the whole point of squad orders.
-      b.deployT = 0;
+      g.tap('Enter'); // the arm delay has long decayed during the 1.0s step above
+      assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
       const seen = [];
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 20; i++) {
         g.step(0.5);
         if (G.scene !== b || b.state === 'end') break;
         seen.push(b.enemyCmd.doctrine + ':' + types.map(t => b.enemySquads[t].stance).join(','));
@@ -1223,7 +1243,9 @@ function runQaSuiteImpl() {
     const b = G.scene;
     let guard = 0;
     while (b.state === 'intro' && guard++ < 50) g.step(0.1);
-    b.deployT = 0;
+    g.step(0.4); // DEPLOY_ARM_T (Plan 033)
+    g.tap('Enter');
+    assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
     b.bloodlust = true;
     g.step(1.0);
     for (const type of Object.keys(b.enemySquads)) {
@@ -1301,7 +1323,9 @@ function runQaSuiteImpl() {
       const b = G.scene;
       let guardTicks = 0;
       while (b.state === 'intro' && guardTicks++ < 50) g.step(0.1);
-      b.deployT = 0;
+      // Plan 033: force straight past the deployment pause — this fixture pins stances
+      // itself every tick, so the confirm's hold-promotion has nothing to protect here.
+      b.state = 'fight';
       const seen = Object.create(null);
       // Long enough for the two lines to actually MEET on FOLLOW: the hero is idle, so the
       // warband holds formation around him and it is the enemy that closes the ground. A
