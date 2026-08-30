@@ -11,14 +11,14 @@
 // It reads no presentation state (never the camera, never a screen-space transform), takes
 // no wall-clock, and draws nothing from `simRng`, so a commander change cannot shift the
 // draw sequence the rest of the battle depends on.
-import { clamp, dist2, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=rdc06e391aa49';
+import { clamp, dist2, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r795695426ca8';
 import {
   ENEMY_SQUAD_TYPES, CMD_TICK, CMD_STANDOFF, CMD_ANCHOR_JITTER, CMD_COVER_R, CMD_COVER_PULL,
   CMD_RANK_GAP, CMD_ROW_GAP, CMD_COL_GAP, BLOB_SPREAD, CMD_FLANK_ANGLE,
   CMD_BLOOD_FRAC, CMD_NERVE_MIN, CMD_NERVE_SPAN,
   CMD_FORMED_FRAC, CMD_SLOT_TOL, CMD_FORM_MAX,
-  WOLF_ISOLATION_MUL, WOLF_ISOLATION_PAD,
-} from './constants.js?v=rdc06e391aa49';
+  WOLF_ISOLATION_MUL, WOLF_ISOLATION_PAD, ENGAGE_GAP,
+} from './constants.js?v=r795695426ca8';
 
 // Which rank of the formed line a type stands in. Only the types that muster appear here;
 // see mustersInLine below for who does and why.
@@ -120,6 +120,61 @@ export function assignEnemySlots(battle) {
   }
 }
 
+// One source for the rank/row/column projection that both the muster anchor and the
+// Plan 033 deployment placement stand on — retuning a gap constant must move both the
+// same way, and only one of the two is covered by isFormedUp's tolerance check.
+// Module-level scratch, consumed synchronously by each caller: enemyAnchorFor runs per
+// enemy per tick, so this must not allocate (same rule as _enemyAnchorScratch itself).
+const _slotScratch = { back: 0, side: 0 };
+function slotOffset(rank, slot) {
+  _slotScratch.back = rank * CMD_RANK_GAP + slot.row * CMD_ROW_GAP;
+  _slotScratch.side = (slot.col - (slot.rowCount - 1) / 2) * CMD_COL_GAP;
+  return _slotScratch;
+}
+
+// Plan 033: the enemy's own deployment. A battle with a deployment phase spawns its force
+// already formed instead of seeded-scattered: melee ranks toward the player (RANK order,
+// same table the muster uses), raiders one rank further back, wolves split onto the wings.
+// The raider rank and the wolf wings are PLACEMENT-ONLY: neither type ever consumes
+// enemyAnchorFor (mustersInLine excludes both), so nothing later steers them to different
+// slots — the tableau shows each archetype roughly where its own AI will fight from.
+// Pure geometry over the eslots assignEnemySlots() already assigned — no RNG at all, so it
+// consumes nothing from any stream and two builds of the same roster place identically.
+// Fights without the phase (ambush, caught-fleeing, deploy:0 fixtures) never call this and
+// keep the legacy scatter: an ambush pincer has no parade formation by definition.
+export function placeEnemyDeployment(battle) {
+  const ax = battle.adx, ay = battle.ady;
+  // The line's centre: the enemy spawn centre the scatter used, one expression. It is also
+  // the exact point Break-objective guards muster on (objectives.js's ecx/ecy), and guards
+  // are not obstacles, so nothing resolves an overlap while the phase is paused — measured,
+  // a 3-guard line's middle tower sits at distance 0.0 from rank-0's centre column. The
+  // whole formation therefore stands one clear step behind the guard line when one exists.
+  const cx = battle.W / 2 + ax * ENGAGE_GAP / 2;
+  const cy = battle.H / 2 + ay * ENGAGE_GAP / 2;
+  const baseBack = battle.objectiveTargets && battle.objectiveTargets.length ? 70 : 0;
+  // Wing offset for the wolves: just outside the widest formed row (5 columns).
+  const wing = (5 / 2) * CMD_COL_GAP + 110;
+  let wolves = 0;
+  for (const e of battle.enemies) {
+    const slot = e.eslot || { row: 0, col: 0, rowCount: 1 };
+    let back, side;
+    if (e.type === 'wolf') {
+      // Alternate wings so a pack threatens both flanks; pairs stack backward.
+      const sign = wolves % 2 === 0 ? 1 : -1;
+      back = baseBack + Math.floor(wolves / 2) * CMD_ROW_GAP;
+      side = sign * (wing + slot.row * 40);
+      wolves++;
+    } else {
+      const o = slotOffset(e.d.ranged ? 2 : (RANK[e.type] || 0), slot);
+      back = baseBack + o.back;
+      side = o.side;
+    }
+    e.x = clamp(cx + ax * back - ay * side, 40, battle.W - 40);
+    e.y = clamp(cy + ay * back + ax * side, 40, battle.H - 40);
+    e.facing = Math.atan2(-ay, -ax); // face the player's line
+  }
+}
+
 export function enemyStance(battle, e) {
   const squad = battle.enemySquads && battle.enemySquads[e.type];
   return squad ? squad.stance : 'follow';
@@ -132,10 +187,9 @@ export function enemyStance(battle, e) {
 export function enemyAnchorFor(battle, e, out) {
   const cmd = battle.enemyCmd;
   const slot = e.eslot || { row: 0, col: 0, rowCount: 1 };
-  const back = (RANK[e.type] || 0) * CMD_RANK_GAP + slot.row * CMD_ROW_GAP;
-  const side = (slot.col - (slot.rowCount - 1) / 2) * CMD_COL_GAP;
-  out.x = clamp(cmd.anchorX + cmd.dirX * back - cmd.dirY * side, 40, battle.W - 40);
-  out.y = clamp(cmd.anchorY + cmd.dirY * back + cmd.dirX * side, 40, battle.H - 40);
+  const o = slotOffset(RANK[e.type] || 0, slot);
+  out.x = clamp(cmd.anchorX + cmd.dirX * o.back - cmd.dirY * o.side, 40, battle.W - 40);
+  out.y = clamp(cmd.anchorY + cmd.dirY * o.back + cmd.dirX * o.side, 40, battle.H - 40);
   return out;
 }
 
@@ -152,9 +206,9 @@ export function isIsolated(battle, target) {
 export function updateEnemyCommandPhase(battle, dt) {
   const cmd = battle.enemyCmd;
   if (!cmd) return;
-  // No orders while the lines are still forming up: the deploy window is the player's free
-  // setup time and no enemy phase runs during it anyway.
-  if (battle.deployT > 0 || battle.enemies.length === 0) return;
+  // Plan 033: no deploy-window guard needed — the deployment phase pauses the whole tick
+  // pipeline, so this phase simply never runs until the player confirms.
+  if (battle.enemies.length === 0) return;
   cmd.t += dt;
   if (cmd.t < CMD_TICK) return;
   cmd.t = 0;

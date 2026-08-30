@@ -119,6 +119,39 @@ test('world rendering stays within its own budget with hover latched on and a br
   expect(runtimeErrors).toEqual([]);
 });
 
+test('deployment-phase rendering stays within the battle budget', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await page.goto('/');
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.evaluate(() => window.game.scenario('battle_big'));
+  const result = await page.evaluate(() => {
+    const g = window.__g;
+    // Plan 033: drive the scene into the paused deployment state. The pre-existing battle
+    // budget case draws during 'intro', where drawDeployZones early-returns, so the deploy
+    // render path (zone tint, two dashed frontiers, drag ring) was structurally unreachable
+    // by any budget until this case.
+    window.game.step(1.4);
+    const battle = g.scene;
+    if (battle.state !== 'deploy') return { state: battle.state, beginPath: -1 };
+    battle.dragUnit = battle.troops[0]; // the drag ring is part of the budgeted path
+    let beginPath = 0;
+    const original = CanvasRenderingContext2D.prototype.beginPath;
+    CanvasRenderingContext2D.prototype.beginPath = function (...args) { beginPath++; return original.apply(this, args); };
+    for (let i = 0; i < 20; i++) g.draw();
+    CanvasRenderingContext2D.prototype.beginPath = original;
+    battle.dragUnit = null;
+    return { state: battle.state, beginPath };
+  });
+  expect(result.state).toBe('deploy');
+  // Its own fixed ceiling, measured like the others: 13020 on capture. Higher than the
+  // live-fight case's 9000 because the deployment camera fits BOTH formed lines, so far
+  // more animated props sit in the frustum than under the action-fit fight camera — the
+  // cost of the wide view, bounded by the field. The overlay itself adds three beginPath
+  // per frame (tint, two frontiers, drag ring) and must never grow unbudgeted state.
+  expect(result.beginPath).toBeLessThan(15000);
+  expect(runtimeErrors).toEqual([]);
+});
+
 test('battle rendering reuses scratch storage and static terrain', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await page.goto('/');

@@ -106,13 +106,15 @@ replacing a delegator with a direct module call silently disables coverage.
 - A world-scene modal genuinely pauses the campaign, and `stats.playT` is gated
   on both the modal and the frozen clock so neither can inflate reported time.
 - `deliberate orders beat giving no order at all` in
-  `tests/e2e/stance-balance.spec.js` is the one active `test.fail` annotation: it
-  records the measured finding that squad orders do not beat pressing nothing.
-  Remove it only when commanding actually wins, never to tidy the suite. It is
-  tagged `@sweep` and excluded from the `chromium` project, so `npm test` does
-  not run it; it runs as its own `Balance sweep` check and via
-  `npm run test:balance`. Use
-  `test.fail` with a plan or finding reference for expected failures — never
+  `tests/e2e/stance-balance.spec.js` carried the suite's one `test.fail`
+  annotation from Plan 019 to Plan 033, recording that squad orders did not beat
+  pressing nothing. Plan 033's deployment phase resolved it (measured twice,
+  digit-identical: idle 49%, chargeAll 60%) and the annotation came off on its
+  own stated terms — the assertion now GUARDS the property, so a change that
+  makes the idle default the best policy again fails the sweep. It is tagged
+  `@sweep` and excluded from the `chromium` project, so `npm test` does not run
+  it; it runs as its own `Balance sweep` check and via `npm run test:balance`.
+  Use `test.fail` with a plan or finding reference for expected failures — never
   `skip` or `fixme`.
 
 ## Working conventions

@@ -237,9 +237,18 @@ single setup tick, so every consumer of those keeps working unchanged.
 ## Battle simulation
 
 `Battle.update()` owns the ordered fight pipeline. `updateSceneState()` handles
-intro/end gates, `updateActivePhases()` runs live commands, hero, troop/enemy,
-separation, and stalemate work, `updateProjectilePhase()` resolves landings,
-and `resolveBattleResult()` is the single terminal/retreat decision point.
+the intro/deploy/end gates, `updateActivePhases()` runs live commands, hero,
+troop/enemy, separation, and stalemate work, `updateProjectilePhase()` resolves
+landings, and `resolveBattleResult()` is the single terminal/retreat decision
+point. The `deploy` state (Plan 033) is a structural pause: a non-ambush battle
+with `setup.deploy` absent or > 0 sits in it after the intro — no phase runs, no
+clock advances — until an armed CONFIRM (`DEPLOY_ARM_T`) calls
+`confirmDeploy()`, which anchors every troop's hold point at its placed position
+and promotes squads still on the neutral `follow` to HOLD. The player drags
+bodies inside his side of the field (`DEPLOY_NO_MANS` short of the midline);
+the enemy spawns already formed through `placeEnemyDeployment()`
+(enemy-command.js, pure eslot geometry, no RNG). Ambush and `deploy: 0` fights
+skip the state and keep the legacy scatter spawn.
 Keep future mechanics in the narrow phase that owns their state and preserve
 projectile-before-result ordering. Battle palette data is frozen and owned by
 each `Battle` instance; never mutate `PAL.battle` or introduce module-global

@@ -6,17 +6,17 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=rdc06e391aa49';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rdc06e391aa49';
-import { ACTIONS } from '../input-actions.js?v=rdc06e391aa49';
+import { HERO } from '../data.js?v=r795695426ca8';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r795695426ca8';
+import { ACTIONS } from '../input-actions.js?v=r795695426ca8';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
   BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
-} from './constants.js?v=rdc06e391aa49';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=rdc06e391aa49';
+} from './constants.js?v=r795695426ca8';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r795695426ca8';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -289,7 +289,6 @@ export function updateHeroPhase(battle, dt, inp, h, ax) {
   // ---- hero attack
   if (h.swingT > 0) h.swingT -= dt;
   if ((inp.mouse.clicked || inp.pressedAction(ACTIONS.ATTACK)) && h.swingT <= 0) {
-    if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
     h.swingT = HERO.swingCd;
     sfx.swing();
     battle.particles.slash(h.x, h.y - 6, aimA, HERO.swingRange, HERO.swingArc, P.cream);
@@ -485,7 +484,6 @@ export function updateTroopPhase(battle, dt, h) {
           // Guards are structures: arrows and blades chip them directly (a palisade
           // has no hit-flash target for a projectile's proximity check, so ranged
           // damage lands on the shot rather than simulating one).
-          if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
           t.cd = t.d.cooldown;
           t.lunge = t.d.ranged ? 0 : 1;
           battle.damageObjective(engage.objRef, dmg);
@@ -494,7 +492,6 @@ export function updateTroopPhase(battle, dt, h) {
           // cooldown is consumed, so a blind archer does not silently burn a shot into a
           // hillside every time its cooldown comes up.
           if (battle.hasLineOfSight(t.x, t.y - 12, engage.x, engage.y)) {
-            if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
             t.cd = t.d.cooldown;
             // Archers standing still shoot straighter than archers walking. Plan 029: the
             // Steady Hands perk tightens the braced grouping further; `battle.bowSpreadBraced`
@@ -507,7 +504,6 @@ export function updateTroopPhase(battle, dt, h) {
             t.blindT = 0;
           }
         } else {
-          if (battle.deployT > 0) { battle.deployT = 0; battle.commandFlash = { text: 'FIRST BLOOD!', t: 0.9 }; battle.game.sfx.horn(155); }
           t.cd = t.d.cooldown;
           t.lunge = 1;
           battle.damageEnemy(engage, dmg * bonusVersus(battle, t, engage.type, stance === 'hold'),
@@ -560,24 +556,8 @@ export function updateTroopPhase(battle, dt, h) {
 
 export function updateEnemyPhase(battle, dt, h) {
   const P = battle.palette;
-  // ---- deploy window: enemies hold their line until the horn, the player sets up freely.
-  // First blood (yours), closing to melee reach, or the timer ends it.
-  if (battle.deployT > 0) {
-    battle.deployT -= dt;
-    battle.lastAction = battle.time; // no stalemate clock during forming-up
-    battle.lastDeath = battle.time;
-    const ne = battle.nearestEnemy(h.x, h.y, 250);
-    if (ne) battle.deployT = 0; // riding into their line starts the fight on the spot
-    if (battle.deployT <= 0) {
-      battle.game.sfx.horn(155);
-      battle.commandFlash = { text: 'THEY ADVANCE!', t: 1.0 };
-    }
-    for (const e of battle.enemies) {
-      e.vx *= 0.85; e.vy *= 0.85;
-      e.facing = angLerp(e.facing, Math.atan2(h.y - e.y, h.x - e.x), 1 - Math.exp(-3 * dt));
-    }
-  } else
-  // ---- enemies
+  // ---- enemies (the pre-033 deploy window's frozen block is gone: the deployment phase
+  // pauses the whole tick pipeline in battle.js, so this phase simply does not run there)
   for (const e of battle.enemies) {
     e.cd -= dt;
     if (e.flash > 0) e.flash -= dt;

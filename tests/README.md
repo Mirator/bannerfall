@@ -75,9 +75,12 @@ replay identically, that the wolf and raider fixtures keep their intended right 
 (the only stance properties measured to generalize across seeds), and that every stance
 can finish a winnable fight.
 
-It also carries one expected failure recording a confirmed defect: giving no order at all
-beats every deliberate order policy. Do not delete that annotation to make the suite look
-clean — it is the honest state of the mechanic.
+From Plan 019 to Plan 033 it carried one expected failure recording a confirmed defect:
+giving no order at all beat every deliberate order policy. Plan 033's deployment phase
+resolved it — with the un-ordered warband holding its placed formed line by default, the
+sweep measured idle 49% against chargeAll 60%, replayed digit for digit across two runs —
+and the `test.fail` annotation came off on its own stated terms. The assertion is now a
+guard: a change that makes the idle default the best policy again fails the sweep.
 
 Two harness rules matter and must not be dropped. The pointer is pinned to the canvas
 centre and camera shake is zeroed before each run, because an idle hero aims at the
@@ -460,9 +463,10 @@ The 26 deterministic records cover:
 24. the 200-step performance smoke budget;
 25. river-pursuit movement without freezing;
 26. enemy command symmetry (Plan 027): every enemy type has a squad, all of them
-    start on the neutral order, none of them takes an order while the deploy
-    window is open (which is also what keeps the 1.5s battle visual baselines out
-    of the commander's reach), the squads genuinely diverge once it commands, two
+    start on the neutral order, none of them takes an order while the Plan 033
+    deployment phase is up (the phase pauses the tick pipeline outright, which is
+    also what keeps the 1.5s battle visual baselines out of the commander's
+    reach), the squads genuinely diverge once the advance is sounded, two
     identical runs produce an identical order sequence, and `bloodlust` collapses
     every enemy squad back to the press so the no-death stall clock's guarantee
     always outranks the commander.
@@ -542,6 +546,15 @@ all** while that banner is up (about 1.1s, or 0.6s once any key is pressed).
 Swing and dash inputs are simply not read there, so a record that taps before
 stepping past the intro asserts nothing. `hero_swing_and_dash_damage_enemies`
 asserts the state transition explicitly for that reason.
+
+Plan 033 added a second gate behind the intro: a non-ambush battle with a
+deployment phase (`setup.deploy` absent or > 0) hands over to `state ===
+'deploy'`, which pauses the tick pipeline the same way until CONFIRM (Enter/E)
+is pressed — and CONFIRM itself arms `DEPLOY_ARM_T` (0.35s) after the phase
+opens. A fixture that needs the fight running either forces `state = 'fight'`
+directly (as the e2e battle fixtures already do) or steps ~0.4s past the intro
+and taps Enter to take the production path. A record that steps a
+production-path battle toward its end without one of those two waits forever.
 
 A *landed* hit sets `battle.freeze` (hit-stop) and `Battle.update()` returns
 early while it runs, which drops the next tick's input on the floor. That is

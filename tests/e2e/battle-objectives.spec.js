@@ -11,7 +11,7 @@ import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 // status, and ONLY resolveBattleResult() ends a fight.
 //
 // Intro rule (tests/README.md): a battle opens in 'intro' and runs no phases, so
-// every fixture forces state='fight'/deployT=0 directly, exactly like
+// every fixture forces state='fight' directly, exactly like
 // battlefield-terrain. Fixture enemies are re-pinned (position AND hp) at every
 // batch boundary — an archer left shooting at a static fixture can otherwise
 // deplete it into an accidental elimination victory.
@@ -47,7 +47,6 @@ async function openBattleHarness(page) {
       });
       const b = window.__g.scene;
       b.state = 'fight';
-      b.deployT = 0;
       return b;
     };
   });
