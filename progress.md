@@ -748,3 +748,56 @@ worth: ranking up three interchangeable bodies is three times nothing. Baselines
   party cannot reach you while you shop. Every other world modal already behaves this way; a
   bespoke half-pause for this one screen would be worse than the exploit it leaves.
 
+## Plan 031 - one key, one modal language, no blind permanent choices
+
+- `E` confirms as well as opens (`CONFIRM: ['Enter', 'KeyE']`). Enter stays bound - it costs
+  nothing and three tests drive it through the real keydown listener. This makes
+  `WORLD_PRIMARY` a strict subset of `CONFIRM`, the only pair in the binding table not
+  separated by scene, so it rests entirely on `updateWorldScreens()` returning true whenever
+  a screen is open. AGENTS.md now says so.
+- Verified rather than assumed: one keydown is one edge (`endFrame()` runs per fixed step,
+  `e.repeat` is filtered), a held key does nothing past its first tick, and the battle
+  intro's early-out is unreachable through the brief path - `pressed` is cleared before
+  Battle first ticks, and for a brief-routed fight `introDur` equals the clause's own 0.6
+  threshold, so it is dead code there.
+- The trap that made the arm mandatory: clearing an aftermath with CONFIRM opens the spec or
+  perk modal on the SAME tick. A player mashing after a fight landed press 2 about 125ms
+  later on a permanent choice and took option 0 blind. `CHOICE_ARM_T` (0.4s) rides on the
+  model, so a screen replacing another gets a fresh arm for free. Navigation stays live and
+  disarms on the first move; while armed the hint reads "read it first..." rather than
+  printing a key that does nothing.
+- Five panels collapsed onto four primitives. `drawSpecPanel` and `drawPerkPanel` were 79%
+  byte-identical - 41 of ~52 lines, every difference a string or a constant. `drawModalRow`
+  is pixel-exact: its two baselines round to the same integers at every row height in use
+  (64 -> 26/48, 52 -> 21/39). `rowBlock` also closed a latent TypeError - both choice panels
+  indexed `rects[rects.length - 1]` unguarded.
+- Two panels could clip and two reserved space they never used. `drawPerkPanel` had NO height
+  clamp and five perks is a normal mid-campaign state; `drawSpecPanel` was unclamped too and
+  survived only by having exactly four options. The brief reserved a fixed 460px base and left
+  ~175px of dead air on every camp raid; the aftermath reserved 440px for as little as 200 of
+  content. All four now size to what they report.
+- `fitText` guards the two real overflows: the brief's perk line runs past the panel edge once
+  five perks are held, and the perk panel's longest detail row nearly does. Both draw copy
+  that lives in progression.js and region.js, so the panels defend themselves.
+- Information the player needed and did not get: defeat takes 30% of your gold and never said
+  so (now `Lost: -N gold`); the aftermath never mentioned the veterancy it had just awarded;
+  the perk panel never drew the `earned`/`spent` its own model computed; the brief never
+  showed hero HP, with the HUD's heart chip at 28% under the scrim.
+- Feel: every world modal was mute. `uiMove`/`uiSelect` ship, are CC0-documented, and were
+  wired only into the main menu - now on navigation, commit, dismiss and menu-open.
+  `Sfx.play()` drops a one-shot with no AudioContext, so no autoplay violation. Added a
+  selected-row marker in the gutter the rows already reserved, a drop shadow offset along the
+  game's light direction (an offset rrect, not ctx.shadowBlur), a header rule with diamond
+  caps, and a DECIDE LATER button on the two panels whose only clickable thing was previously
+  an irreversible commit.
+- Correction: Plan 030 left a comment claiming visual baselines pinned the spec and perk
+  panels. False - there were none, and no scenario could open either. `world_choice` and two
+  baselines were added first, as the prerequisite for touching those painters.
+- Accepted: mashing E at a settlement still buys repeatedly. The purse updates live and the
+  notice names each purchase; arming the site menu would dull the interaction it exists to
+  make fast, and the outcome is neither permanent nor hidden. The brief is unarmed for the
+  same reason - it opens because the player chose a row and it offers withdraw.
+- Four baselines recaptured (both briefs, both aftermaths) plus two new choice ones, all
+  through the pinned-Linux workflow. The two site baselines were NOT recaptured: the marker,
+  rule and shadow landed inside the 1.5% cap and they still pass unmodified.
+

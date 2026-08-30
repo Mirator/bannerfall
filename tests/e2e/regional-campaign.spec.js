@@ -66,6 +66,21 @@ async function tickSiteRow(page, rowId) {
   await tickAction(page, 'confirm');
 }
 
+// Plan 031: the specialization and perk modals refuse a commit for CHOICE_ARM_T after they
+// open, so a burst of presses clearing an aftermath cannot pick a permanent option blind.
+// A fixture has to wait it out exactly like a player does — ticking here rather than
+// reaching past the guard is the point.
+async function commitChoice(page, note = '') {
+  await page.evaluate(() => {
+    const w = window.__g.scene;
+    if (!w.screen || w.screen.armT == null) return;
+    let guard = 0;
+    while (w.screen && w.screen.armT > 0 && guard++ < 120) window.__tick(1 / 60);
+  });
+  await tickAction(page, 'confirm');
+  return note;
+}
+
 test('a fresh campaign opens with the documented regional shape', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openWorld(page);
@@ -126,7 +141,7 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
     const w = window.__g.scene;
     return { troops: w.save.troops.length, cap: w.save.armyCap };
   });
-  await tickAction(page, 'confirm');
+  await commitChoice(page);
   const chosen = await page.evaluate(async () => {
     const w = window.__g.scene;
     await window.__g.saves.flush();
@@ -178,7 +193,7 @@ test('dismissing the spec choice does not lose it — the site menu at the gates
   expect(reopened.kind).toBe('spec');
   expect(reopened.id).toBe('ashford');
 
-  await tickAction(page, 'confirm'); // commit the first option (Barracks)
+  await commitChoice(page); // commit the first option (Barracks)
   const committed = await page.evaluate(() => {
     const w = window.__g.scene;
     return {
@@ -231,12 +246,12 @@ test('capturing a second settlement while a first choice is still outstanding do
   expect(bothPending.screenId).toBe('brindle');
   expect(bothPending.captures).toBe(2);
 
-  await tickAction(page, 'confirm'); // commit brindle's choice
+  await commitChoice(page); // commit brindle's choice
   // Plan 029: two captures have earned two perk choices, which queue behind the spec
   // modals. Take them both so the world is modal-free before the reopen is tested — the
   // property under test is that ashford's SPEC choice survived, not the perk ordering.
-  await tickAction(page, 'confirm');
-  await tickAction(page, 'confirm');
+  await commitChoice(page);
+  await commitChoice(page);
   expect(await page.evaluate(() => window.__g.scene.screen && window.__g.scene.screen.kind))
     .toBe(null);
 
@@ -253,7 +268,7 @@ test('capturing a second settlement while a first choice is still outstanding do
   expect(ashfordReopened.kind).toBe('spec');
   expect(ashfordReopened.id).toBe('ashford');
 
-  await tickAction(page, 'confirm'); // commit ashford's choice too
+  await commitChoice(page); // commit ashford's choice too
   const final = await page.evaluate(() => {
     const w = window.__g.scene;
     return {

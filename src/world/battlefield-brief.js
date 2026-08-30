@@ -12,9 +12,9 @@
 // Plan 024 "The property that makes this cheap": `setup.approach` is a compass letter and
 // world north is battle north, so world -> battlefield needs only a uniform scale (S) and a
 // translate (origin) — no rotation.
-import { WORLD } from '../data.js?v=r70b613c6e5cd';
-import { makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r70b613c6e5cd';
-import { ENGAGE_GAP } from '../battle/constants.js?v=r70b613c6e5cd';
+import { WORLD } from '../data.js?v=r1a9e52c1bce3';
+import { makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r1a9e52c1bce3';
+import { ENGAGE_GAP } from '../battle/constants.js?v=r1a9e52c1bce3';
 
 export const WORLD_TO_FIELD = 4;
 

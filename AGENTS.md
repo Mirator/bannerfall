@@ -159,6 +159,23 @@ calling, raid, storm — must close or replace the site menu BEFORE calling into
 `queueSpecChoice()` and `offerPerkChoice()` both no-op while a screen is open, so
 claiming from inside an open menu would silently swallow the prompt it earns.
 
+Plan 031: `CONFIRM` is bound to BOTH `Enter` and `KeyE`, which makes
+`WORLD_PRIMARY` a strict SUBSET of `CONFIRM` — the only pair in the binding table
+not separated by scene. Its whole safety rests on `updateWorldScreens()` returning
+`true` whenever a screen is open, so the site-menu phase cannot run in the same
+tick. Adding a sixth `world.screen` kind WITHOUT a branch there would make
+`updateWorldScreens` fall through and re-open the site menu on top of the orphan
+screen every tick E is pressed. Give every new screen kind a branch.
+
+The specialization and perk models carry `armT` (`CHOICE_ARM_T`, 0.4s), decremented
+in `updateWorldScreens`, and refuse a commit until it reaches zero. They are the only
+two modals that open UNBIDDEN — on the tick the aftermath closes, which is the tick
+the player was already pressing CONFIRM — so without it a mashed press takes a
+PERMANENT choice blind. Navigation is deliberately still live and disarms on the
+first move. The arm rides on the MODEL so a screen replacing another gets a fresh
+one for free. Do not remove it to make a fixture simpler; `commitChoice()` in
+`regional-campaign.spec.js` is how a test waits it out.
+
 Every world modal panel declares its own `ctx.textBaseline`. It used to arrive by
 accident — `drawHud()` sets `'middle'` for the resource chip and never reset it, and
 all four panels inherited that — which made their vertical text placement a hidden

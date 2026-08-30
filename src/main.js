@@ -1,17 +1,17 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r70b613c6e5cd';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r70b613c6e5cd';
-import { Sfx } from './audio.js?v=r70b613c6e5cd';
-import { Battle } from './battle.js?v=r70b613c6e5cd';
-import { World } from './world.js?v=r70b613c6e5cd';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r70b613c6e5cd';
-import { FIELD } from './battle/constants.js?v=r70b613c6e5cd';
-import { ACTIONS } from './input-actions.js?v=r70b613c6e5cd';
-import { createWebPlatform } from './platform/web-platform.js?v=r70b613c6e5cd';
-import { SaveRepository } from './persistence/save-repository.js?v=r70b613c6e5cd';
-import { buildSummaryModel } from './world-screens.js?v=r70b613c6e5cd';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r70b613c6e5cd';
-import { perkChoiceDue, perkMods } from './progression.js?v=r70b613c6e5cd';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r1a9e52c1bce3';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r1a9e52c1bce3';
+import { Sfx } from './audio.js?v=r1a9e52c1bce3';
+import { Battle } from './battle.js?v=r1a9e52c1bce3';
+import { World } from './world.js?v=r1a9e52c1bce3';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r1a9e52c1bce3';
+import { FIELD } from './battle/constants.js?v=r1a9e52c1bce3';
+import { ACTIONS } from './input-actions.js?v=r1a9e52c1bce3';
+import { createWebPlatform } from './platform/web-platform.js?v=r1a9e52c1bce3';
+import { SaveRepository } from './persistence/save-repository.js?v=r1a9e52c1bce3';
+import { buildSummaryModel } from './world-screens.js?v=r1a9e52c1bce3';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r1a9e52c1bce3';
+import { perkChoiceDue, perkMods } from './progression.js?v=r1a9e52c1bce3';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -1301,6 +1301,36 @@ window.game = {
       game.input.injectAction(ACTIONS.WORLD_PRIMARY, true);
       game.update(DT);
       game.input.injectAction(ACTIONS.WORLD_PRIMARY, false);
+    } else if (name === 'world_choice') {
+      // The two permanent-choice modals, opened through their production paths so the
+      // visual suite covers them at all. `kind: 'spec'` claims Ashford at its gates (the
+      // claim row raises the specialization prompt); `kind: 'perk'` takes the milestone a
+      // claim also earns, by committing that specialization first — chooseSpec() re-asks
+      // offerPerkChoice() on the tick it closes. Never opened by assigning world.screen.
+      if (opts && opts.seed != null) game.testSeed = opts.seed;
+      game.startWorld(null);
+      const world = game.scene;
+      const at = WORLD.settlements.find(x => x.id === 'ashford');
+      world.parties.length = 0;
+      world.hero.x = at.x; world.hero.y = at.y;
+      world.grace = 0;
+      const press = (action) => {
+        game.input.injectAction(action, true);
+        game.update(DT);
+        game.input.injectAction(action, false);
+      };
+      press(ACTIONS.WORLD_PRIMARY); // the site menu
+      const claimAt = world.screen.rows.findIndex(r => r.id === 'claim');
+      for (let i = 0; i < claimAt; i++) press(ACTIONS.MENU_DOWN);
+      press(ACTIONS.CONFIRM); // claim -> the specialization prompt
+      if ((opts && opts.kind) === 'perk') {
+        // Plan 031: a permanent choice refuses a commit until its arm expires, so this
+        // fixture waits it out exactly as a player does. Reaching past the guard here would
+        // make the scenario the one caller in the game that does not obey it.
+        let guard = 0;
+        while (game.scene.screen && game.scene.screen.armT > 0 && guard++ < 120) game.update(DT);
+        press(ACTIONS.CONFIRM); // commit it -> the perk prompt
+      }
     } else if (name === 'world_aftermath') {
       // Drives a real party clash through requestBattle -> confirm -> a real
       // Battle.endBattle() -> the real onEnd path, never by assigning world.screen
