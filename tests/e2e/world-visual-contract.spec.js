@@ -108,3 +108,60 @@ for (const [width, height] of [[960, 540], [1280, 720], [1600, 900]]) {
     expect(pointInWorldHud(width / 2, height / 2, width, height)).toBe(false);
   });
 }
+
+// The map's name plates used to only set `textAlign` and inherit whatever `textBaseline`
+// the previous frame's HUD left behind: the landmark interaction chip ends on
+// 'alphabetic' and the resource chip ends on 'middle', so a settlement name jumped to the
+// top edge of its own plate on every frame after the hero stood at a landmark. That is a
+// render-order accident, not a style, and it is invisible to a single-frame baseline —
+// this test pins the plates against ANY inherited baseline and against the text drifting
+// off-centre inside the plate it was drawn on.
+test('map name plates centre their text regardless of the inherited canvas baseline', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => window.game && window.game.scenario);
+  const probe = await page.evaluate(() => {
+    window.game.scenario('world');
+    window.game.step(0.2);
+    const g = window.__g, site = { x: 700, y: 1150 };  // Ashford
+    g.scene.hero.x = site.x; g.scene.hero.y = site.y;
+    const canvas = document.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    // The plate lives just under the settlement anchor; the village art is scaled 1.28.
+    const x0 = Math.round(canvas.width / 2 - 100), w = 200;
+    const y0 = Math.round(canvas.height / 2 + 38), h = 42;
+    const near = (d, i, c) => Math.abs(d[i] - c[0]) < 26 && Math.abs(d[i + 1] - c[1]) < 26 &&
+      Math.abs(d[i + 2] - c[2]) < 26;
+    const rows = [];
+    for (const baseline of ['alphabetic', 'middle', 'top', 'bottom', 'hanging']) {
+      g.camera.x = site.x; g.camera.y = site.y;  // step(0) runs no update, so this holds
+      ctx.textBaseline = baseline;
+      window.game.step(0);
+      const d = ctx.getImageData(x0, y0, w, h).data;
+      const ink = [], cream = [];
+      for (let y = 0; y < h; y++) {
+        let i = 0, c = 0;
+        for (let x = 0; x < w; x++) {
+          const p = (y * w + x) * 4;
+          if (near(d, p, [30, 42, 74])) i++;
+          if (near(d, p, [242, 227, 193])) c++;
+        }
+        if (i > 60) ink.push(y);
+        if (c > 4) cream.push(y);
+      }
+      rows.push({ baseline, plate: [ink[0], ink[ink.length - 1]], text: [cream[0], cream[cream.length - 1]] });
+    }
+    return rows;
+  });
+
+  const first = probe[0];
+  expect(first.plate[0], 'the name plate must be inside the probed crop').toBeGreaterThan(0);
+  expect(first.text[0], 'the name must render inside the plate').toBeGreaterThan(first.plate[0]);
+  for (const frame of probe) {
+    expect(frame, `baseline '${frame.baseline}' changed the plate`).toEqual({ ...first, baseline: frame.baseline });
+  }
+  // and the name sits centred on its plate rather than riding either edge
+  const above = first.text[0] - first.plate[0];
+  const below = first.plate[1] - first.text[1];
+  expect(Math.abs(above - below), `name off-centre in its plate (${above} above, ${below} below)`)
+    .toBeLessThanOrEqual(3);
+});

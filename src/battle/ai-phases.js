@@ -6,17 +6,17 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r1a9e52c1bce3';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r1a9e52c1bce3';
-import { ACTIONS } from '../input-actions.js?v=r1a9e52c1bce3';
+import { HERO } from '../data.js?v=rdc06e391aa49';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rdc06e391aa49';
+import { ACTIONS } from '../input-actions.js?v=rdc06e391aa49';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
   BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
-} from './constants.js?v=r1a9e52c1bce3';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r1a9e52c1bce3';
+} from './constants.js?v=rdc06e391aa49';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=rdc06e391aa49';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.

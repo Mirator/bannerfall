@@ -1,18 +1,18 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=r1a9e52c1bce3';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r1a9e52c1bce3';
+import { PAL, WORLD } from '../data.js?v=rdc06e391aa49';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=rdc06e391aa49';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
   drawSpecPanel, drawPerkPanel, drawSitePanel,
-} from '../world-screens.js?v=r1a9e52c1bce3';
+} from '../world-screens.js?v=rdc06e391aa49';
 import {
   settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
   strongholdStateId, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r1a9e52c1bce3';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=r1a9e52c1bce3';
-import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r1a9e52c1bce3';
+} from '../region.js?v=rdc06e391aa49';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=rdc06e391aa49';
+import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=rdc06e391aa49';
 
 const P = PAL.world;
 
@@ -442,22 +442,39 @@ export function drawSettlement(world, ctx, s) {
     ctx.restore();
   }
   // Dark destination plates match the HUD hierarchy and stay readable over pale roads.
+  // Baseline is DECLARED, never inherited: the interaction chip in render-actors.js ends
+  // its frame on 'alphabetic' and the resource chip ends on 'middle', so map labels that
+  // only set textAlign rendered their text jammed against the top edge of the plate on
+  // every frame after the hero stood at a landmark. Every chip below centres its text on
+  // the plate it just drew.
   ctx.font = '800 14px Inter, system-ui, sans-serif';
   ctx.textAlign = 'center';
-  const nw = ctx.measureText(s.name).width + 18;
+  ctx.textBaseline = 'middle';
+  // the specialization glyph rides on the name chip — one compact status icon. It is
+  // measured BEFORE the plate so the plate is widened to hold it; sized in, it can never
+  // be painted over the name.
+  const rec = settlementRecord(world.save, s.id);
+  const glyph = rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied && rec.spec
+    ? SPECIALIZATIONS[rec.spec].glyph : null;
+  const nameW = ctx.measureText(s.name).width;
+  let glyphW = 0;
+  if (glyph) {
+    ctx.font = '800 12px Inter, system-ui, sans-serif';
+    glyphW = ctx.measureText(glyph).width;
+    ctx.font = '800 14px Inter, system-ui, sans-serif';
+  }
+  const gap = glyph ? 6 : 0;
+  const contentW = nameW + gap + glyphW;
+  const nw = contentW + 18;
+  const contentX = s.x - contentW / 2;
   ctx.fillStyle = P.ink;
   rrect(ctx, s.x - nw / 2, s.y + 34, nw, 20, 6); ctx.fill();
   ctx.fillStyle = P.cream;
-  ctx.fillText(s.name, s.x, s.y + 45);
-  // the specialization glyph rides on the name chip — one compact status icon
-  {
-    const rec = settlementRecord(world.save, s.id);
-    if (rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied && rec.spec) {
-      const glyph = SPECIALIZATIONS[rec.spec].glyph;
-      ctx.font = '800 12px Inter, system-ui, sans-serif';
-      ctx.fillStyle = P.hero;
-      ctx.fillText(glyph, s.x + nw / 2 - 9, s.y + 46);
-    }
+  ctx.fillText(s.name, contentX + nameW / 2, s.y + 44);
+  if (glyph) {
+    ctx.font = '800 12px Inter, system-ui, sans-serif';
+    ctx.fillStyle = P.hero;
+    ctx.fillText(glyph, contentX + nameW + gap + glyphW / 2, s.y + 44);
   }
 
   // Milestone 025 Slice A: ownership reads from the map without any text — the
@@ -498,7 +515,7 @@ export function drawSettlement(world, ctx, s) {
     ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
     rrect(ctx, s.x - lw / 2, s.y + 58, lw, 18, 6); ctx.stroke();
     ctx.fillStyle = P.cream;
-    ctx.fillText(label, s.x, s.y + 70);
+    ctx.fillText(label, s.x, s.y + 67);
   } else if (threatened) {
     // a pulsing warning ring — a raiding party is inbound but has not arrived yet
     const pulse = 6 + Math.sin(world.time * 5) * 3;
@@ -572,12 +589,13 @@ export function drawCamp(world, ctx, c, razed) {
     tent(c.x - 26, c.y + 26, 15); tent(c.x + 26, c.y + 28, 17);
     ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.moveTo(c.x, c.y - 52); ctx.lineTo(c.x, c.y - 80); ctx.lineTo(c.x + 20, c.y - 73); ctx.lineTo(c.x, c.y - 66); ctx.closePath(); ctx.fill();
-    ctx.font = '800 15px Inter, system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; // declared, see drawSettlement
     const holdW = ctx.measureText(c.name).width + 22;
     ctx.fillStyle = P.ink;
     rrect(ctx, c.x - holdW / 2, c.y + 43, holdW, 22, 6); ctx.fill();
     ctx.fillStyle = P.cream;
-    ctx.fillText(c.name, c.x, c.y + 55);
+    ctx.fillText(c.name, c.x, c.y + 54);
     // Milestone 025 Slice A: the hold's power state is a map-readable word chip,
     // not a hidden number — its colour deepens as the hold weakens toward Exposed.
     const powerId = strongholdStateId(world.save);
@@ -589,7 +607,7 @@ export function drawCamp(world, ctx, c, razed) {
     ctx.strokeStyle = P.ink; ctx.lineWidth = 2;
     rrect(ctx, c.x - lw2 / 2, c.y + 66, lw2, 18, 6); ctx.stroke();
     ctx.fillStyle = powerId === 'exposed' ? P.ink : P.cream;
-    ctx.fillText(label, c.x, c.y + 78);
+    ctx.fillText(label, c.x, c.y + 75);
   } else {
     tent(c.x - 16, c.y + 6, 14); tent(c.x + 14, c.y + 10, 12);
     // campfire
@@ -601,13 +619,13 @@ export function drawCamp(world, ctx, c, razed) {
     // same cream chip convention as settlement names — clamped inside the map so the
     // label can never be clipped by the viewport edge
     ctx.font = '800 13px Inter, system-ui, sans-serif';
-    ctx.textAlign = 'center';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; // declared, see drawSettlement
     const cw2 = ctx.measureText('Bandit camp').width + 16;
     const ly2 = Math.min(c.y + 24, world.H - 30);
     ctx.fillStyle = P.enemy;
     rrect(ctx, c.x - cw2 / 2, ly2, cw2, 19, 6); ctx.fill();
     ctx.fillStyle = P.cream;
-    ctx.fillText('Bandit camp', c.x, ly2 + 10);
+    ctx.fillText('Bandit camp', c.x, ly2 + 9.5);
   }
   ctx.restore();
 }

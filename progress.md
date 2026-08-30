@@ -801,3 +801,34 @@ worth: ranking up three interchangeable bodies is three times nothing. Baselines
   through the pinned-Linux workflow. The two site baselines were NOT recaptured: the marker,
   rule and shadow landed inside the 1.5% cap and they still pass unmodified.
 
+
+## Map name plates: text jammed to the top edge (2026-08-30)
+
+Reported as "the titles get regularly broken", with three screenshots of Ashford.
+"Regularly" was the diagnosis: the breakage toggles with where the hero is standing.
+
+`drawSettlement` and `drawCamp` in `src/world/render-scene.js` set `ctx.font` and
+`ctx.textAlign` but never `ctx.textBaseline` - they inherited it. The landmark
+interaction chip in `render-actors.js` ends its frame on `'alphabetic'` and the resource
+chip ends on `'middle'`, and canvas text state survives the frame, so the plate that a
+settlement drew was filled with whatever the PREVIOUS frame's HUD had left. Measured at
+Ashford, 1280x720, camera pinned: plate rows 404-428 both times; the name occupied rows
+405-417 with the hero parked on the village (1px above, 11px below) and rows 410-422 with
+the hero away (6 and 6). Same frame, same code, two different-looking titles.
+
+Fixed by declaring the baseline and centring every map chip on the plate it just drew:
+settlement name, OCCUPIED, Wolfsjaw Hold, the hold's power word, and the bandit-camp
+chip. The stronghold power and OCCUPIED chips were 3px low even in the good state; they
+are centred now too.
+
+Second defect found in the same block: the specialization glyph was drawn centred on
+`s.x + nw / 2 - 9`, which is exactly the right edge of the centred name, so a player-held
+town with a specialization painted the glyph over its own last letter. The glyph is now
+measured before the plate and the plate is widened to hold it.
+
+Guarded by `map name plates centre their text regardless of the inherited canvas
+baseline` in `world-visual-contract.spec.js`: it renders the same pinned frame under five
+inherited baselines and asserts the plate and text pixel rows are identical, then asserts
+the name is centred within 3px. Verified to fail on the pre-fix renderer. A single-frame
+visual baseline cannot catch this class of bug - it only ever records one of the two
+states.
