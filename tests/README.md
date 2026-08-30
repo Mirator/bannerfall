@@ -129,6 +129,22 @@ assault it) always shows the real composition; the aftermath blocks every
 world phase and freezes `grace` while open, decays only after dismissal, and
 is suppressed in favor of the victory scene when `save.won`.
 
+Plan 030 put a third screen on that machinery: the site menu, `world.screen` of
+kind `'site'`, which is what `WORLD_PRIMARY` (E) opens next to any settlement,
+camp or the stronghold. Every settlement and camp service is a row of it, so a
+spec asserting a service drives E, then the menu actions to the row, then
+`CONFIRM` — never a per-service hotkey, and never a call straight into the
+method. Two helpers exist for that and each names the rows it found when the one
+asked for is missing: `tickSiteRow` (`regional-campaign.spec.js`, for the
+parked-tick harness) and `siteRow`/`siteRowIds` (`qa_suite.js`). A spec on the
+live scheduler drives it with `window.game.tap` directly; do not reach for
+`tap()` under a parked `window.__g.update`, where it advances nothing. `scenario('world_site',
+{kind, seed})` opens one through the production press; `scenario('world_brief',
+{kind: 'campScouted' | 'stronghold'})` now drives both presses, since the assault
+row is what calls `requestBattle`. Two gates are asserted structurally rather
+than by pressing a key and checking nothing moved: an occupied settlement's menu
+has zero rows, and a village's carries no `expand` or `banner` row.
+
 Two structural specs extend to cover the modal: `world-battle-seams.spec.js`
 asserts the wrapped world phases produce an empty order while a brief blocks
 the pipeline, and `performance.spec.js` adds a `<12000` `beginPath` budget

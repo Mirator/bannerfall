@@ -43,6 +43,28 @@ function runQaSuiteImpl() {
   }
   function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
+  // Plan 030: every settlement and camp service is a row of the site menu now, so these
+  // records drive the production path a player actually takes — E to open, MENU_DOWN to
+  // the row, ENTER to commit — instead of one hotkey per service. Opening fresh each time
+  // keeps a record's steps independent of whatever the previous one left on screen.
+  function openSiteMenu() {
+    if (G.scene.screen) g.tap('KeyX');
+    g.tap('KeyE');
+    const screen = G.scene.screen;
+    assert(screen && screen.kind === 'site',
+      'the site menu did not open here (screen=' + ((screen || {}).kind || 'none') + ')');
+    return screen;
+  }
+  function siteRowIds() { return openSiteMenu().rows.map(r => r.id); }
+  function siteRow(id) {
+    const screen = openSiteMenu();
+    const i = screen.rows.findIndex(r => r.id === id);
+    assert(i >= 0, 'no "' + id + '" row here — rows: ' + (screen.rows.map(r => r.id).join(', ') || '(none)'));
+    const steps = (i - screen.index + screen.rows.length) % screen.rows.length;
+    for (let n = 0; n < steps; n++) g.tap('KeyS');
+    g.tap('Enter');
+  }
+
   // Plan 029 helpers, named so the progression record reads as prose rather than as
   // repeated calls into two modules.
   const DATA = { playerStrength };
@@ -476,16 +498,25 @@ function runQaSuiteImpl() {
     assert(save.troops.length === ARMY_CAP_BASE - 1,
       'the column is full at ' + ARMY_CAP_BASE + ' places: ' + (ARMY_CAP_BASE - 2) + ' spears + one knight');
 
-    // interactive-path parity: real KeyQ handler near a settlement
+    // interactive-path parity: the real site-menu row near a settlement
     G.scene.hero.x = SETTLEMENT_ASHFORD.x; G.scene.hero.y = SETTLEMENT_ASHFORD.y;
     save.gold = 100; save.troops = [];
-    g.tap('KeyQ');
+    siteRow('recruit-spear');
     // spec v3 (phase-3 coherence): settlements quote local prices.
     assert(save.gold === 100 - SETTLEMENT_ASHFORD.spearCost,
-      'interactive KeyQ recruit at Ashford expected gold ' + (100 - SETTLEMENT_ASHFORD.spearCost) + ', got ' + save.gold);
-    assert(save.troops.length === 1, 'interactive KeyQ recruit expected 1 troop, got ' + save.troops.length);
+      'site-menu recruit at Ashford expected gold ' + (100 - SETTLEMENT_ASHFORD.spearCost) + ', got ' + save.gold);
+    assert(save.troops.length === 1, 'site-menu recruit expected 1 troop, got ' + save.troops.length);
+    // Plan 030: the menu survives a purchase and re-derives, so a second man is one more
+    // ENTER rather than another walk up to the gates.
+    assert(G.scene.screen && G.scene.screen.kind === 'site', 'the menu closed after a purchase');
+    assert(G.scene.screen.purse.gold === save.gold,
+      'the menu purse went stale: shows ' + G.scene.screen.purse.gold + ', save has ' + save.gold);
+    g.tap('Enter');
+    assert(save.troops.length === 2, 'a second ENTER on the open menu should buy a second man, got ' + save.troops.length);
+    assert(save.gold === 100 - SETTLEMENT_ASHFORD.spearCost * 2,
+      'the second purchase should charge the local price again, got ' + save.gold);
     return 'recruit cost/cap/gold refusals correct; a knight costs two places in the column; ' +
-      'interactive KeyQ path matches direct recruit() call';
+      'the site-menu row matches direct recruit() and the menu re-derives for a repeat buy';
   });
 
   // ======================================================================
@@ -497,18 +528,18 @@ function runQaSuiteImpl() {
     const save = G.scene.save;
 
     save.heroHp = save.heroMaxHp; save.gold = 100;
-    g.tap('KeyF');
+    siteRow('heal');
     assert(G.scene.msg === 'Already rested', 'expected "Already rested" at full HP, got: ' + G.scene.msg);
     assert(save.gold === 100, 'gold should be unchanged when already rested, got ' + save.gold);
 
     save.heroHp = 50; save.gold = 5;
-    g.tap('KeyF');
+    siteRow('heal');
     assert(G.scene.msg === 'Not enough gold', 'expected "Not enough gold" refusal, got: ' + G.scene.msg);
     assert(save.heroHp === 50, 'heroHp should be unchanged on refusal, got ' + save.heroHp);
     assert(save.gold === 5, 'gold should be unchanged on refusal, got ' + save.gold);
 
     save.heroHp = 50; save.gold = 50; save.troops = [{ type: 'spear', hp: 33 }];
-    g.tap('KeyF');
+    siteRow('heal');
     assert(save.gold === 50 - HEAL_COST, 'heal should deduct exactly ' + HEAL_COST + ' gold, got gold=' + save.gold);
     assert(save.heroHp === save.heroMaxHp, 'heal should restore hero to max HP, got ' + save.heroHp);
     assert(save.troops[0].hp === undefined, 'heal should clear per-troop hp overrides, still has hp=' + save.troops[0].hp);
@@ -535,13 +566,13 @@ function runQaSuiteImpl() {
       'the first expansion should cost armyCapCostBase (' + BALANCE.armyCapCostBase + '), got ' + firstCost);
 
     save.gold = firstCost - 1;
-    g.tap('KeyT');
+    siteRow('expand');
     assert(save.armyCap === ARMY_CAP_BASE, 'a refused expansion must not raise the cap, got ' + save.armyCap);
     assert(save.gold === firstCost - 1, 'a refused expansion must not spend gold, got ' + save.gold);
     assert(w.msg === 'Need ' + firstCost + ' gold', 'expected the priced refusal, got: ' + w.msg);
 
     save.gold = firstCost + 5;
-    g.tap('KeyT');
+    siteRow('expand');
     assert(save.armyCap === ARMY_CAP_BASE + 2, 'expansion should add exactly 2 cap, got ' + save.armyCap);
     assert(save.gold === 5, 'expansion should spend exactly ' + firstCost + ', gold left ' + save.gold);
     assert(w.msg === 'Army capacity is now ' + save.armyCap, 'expected the success message, got: ' + w.msg);
@@ -566,15 +597,19 @@ function runQaSuiteImpl() {
     assert(w.syncLiveStateToSave().armyCap === ARMY_CAP_BASE + 2,
       'the raised cap must be in the persisted snapshot, got ' + w.syncLiveStateToSave().armyCap);
 
-    // village gate: only a town sells capacity, and a village must not even answer
+    // village gate: only a town sells capacity. Plan 030 makes the gate structural rather
+    // than a silent no-op — a village's menu simply does not carry the row, which is a
+    // stronger statement than "pressing the key changed nothing".
     w.hero.x = SETTLEMENT_ASHFORD.x; w.hero.y = SETTLEMENT_ASHFORD.y;
     save.gold = 500;
     const capAtVillage = save.armyCap;
-    w.msg = '';
-    g.tap('KeyT');
-    assert(save.armyCap === capAtVillage, 'a village must not sell army capacity, cap went to ' + save.armyCap);
-    assert(save.gold === 500, 'a village must not charge for it either, gold ' + save.gold);
-    assert(w.msg === '', 'a village should say nothing about capacity, said: ' + w.msg);
+    const villageRows = siteRowIds();
+    assert(!villageRows.includes('expand'),
+      'a village must not sell army capacity, but its menu offered: ' + villageRows.join(', '));
+    assert(!villageRows.includes('banner'),
+      'a village must not sell the banner either, but its menu offered: ' + villageRows.join(', '));
+    assert(save.armyCap === capAtVillage, 'opening a village menu must not raise the cap, got ' + save.armyCap);
+    assert(save.gold === 500, 'opening a village menu must not charge, gold ' + save.gold);
     return 'expansion cost ' + firstCost + ' for +2 cap, refused when short, escalated to ' +
       secondCost + ', raised the recruit ceiling, persisted, and stayed town-only';
   });
@@ -616,10 +651,11 @@ function runQaSuiteImpl() {
     assert(campState && !campState.razed, 'camp c1 expected un-razed at fresh world start');
     scene.hero.x = CAMP_C1.x; scene.hero.y = CAMP_C1.y;
     const goldBefore = scene.save.gold, troopsBefore = scene.save.troops.length;
-    g.tap('KeyE');
-    // Plan 021: E on a camp now opens the assault brief; confirm it to actually raid.
+    // Plan 021/030: E at a camp opens the site menu, and its raid row opens the assault
+    // brief; confirm THAT to actually raid.
+    siteRow('raid');
     assert(g.scene() === 'world' && G.scene.screen && G.scene.screen.kind === 'brief',
-      'KeyE near camp did not open the assault brief, scene=' + g.scene());
+      'the raid row did not open the assault brief, scene=' + g.scene());
     g.tap('Enter');
     assert(g.scene() === 'battle', 'confirming the assault brief did not start a battle, scene=' + g.scene());
     const nEnemies = G.scene.totalEnemies;
@@ -910,14 +946,17 @@ function runQaSuiteImpl() {
     assert(scene.save.settlements.find(s => s.id === 'brindle').occupied === true,
       'save.settlements[brindle].occupied was not set true on arrival');
 
-    // service suspension: recruiting at an occupied settlement must refuse and say so
+    // service suspension: an occupied settlement's menu offers no services at all — Plan
+    // 030 makes that structural instead of a per-key refusal.
     scene.hero.x = target.x; scene.hero.y = target.y;
     const goldBefore = scene.save.gold, troopsBefore = scene.save.troops.length;
-    G.input.injectKey('KeyQ', true);
-    scene.updateSettlementInteractions(G.input);
-    G.input.injectKey('KeyQ', false);
+    const occupiedRows = siteRowIds();
+    assert(occupiedRows.length === 0,
+      'an occupied settlement still offered services: ' + occupiedRows.join(', '));
+    g.tap('Enter'); // nothing to commit — must not buy anything either
     assert(scene.save.gold === goldBefore && scene.save.troops.length === troopsBefore,
       'recruiting succeeded at an occupied settlement');
+    g.tap('KeyX');
 
     // recapture: walking onto the occupier and winning restores the service
     scene.hero.x = party.x; scene.hero.y = party.y;

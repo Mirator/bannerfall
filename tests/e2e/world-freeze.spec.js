@@ -196,13 +196,21 @@ test('town and camp interaction still work while time is frozen', async ({ page 
     const g = window.__g, world = g.scene;
     world.parties.length = 0; // isolate from incidental party contact
 
+    // Plan 030: one press opens the site menu, a second commits the row. Both of those
+    // ticks happen on a hero that has never moved, which is the whole point.
+    const press = (action) => {
+      g.input.injectAction(action, true);
+      g.update(1 / 60);
+      g.input.injectAction(action, false);
+    };
+
     // 1) press an assault on a camp from a dead standstill
     world.hero.x = camp.x; world.hero.y = camp.y;
     world.hero.vx = 0; world.hero.vy = 0;
     world.grace = 0;
-    g.input.injectAction('worldPrimary', true);
-    g.update(1 / 60);
-    g.input.injectAction('worldPrimary', false);
+    press('worldPrimary');
+    const menuAtCamp = { frozen: world.isTimeFrozen(), screenKind: world.screen && world.screen.kind };
+    press('confirm'); // commit the raid row
     const assault = { frozen: world.isTimeFrozen(), screenKind: world.screen && world.screen.kind };
     world.screen = null; world.pending = null;
 
@@ -211,21 +219,25 @@ test('town and camp interaction still work while time is frozen', async ({ page 
     world.hero.vx = 0; world.hero.vy = 0;
     world.save.gold = 500;
     const goldBefore = world.save.gold, troopsBefore = world.save.troops.length;
-    g.input.injectAction('recruitSpear', true);
-    g.update(1 / 60);
-    g.input.injectAction('recruitSpear', false);
+    press('worldPrimary'); // opens the site menu, spearman row selected
+    press('confirm');
     return {
+      menuAtCamp,
       assault,
       recruit: {
         frozen: world.isTimeFrozen(),
         goldSpent: goldBefore - world.save.gold,
         troopsGained: world.save.troops.length - troopsBefore,
+        stillOpen: world.screen && world.screen.kind,
       },
     };
   }, { camp: LIVE_CAMP, town: ASHFORD });
+  expect(result.menuAtCamp.frozen).toBe(true);
+  expect(result.menuAtCamp.screenKind).toBe('site');
   expect(result.assault.frozen).toBe(true);
   expect(result.assault.screenKind).toBe('brief');
   expect(result.recruit.frozen).toBe(true);
+  expect(result.recruit.stillOpen).toBe('site'); // the menu survives a purchase
   expect(result.recruit.goldSpent).toBeGreaterThan(0);
   expect(result.recruit.troopsGained).toBe(1);
   expect(runtimeErrors, runtimeErrors.join('\n')).toEqual([]);

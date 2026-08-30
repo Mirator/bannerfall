@@ -46,6 +46,26 @@ async function tickAction(page, action) {
   }, { action });
 }
 
+// Plan 030: a settlement service, a claim and an assault are all rows of the site menu
+// now. This opens it with the one map verb, walks to the named row with the menu actions
+// and commits with CONFIRM — every step a production press through a full world tick, the
+// same shape the rest of this spec uses. It names the rows it found when the one asked for
+// is not offered, which is the failure a fixture standing in the wrong place actually has.
+async function tickSiteRow(page, rowId) {
+  await tickAction(page, 'worldPrimary');
+  const steps = await page.evaluate(id => {
+    const screen = window.__g.scene.screen;
+    if (!screen || screen.kind !== 'site') {
+      throw new Error(`site menu did not open (screen: ${(screen || {}).kind || 'none'})`);
+    }
+    const i = screen.rows.findIndex(r => r.id === id);
+    if (i < 0) throw new Error(`no "${id}" row here — rows: ${screen.rows.map(r => r.id).join(', ') || '(none)'}`);
+    return (i - screen.index + screen.rows.length) % screen.rows.length;
+  }, rowId);
+  for (let n = 0; n < steps; n++) await tickAction(page, 'menuDown');
+  await tickAction(page, 'confirm');
+}
+
 test('a fresh campaign opens with the documented regional shape', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openWorld(page);
@@ -76,7 +96,7 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
-  await tickAction(page, 'claim');
+  await tickSiteRow(page, 'claim');
   const claimed = await page.evaluate(async () => {
     const w = window.__g.scene;
     await window.__g.saves.flush();
@@ -131,14 +151,14 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('dismissing the spec choice does not lose it — G at the gates reopens it', async ({ page }) => {
+test('dismissing the spec choice does not lose it — the site menu at the gates reopens it', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openWorld(page);
   await page.evaluate(({ x, y }) => {
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
-  await tickAction(page, 'claim'); // capture ashford — its spec modal opens
+  await tickSiteRow(page, 'claim'); // capture ashford — its spec modal opens
   await tickAction(page, 'withdraw'); // "decide later"
   const dismissed = await page.evaluate(() => {
     const w = window.__g.scene;
@@ -149,8 +169,8 @@ test('dismissing the spec choice does not lose it — G at the gates reopens it'
   expect(dismissed.owner).toBe('player'); // the capture itself is not undone by dismissing
   expect(dismissed.spec).toBeFalsy(); // but no specialization was chosen either
 
-  // G at the same gates — still owned, still unspecialized — reopens the prompt.
-  await tickAction(page, 'claim');
+  // The menu at the same gates — still owned, still unspecialized — reopens the prompt.
+  await tickSiteRow(page, 'spec');
   const reopened = await page.evaluate(() => {
     const w = window.__g.scene;
     return { kind: w.screen && w.screen.kind, id: w.screen && w.screen.settlement.id };
@@ -180,14 +200,14 @@ test('capturing a second settlement while a first choice is still outstanding do
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
-  await tickAction(page, 'claim'); // capture ashford
+  await tickSiteRow(page, 'claim'); // capture ashford
   await tickAction(page, 'withdraw'); // decide later — leaves ashford queued, unspecialized
 
   await page.evaluate(({ x, y }) => {
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('brindle').x, y: S('brindle').y });
-  await tickAction(page, 'claim'); // capture brindle while ashford's choice is still outstanding
+  await tickSiteRow(page, 'claim'); // capture brindle while ashford's choice is still outstanding
   const bothPending = await page.evaluate(() => {
     const w = window.__g.scene;
     const ashford = w.save.settlements.find(s => s.id === 'ashford');
@@ -220,12 +240,12 @@ test('capturing a second settlement while a first choice is still outstanding do
   expect(await page.evaluate(() => window.__g.scene.screen && window.__g.scene.screen.kind))
     .toBe(null);
 
-  // Return to ashford's gates: G still reopens its own, still-outstanding choice.
+  // Return to ashford's gates: the menu still reopens its own, still-outstanding choice.
   await page.evaluate(({ x, y }) => {
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
-  await tickAction(page, 'claim');
+  await tickSiteRow(page, 'spec');
   const ashfordReopened = await page.evaluate(() => {
     const w = window.__g.scene;
     return { kind: w.screen && w.screen.kind, id: w.screen && w.screen.settlement.id };
@@ -557,7 +577,7 @@ test('stronghold power states materially change the final battle', async ({ page
       w.hero.x = x; w.hero.y = y;
       w.grace = 0;
     }, { x: STRONGHOLD.x, y: STRONGHOLD.y, fixture });
-    await tickAction(page, 'worldPrimary');
+    await tickSiteRow(page, 'storm');
     const brief = await page.evaluate(() => {
       const w = window.__g.scene;
       const d = w.pending && w.pending.descriptor;
@@ -630,7 +650,7 @@ test('the final stronghold victory ends the campaign with the regional summary c
     w.hero.x = x; w.hero.y = y;
     w.grace = 0;
   }, { x: STRONGHOLD.x, y: STRONGHOLD.y });
-  await tickAction(page, 'worldPrimary');
+  await tickSiteRow(page, 'storm');
   await tickAction(page, 'confirm');
   await page.evaluate(() => {
     if (window.__g.sceneName !== 'battle') throw new Error('confirming the stronghold brief did not start a battle');

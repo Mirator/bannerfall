@@ -1,15 +1,12 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with one body-count
 // badge, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, WORLD, UNIT_TYPES, BALANCE, oddsWord, armySlots, rankOf } from '../data.js?v=r0a1bd3998320';
-import { bannerCost, bannerLabel, perkMods } from '../progression.js?v=r0a1bd3998320';
-import { TAU, rrect, shadow } from '../engine.js?v=r0a1bd3998320';
-import {
-  strongholdModifiers, STRONGHOLD_POWER_LABELS, OWNERSHIP, SPECIALIZATIONS,
-} from '../region.js?v=r0a1bd3998320';
-import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r0a1bd3998320';
-
-const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
+import { PAL, WORLD, BALANCE, armySlots, rankOf } from '../data.js?v=r70b613c6e5cd';
+import { perkMods } from '../progression.js?v=r70b613c6e5cd';
+import { TAU, rrect, shadow } from '../engine.js?v=r70b613c6e5cd';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from '../region.js?v=r70b613c6e5cd';
+import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r70b613c6e5cd';
+import { nearestSite, siteChipLabel } from './site-menu.js?v=r70b613c6e5cd';
 
 const P = PAL.world;
 const WORLD_LANDMARKS = [...WORLD.settlements, ...WORLD.camps];
@@ -176,70 +173,42 @@ export function drawHud(world, ctx) {
     }
   }
 
-  // context prompt
-  const s = world.nearSettlement();
-  const camp = world.nearCamp();
-  let lines = null;
-  if (s && world.isSettlementOccupied(s)) {
-    lines = [`${s.name} — OCCUPIED`, 'A raiding party has seized it — its service is suspended', 'Defeat them here to drive them out'];
-  } else if (s) {
-    const sc = world.costAt(s, 'spear'), ac = world.costAt(s, 'archer');
-    const healTxt = s.freeHeal ? 'F Rest & heal FREE' : `F Rest & heal ${world.healCostAt(s)}g`;
-    const rec = world.save.settlements.find(x => x.id === s.id);
-    const owned = rec && rec.owner === OWNERSHIP.PLAYER;
-    const specLine = owned && rec.spec ? `${rec.spec === 'watchtower' ? '' : ''}${specName(rec.spec)}` : null;
-    const claimLine = !owned && !rec?.spec ? 'G Claim this settlement for your banner' : null;
-    // Plan 029: every recruit line states its SLOT COST, and the panel carries the role
-    // text from UNIT_TYPES so a player can tell a spearman from an archer before buying
-    // one. The banner is the town's third purchase, beside the army cap.
-    const slotTag = (type) => {
-      const n = UNIT_TYPES[type].slots ?? 1;
-      return n > 1 ? ` (${n} slots)` : '';
-    };
-    const bCost = bannerCost(world.save.banner);
-    const bannerTxt = bCost == null
-      ? `Banner: ${bannerLabel(world.save.banner)} (highest)`
-      : `B Raise the banner ${bCost}g → ${bannerLabel(world.save.banner + 1)}s`;
-    // A settlement states the role of every body it actually sells: a player standing at
-    // the gates should be able to tell a spearman from an archer without leaving the map.
-    const roleLines = (types) => types.map(t => `${UNIT_TYPES[t].name}: ${UNIT_TYPES[t].role}`);
-    const base = s.kind === 'town'
-      ? [`${s.name} — ${s.flavor}`,
-         `Q Spearman ${sc}g · E Archer ${ac}g · R Knight ${UNIT_TYPES.knight.cost}g${slotTag('knight')}`,
-         `${healTxt} · T +2 army cap ${world.armyCapCost()}g · ${bannerTxt}`,
-         ...roleLines(['spear', 'archer', 'knight'])]
-      : [`Village of ${s.name} — ${s.flavor}`,
-         `Q Spearman ${sc}g · E Archer ${ac}g · ${healTxt}`,
-         ...roleLines(['spear', 'archer'])];
-    if (owned && rec.spec) base.push(`${s.name} is yours — ${specLine}`);
-    else if (!owned) base.push(claimLine);
-    lines = base;
-  } else if (camp) {
-    const razedC = world.save.camps.filter(c => c.razed && c.id !== 'strong').length;
-    const est = world.garrisonStrength(camp), mine = world.myStrength();
-    // Plan 021 design decision 3: proximity prompts carry only the odds WORD, never a
-    // strength number — badges are bodies, prompts are words, hover shows both. Hover
-    // the camp for the full breakdown.
-    const odds = est == null ? 'ride closer to scout it' : oddsWord(est, mine);
-    lines = camp.stronghold
-      ? (razedC < 3 ? [`${camp.name} — enemy stronghold`, `Its camps still feed it: cut the supply lines (${razedC}/3)`] : [`${camp.name} — enemy stronghold`, odds, 'E Storm the hold!'])
-      : [`Bandit camp — ${odds}`, 'E Raid the camp (counts toward the 3)'];
-  }
-  if (lines) {
-    const bw = Math.min(W - WORLD_ART.hud.margin * 2, WORLD_ART.hud.contextW);
-    const panelH = lines.length * 22 + 16;
-    const bx = W / 2 - bw / 2, by = H - panelH - WORLD_ART.hud.margin;
+  // Plan 030: the interaction prompt is one chip now — a name and the key that opens the
+  // menu. Everything it used to list (prices, roles, the claim line, the camp odds) moved
+  // into the site menu, where it can be read at leisure instead of crowding the map.
+  const site = nearestSite(world);
+  if (site) {
+    const label = siteChipLabel(world, site);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
+    const nameW = ctx.measureText(label).width;
+    ctx.font = '800 13px Inter, system-ui, sans-serif';
+    const keyW = ctx.measureText('E').width;
+    const padX = 16, gap = 12, keyBox = Math.max(22, keyW + 14), chipH = 34;
+    const bw = padX + nameW + gap + keyBox + padX;
+    const bx = W / 2 - bw / 2, by = H - chipH - WORLD_ART.hud.margin;
     ctx.fillStyle = P.ink;
-    rrect(ctx, bx, by, bw, lines.length * 22 + 16, 10); ctx.fill();
-    ctx.fillStyle = P.cream; ctx.textAlign = 'center';
-    lines.forEach((l, i) => {
-      ctx.font = i === 0 ? '800 15px Inter, system-ui, sans-serif' : '600 13px Inter, system-ui, sans-serif';
-      ctx.fillText(l, W / 2, by + 20 + i * 22);
-    });
+    rrect(ctx, bx, by, bw, chipH, 10); ctx.fill();
+    ctx.fillStyle = P.cream;
+    ctx.font = '800 15px Inter, system-ui, sans-serif';
+    ctx.fillText(label, bx + padX, by + chipH / 2);
+    // The key glyph reads as a key, not as a word: a filled cap in the hero colour.
+    const kx = bx + padX + nameW + gap;
+    ctx.fillStyle = P.hero;
+    rrect(ctx, kx, by + 7, keyBox, chipH - 14, 5); ctx.fill();
+    ctx.fillStyle = P.ink;
+    ctx.font = '800 13px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('E', kx + keyBox / 2, by + chipH / 2 + 1);
+    ctx.textBaseline = 'alphabetic';
   }
 
   // toast
   if (world.msgT > 0 && world.msg) {
+    // Declared, not inherited: the interaction chip above resets the baseline and the
+    // resource chip leaves it 'middle', so without this the toast's text would sit 4px
+    // higher whenever the hero happens to be standing at a landmark.
+    ctx.textBaseline = 'middle';
     ctx.globalAlpha = Math.min(1, world.msgT * 2);
     ctx.fillStyle = P.ink;
     ctx.font = '700 14px Inter, system-ui, sans-serif';

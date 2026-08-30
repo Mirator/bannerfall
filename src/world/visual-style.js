@@ -57,9 +57,12 @@ export const WORLD_ART = freeze({
     freeze({ id: 'east', minX: 2430, maxX: Infinity, ground: '#DD9638', light: '#E6A142', vegetation: '#356B3D' }),
   ]),
   hud: freeze({
-    margin: 14, radius: 9, topSafeH: 148, bottomSafeH: 120,
+    // Plan 030: the bottom safe band shrank with the prompt. It used to reserve room for a
+    // five-line service legend; the interaction chip that replaced it is one 34px row, and
+    // reserving more than that would keep hover suppressed over map the HUD no longer covers.
+    margin: 14, radius: 9, topSafeH: 148, bottomSafeH: 64,
     resourceW: 240, resourceH: 36, objectiveW: 300, objectiveH: 56,
-    contextW: 420, toastH: 34,
+    toastH: 34,
   }),
   framing: freeze({
     // When the hero is exactly on an interaction coordinate, lift the presentation

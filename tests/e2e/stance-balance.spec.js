@@ -148,12 +148,20 @@ async function raidSweep(page, orders, seeds, campIds) {
           world.hero.x = camp.x; world.hero.y = camp.y; world.grace = 0;
           game.input.injectMouse(640, 360, false);
           game.input.injectKey('KeyE', true); real(dt); game.input.injectKey('KeyE', false);
-          // Plan 021: KeyE now opens a pre-battle brief (still scene 'world') before
-          // committing — confirm it to reach the same battle entry this sweep measures.
+          // Plan 030: KeyE opens the site menu (its raid row selected), and Plan 021's
+          // pre-battle brief sits behind that — two confirms to reach the same battle entry
+          // this sweep measures. Both are asserted rather than skipped: a `continue` here
+          // would let the sweep silently measure nothing if the flow changes again.
+          if (game.sceneName === 'world' && world.screen && world.screen.kind === 'site') {
+            game.input.injectKey('Enter', true); real(dt); game.input.injectKey('Enter', false);
+          }
           if (game.sceneName === 'world' && world.screen && world.screen.kind === 'brief') {
             game.input.injectKey('Enter', true); real(dt); game.input.injectKey('Enter', false);
           }
-          if (game.sceneName !== 'battle') continue;
+          if (game.sceneName !== 'battle') {
+            throw new Error('camp assault did not reach a battle: scene=' + game.sceneName +
+              ', screen=' + ((world.screen || {}).kind || 'none'));
+          }
           const b = game.scene;
           game.camera.shakeT = 0; game.camera.shakeAmp = 0; game.camera.sx = 0; game.camera.sy = 0;
           let t = 0;

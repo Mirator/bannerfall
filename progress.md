@@ -708,3 +708,43 @@ worth: ranking up three interchangeable bodies is three times nothing. Baselines
   `world-brief-camp-withdraw.png` (4%). The brief panel legitimately grew two roster lines
   (veterans, perks) and 40px of height. Baselines are captured only through the pinned-Linux CI
   workflow, so they are listed rather than recaptured, and the 1.5% cap was not touched.
+
+## Plan 030 - one menu behind every map interaction
+
+- The campaign map has one verb. `E` next to a village, a town, a bandit camp or the
+  stronghold opens a site menu; every service is a row in it. `RECRUIT_SPEAR`,
+  `RECRUIT_KNIGHT`, `HEAL`, `EXPAND_ARMY`, `CLAIM` and `UPGRADE_BANNER` were deleted from
+  `input-actions.js` rather than left bound, which also cleared `KeyR`'s collision with
+  `ABANDON_RUN`.
+- The five-line prompt panel is now a one-line chip: `Village of Ashford · E`. The bottom
+  HUD safe band dropped 120px to 64px with it, so hover is no longer suppressed over map the
+  HUD stopped covering, and `WORLD_ART.hud.contextW` was deleted.
+- The menu is a `world.screen` of kind `'site'`, on the machinery the brief, aftermath,
+  specialization and perk screens already share. That is what buys the "a world modal
+  genuinely pauses the campaign" contract without inventing a second pause. `site-menu.js`
+  owns the model and the dispatch; the rules stay in `recruit()`, `restAndHeal()`,
+  `expandArmy()`, `upgradeBanner()` and `claimSettlement()`, so a row's price tag and its
+  charge read the same number and a refused row still commits so that method's own refusal
+  is what the player sees.
+- Committing a row rebuilds the model from the save instead of patching it, so a second
+  spearman is one more ENTER and the purse in the header cannot go stale. Claim and
+  choose-a-calling close the menu before calling in, because `queueSpecChoice()` and
+  `offerPerkChoice()` both no-op while a screen is open and would otherwise have swallowed
+  the prompt the claim earns.
+- An occupied settlement's menu has zero rows. The suspension is structural now rather than
+  a refusal per key, and both `qa_suite.js` and `campaign-persistence.spec.js` assert it that
+  way. The stronghold's storm row is offered at every power state, which is what the code
+  already allowed - only the old prompt text hid it below three razed camps.
+- Found while doing it: every world modal's vertical text placement was a hidden dependency
+  on `drawHud()` leaking `ctx.textBaseline = 'middle'` and never resetting it. The new chip
+  resets it properly, which shifted all four panels 8px and failed
+  `world-brief-camp-withdraw.png`. Fixed by declaring the baseline in each panel, not by
+  removing the reset. The baselines are unchanged.
+- No existing baseline was recaptured. Two were added - `world-site-town.png` and
+  `world-site-camp.png` - through the pinned-Linux workflow. The chip and the missing
+  scouting toast both sit under the modal scrim in every affected frame and stayed inside the
+  1.5% cap.
+- Accepted: an open menu freezes the clash seam that still runs under a stopped hero, so a
+  party cannot reach you while you shop. Every other world modal already behaves this way; a
+  bespoke half-pause for this one screen would be worse than the exploit it leaves.
+

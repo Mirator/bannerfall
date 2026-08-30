@@ -48,6 +48,7 @@ otherwise.
 | `assets/audio/` | the shipped clips; `SOURCES.md` records CC0 provenance per file |
 | `src/platform/`, `src/persistence/` | capability + storage adapters (Steam-ready boundary) |
 | `src/input-actions.js` | named action layer; gameplay never reads raw key codes |
+| `src/world/site-menu.js` | the one map verb: E opens the site menu, its rows are every interaction |
 | `src/data.js` | balance and unit tuning |
 | `tests/e2e/` | Playwright suites — see `tests/README.md` |
 | `tests/qa_suite.js` | deterministic legacy record suite |

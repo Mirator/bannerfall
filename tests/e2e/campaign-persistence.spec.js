@@ -328,7 +328,10 @@ test('final stronghold victory enters the victory scene and clears the run save'
     world.save.x = world.hero.x;
     world.save.y = world.hero.y;
   });
+  // Plan 030: E opens the site menu at the hold; ENTER commits its one row (storm), which
+  // is what opens the brief confirmBrief then confirms.
   await injectKeyAndStep(page, 'KeyE');
+  await injectKeyAndStep(page, 'Enter');
   await confirmBrief(page);
   await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('battle');
   await page.evaluate(() => window.__g.scene.endBattle(true));
@@ -633,11 +636,17 @@ test('an occupied settlement and its occupier survive an explicit save and Conti
     const world = window.__g.scene;
     world.hero.x = sx + 80; world.hero.y = sy;
   }, { sx: OCCUPY_SETTLEMENT.x, sy: OCCUPY_SETTLEMENT.y });
-  await page.evaluate(() => {
-    window.__g.input.injectKey('KeyQ', true);
-    window.__g.scene.updateSettlementInteractions(window.__g.input);
-    window.__g.input.injectKey('KeyQ', false);
+  // Plan 030: the refusal is structural now — an occupied settlement's menu offers no
+  // service rows at all, so there is nothing to press. Assert that through the production
+  // open, not by calling a phase directly.
+  await injectKeyAndStep(page, 'KeyE');
+  const occupiedMenu = await page.evaluate(() => {
+    const screen = window.__g.scene.screen;
+    return { kind: screen && screen.kind, rows: screen ? screen.rows.length : null };
   });
+  expect(occupiedMenu.kind).toBe('site');
+  expect(occupiedMenu.rows).toBe(0);
+  await injectKeyAndStep(page, 'KeyX');
   const goldAfter = await page.evaluate(() => window.__g.scene.save.gold);
   expect(goldAfter).toBe(goldBefore);
   assertNoRuntimeErrors(runtimeErrors);

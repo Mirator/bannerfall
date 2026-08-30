@@ -61,6 +61,19 @@ test('world road river and bridge landmark remains visible', async ({ page }) =>
   await expect(canvas).toHaveScreenshot('world-bridge.png', VISUAL_OPTIONS);
 });
 
+// Plan 030: the site menu is the one modal behind every map interaction, so the two shapes
+// it takes are both worth pinning — a town, which carries every service row including a
+// refused one, and a camp, whose single row is the door to the assault brief.
+test('the town site menu remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_site', { kind: 'town', seed: 424242 });
+  await expect(canvas).toHaveScreenshot('world-site-town.png', VISUAL_OPTIONS);
+});
+
+test('the camp site menu remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_site', { kind: 'camp', seed: 424242 });
+  await expect(canvas).toHaveScreenshot('world-site-camp.png', VISUAL_OPTIONS);
+});
+
 test('pre-battle brief for a fleeing party remains visually stable', async ({ page }) => {
   const canvas = await settle(page, 'world_brief', { kind: 'partyFlee', seed: 424242 });
   await expect(canvas).toHaveScreenshot('world-brief-party.png', VISUAL_OPTIONS);

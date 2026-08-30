@@ -1,17 +1,17 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r0a1bd3998320';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r0a1bd3998320';
-import { Sfx } from './audio.js?v=r0a1bd3998320';
-import { Battle } from './battle.js?v=r0a1bd3998320';
-import { World } from './world.js?v=r0a1bd3998320';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r0a1bd3998320';
-import { FIELD } from './battle/constants.js?v=r0a1bd3998320';
-import { ACTIONS } from './input-actions.js?v=r0a1bd3998320';
-import { createWebPlatform } from './platform/web-platform.js?v=r0a1bd3998320';
-import { SaveRepository } from './persistence/save-repository.js?v=r0a1bd3998320';
-import { buildSummaryModel } from './world-screens.js?v=r0a1bd3998320';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r0a1bd3998320';
-import { perkChoiceDue, perkMods } from './progression.js?v=r0a1bd3998320';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r70b613c6e5cd';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r70b613c6e5cd';
+import { Sfx } from './audio.js?v=r70b613c6e5cd';
+import { Battle } from './battle.js?v=r70b613c6e5cd';
+import { World } from './world.js?v=r70b613c6e5cd';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r70b613c6e5cd';
+import { FIELD } from './battle/constants.js?v=r70b613c6e5cd';
+import { ACTIONS } from './input-actions.js?v=r70b613c6e5cd';
+import { createWebPlatform } from './platform/web-platform.js?v=r70b613c6e5cd';
+import { SaveRepository } from './persistence/save-repository.js?v=r70b613c6e5cd';
+import { buildSummaryModel } from './world-screens.js?v=r70b613c6e5cd';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r70b613c6e5cd';
+import { perkChoiceDue, perkMods } from './progression.js?v=r70b613c6e5cd';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -1241,9 +1241,15 @@ window.game = {
         world.parties.length = 0; // isolate: no incidental party collision on the ride in
         world.hero.x = camp.x; world.hero.y = camp.y;
         world.grace = 0;
+        // Plan 030: WORLD_PRIMARY opens the site menu; the assault row it selects by
+        // default is what actually calls requestBattle. Two production presses, exactly
+        // what a player does.
         game.input.injectAction(ACTIONS.WORLD_PRIMARY, true);
         game.update(DT);
         game.input.injectAction(ACTIONS.WORLD_PRIMARY, false);
+        game.input.injectAction(ACTIONS.CONFIRM, true);
+        game.update(DT);
+        game.input.injectAction(ACTIONS.CONFIRM, false);
       } else {
         // Away from every settlement's canClash-blocking safe zone (WORLD.heroStart
         // itself sits ~128px from Ashford, just inside the 130px radius).
@@ -1276,6 +1282,25 @@ window.game = {
         game.update(DT);
         keepAwake(world, false);
       }
+    } else if (name === 'world_site') {
+      // Plan 030: the site menu, opened through the production WORLD_PRIMARY press at a
+      // real landmark. `kind` picks which shape of menu: 'village' (Ashford, claimable),
+      // 'town' (Highmere, every service including the banner), 'camp' (a scouted bandit
+      // camp), 'stronghold' (Wolfsjaw). Never opened by assigning world.screen.
+      if (opts && opts.seed != null) game.testSeed = opts.seed;
+      game.startWorld(null);
+      const world = game.scene;
+      const kind = (opts && opts.kind) || 'village';
+      const at = kind === 'town' ? WORLD.settlements.find(x => x.kind === 'town')
+        : kind === 'camp' ? WORLD.camps.find(c => c.id === 'c1')
+        : kind === 'stronghold' ? WORLD.camps.find(c => c.id === 'strong')
+        : WORLD.settlements.find(x => x.id === 'ashford');
+      world.parties.length = 0; // isolate: no incidental party collision on the ride in
+      world.hero.x = at.x; world.hero.y = at.y;
+      world.grace = 0;
+      game.input.injectAction(ACTIONS.WORLD_PRIMARY, true);
+      game.update(DT);
+      game.input.injectAction(ACTIONS.WORLD_PRIMARY, false);
     } else if (name === 'world_aftermath') {
       // Drives a real party clash through requestBattle -> confirm -> a real
       // Battle.endBattle() -> the real onEnd path, never by assigning world.screen
