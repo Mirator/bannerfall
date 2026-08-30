@@ -45,6 +45,7 @@ conditions, and update its status row when done.
 | 027 | Give the enemy a commander, so the player's orders have something to answer | P0 | L | 019, 024 | STOPPED on its own condition — shipped as structure, see plan |
 | 028 | Rebase the encounter generator on measured combat power | P0 | L | 020, 021, 027 | DONE — premise corrected by measurement, see plan |
 | 029 | Unit identity, and something to build between fights | P0 | XL | 019, 021, 027, 028 | DONE — one self-inflicted regression measured and closed inside the slice, see plan |
+| 032 | Make where a man is standing worth something | P0 | M | 019, 027, 029 | DONE as a mechanic, not as the fix — margin back to zero, annotation stays, see plan |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -157,6 +158,16 @@ real power (49.1% idle win) where it delivered 0.73-1.29 (58.9%). The `@sweep` a
 stays and is now a measured loss rather than a tie: over 360 raids per policy, pressing
 nothing beats the best deliberate order by 5.3 +/- 2.8 points. See
 `critiques/encounter-power-comparison.md`.
+
+Plan 032 is the fifth attempt on the same finding and the one that names what the previous
+four were working around: until it landed, nothing in the damage arithmetic read `facing`, so
+a blow was worth the same from in front and from directly behind and there was no positional
+mechanic to command for. A melee blow from outside a body's front arc now pays `FLANK_BONUS`,
+and a set line cannot brace against what reaches it from behind. Over the same 120 organic
+camp raids the best deliberate policy went from one point behind pressing nothing to level
+with it, and the idle win rate fell rather than rose. A tie is still not a strict inequality,
+so the `@sweep` annotation stays — including against a `FLANK_BONUS` value that does make it
+pass, which was probed and rejected because commanding is no better at that value.
 
 Plan 022 was executed from the 2026-08-20 codebase audit
 (`critiques/codebase-audit-2026-08-20.md`) rather than from a forward plan; it splits

@@ -12,15 +12,15 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=rdc06e391aa49';
-import { dist2, clamp } from '../engine.js?v=rdc06e391aa49';
-import { ACTIONS } from '../input-actions.js?v=rdc06e391aa49';
-import { buildBriefModel, veteranLine } from '../world-screens.js?v=rdc06e391aa49';
-import { sampleBattlefield } from './battlefield-brief.js?v=rdc06e391aa49';
-import { FIELD } from '../battle/constants.js?v=rdc06e391aa49';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=rdc06e391aa49';
-import { awardVeterancy, perkMods } from '../progression.js?v=rdc06e391aa49';
-import { performSiteAction } from './site-menu.js?v=rdc06e391aa49';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=rf856e1bc4599';
+import { dist2, clamp } from '../engine.js?v=rf856e1bc4599';
+import { ACTIONS } from '../input-actions.js?v=rf856e1bc4599';
+import { buildBriefModel, veteranLine } from '../world-screens.js?v=rf856e1bc4599';
+import { sampleBattlefield } from './battlefield-brief.js?v=rf856e1bc4599';
+import { FIELD } from '../battle/constants.js?v=rf856e1bc4599';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=rf856e1bc4599';
+import { awardVeterancy, perkMods } from '../progression.js?v=rf856e1bc4599';
+import { performSiteAction } from './site-menu.js?v=rf856e1bc4599';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;

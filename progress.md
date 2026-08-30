@@ -832,3 +832,60 @@ inherited baselines and asserts the plate and text pixel rows are identical, the
 the name is centred within 3px. Verified to fail on the pre-fix renderer. A single-frame
 visual baseline cannot catch this class of bug - it only ever records one of the two
 states.
+
+
+## Facing and flank arcs (2026-08-30)
+
+Plan 032. The audit finding that pressing nothing beats commanding has now been attacked five
+times; this slice names what the previous four were working around. Every body has carried a
+`facing` since the first battle build and nothing in the damage arithmetic read it, so a blow
+landed for the same number from in front, from the side and from directly behind. Plan 027's
+flanking muster therefore changed only where the enemy walked, never what the walk was worth,
+and an idle blob took exactly the same hits as a deliberately arranged line.
+
+`FRONT_ARC` (+/-110 degrees) and `FLANK_BONUS` (1.35) are in `src/battle/constants.js`. A
+melee blow landing outside a body's front arc pays the bonus; a rush arriving outside it
+cannot be braced against. One predicate (`inFrontArc` in `ai-phases.js`), two rules, both
+sides, and the enemy reads the shipped constants rather than the perk-modified values. 1.35 is
+`CHARGE_EXPOSURE` deliberately: both are the price of an open formation, and pricing them
+apart is a claim nothing measured supports.
+
+The arc width is the design, not a tuning knob. A body turns onto its target within about a
+fifth of a second, so what a 110-degree cone prices is not "which way is he pointing" but "he
+is already committed to somebody else" - the second man onto a body, and the man who arrives
+while it is winding up on someone behind it. The same fact makes the brace gate narrower than
+it reads: it removes the first blow against a rusher that closed from behind while the man was
+still turned, which is the case where a set line manifestly has not set itself.
+
+Melee only. An arrow resolves against whoever is nearest where it FALLS, hundreds of
+milliseconds after it was loosed, so there is no honest incoming direction; a brute's slam is
+an AoE ring, already excluded from the brace for the same reason. The hero is exempt as
+attacker and as defender: his facing comes from the cursor through `Camera.toWorld`, and a
+flankable hero would put fight outcomes back under the mouse.
+
+Measured on the 120-raid camp-raid sweep, idle / chargeAll / split: 69 / 68 / 45 before,
+68 / 68 / 48 after. Both replayed digit for digit across two runs. Idle FELL, which was the
+failure mode being watched for - both sides encircle, but a camp garrison outnumbers the
+warband, so the extra blows land on the player at least as often as on the enemy, and no
+gating was needed. The best deliberate policy went from one point behind pressing nothing to
+level with it. A tie is not a strict inequality, so the `test.fail` annotation stays; its
+comment block carries the numbers.
+
+`FLANK_BONUS = 1.60` was probed and rejected. It makes the assertion pass (67 / 68 / 43,
+chargeAll ahead by one) but commanding does not improve between the two values - chargeAll is
+68 at both - and split is five points worse, so the crossing is one point of erosion on idle,
+inside the noise of 120 raids. Choosing that value would be choosing a constant to satisfy an
+assertion.
+
+Coverage: `tests/e2e/facing-flank.spec.js`, four two-body fixtures stepped exactly as far as
+one blow takes to land. Flank from behind and no flank from the front, the same pair with the
+enemy swinging, brace paid inside the front arc and refused behind it, and the slam and the
+arrow both landing for their declared damage on a target with its back turned.
+
+One process note worth keeping. The first pass of this slice measured a 10-failure gate and an
+after-sweep of 0% wins across all three policies, and neither was real: `playwright.config.js`
+uses `reuseExistingServer` on a fixed port 8474, and a `python scripts/serve.py` from a
+different checkout already held it, so every spec ran against another tree's files while
+reading this one's assertions. Against a server pinned to this worktree the pre-change gate is
+181/181 and the post-change gate is 185/185. Check what 8474 is actually serving before
+believing a number taken from it.

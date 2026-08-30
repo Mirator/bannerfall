@@ -77,7 +77,25 @@ can finish a winnable fight.
 
 It also carries one expected failure recording a confirmed defect: giving no order at all
 beats every deliberate order policy. Do not delete that annotation to make the suite look
-clean — it is the honest state of the mechanic.
+clean — it is the honest state of the mechanic. Its comment block is the running record of
+every attempt on that finding, most recently Plan 032, which brought the margin back to zero
+and documents a constant value that WOULD make the assertion pass and was rejected for it.
+
+`tests/e2e/facing-flank.spec.js` owns the Plan 032 mechanic itself, and it is the other half
+of that story: the sweep says what the rule did to a campaign, this spec says what the rule
+IS. Four two-body fixtures, each stepped exactly as far as it takes for one blow to land — a
+melee blow from outside the defender's front arc paying `FLANK_BONUS` and one from the front
+paying the declared damage exactly, the same pair with the enemy swinging (Plan 027's symmetry
+rule), a braced line paying `BRACE_BONUS` against a rush inside its front arc and nothing
+against one behind it, and the two "melee only" exclusions (a brute's slam and an archer's
+arrow both land for their declared damage on a target with its back turned). Two bodies rather
+than a warband because the claim is arithmetic about a single strike; fight-scale questions
+belong to the balance harness. Three properties of the pipeline make one tick enough and are
+worth knowing before adding a fixture here: `updateTroopPhase` runs before `updateEnemyPhase`,
+a body turns onto its target by only 12.5% of the remaining angle per tick, and the enemy
+commander cannot have issued anything before `CMD_TICK` (0.8s), so no stance term is in play
+at t = 0. The hero is parked far away in every fixture because he is deliberately outside the
+flank rule in both directions.
 
 Two harness rules matter and must not be dropped. The pointer is pinned to the canvas
 centre and camera shake is zeroed before each run, because an idle hero aims at the

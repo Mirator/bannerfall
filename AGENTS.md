@@ -276,6 +276,20 @@ cost two measurements and both are load-bearing:
   knockback impulse every landed hit applies is larger than most bodies' locomotion. Any
   rule keyed in that band means "I hit it, therefore it charged me".
 
+**Facing is a damage term now (Plan 032), and the hero is outside it on purpose.** `FRONT_ARC`
+(±110°) is the half-angle of the cone a body faces. A MELEE blow landing outside it pays
+`FLANK_BONUS`, and the brace above pays only against a rush that arrives INSIDE it — one
+predicate (`inFrontArc` in `ai-phases.js`), both rules, both sides, and the enemy reads the
+shipped constants rather than anything a perk can move. Three exclusions are deliberate and
+each has a reason: an arrow resolves against whoever is nearest where it FALLS, long after it
+was loosed, so it has no honest incoming direction; a brute's slam is an AoE ring, which is why
+it is already excluded from the brace; and the HERO is exempt as attacker and as defender,
+because his facing comes from the cursor through `Camera.toWorld` and a flankable hero would
+put fight outcomes back under the mouse — the defect `battle outcomes are independent of canvas
+size and cursor position` exists to catch. Do not extend the rule to any of the three without
+re-measuring the `@sweep` fixture; `FLANK_BONUS` at 1.60 makes that assertion pass and was
+rejected for it (plans/032 finding 3).
+
 So `markRush(unit, commanded)` in `ai-phases.js` is the single writer and it is called ONLY
 from the branch that is steering toward a hostile, with the commanded speed BEFORE terrain
 scaling. `BRACE_SPEED` (130) is the "inherently fast body" clause — wolf 158, knight 175 —
@@ -734,6 +748,15 @@ gap: over the same 120 organic camp raids, charging everything went from 65% to 
 pressing nothing went from 75% to 77.5% — a 10-point deficit became a tie. The assertion is
 a strict inequality and a tie does not satisfy it. See `critiques/enemy-command-comparison.md`
 for the full before/after table and plans/027 for why the idle win rate did not move.
+
+Plan 032 (facing and flank arcs) produced the second tie. Over the same 120 organic camp
+raids: idle 69 -> 68, chargeAll 68 -> 68, split 45 -> 48, so the best deliberate policy went
+from one point behind pressing nothing to level with it, and the idle rate FELL rather than
+rose. Both figures replayed digit for digit across two runs. The annotation stays, and it
+stays even though a `FLANK_BONUS` of 1.60 does make the assertion pass — commanding is
+unchanged between the two values and the crossing is one point of erosion on idle, so the
+value that flips the test was rejected rather than shipped. `plans/032-facing-and-flank-arcs.md`
+carries the tables and the reasoning.
 
 That sweep is also the most expensive test in the repository, so it is tagged
 `@sweep` and split out of the `chromium` project the PR gate runs. `npm test`
