@@ -1,12 +1,12 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=ra61468519e7e';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=ra61468519e7e';
-import { stableSortPrefix } from './spatial-index.js?v=ra61468519e7e';
-import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=ra61468519e7e';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=ra61468519e7e';
-import { drawHud } from './hud.js?v=ra61468519e7e';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r795695426ca8';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r795695426ca8';
+import { stableSortPrefix } from './spatial-index.js?v=r795695426ca8';
+import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=r795695426ca8';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r795695426ca8';
+import { drawHud } from './hud.js?v=r795695426ca8';
 
 // ------------------------------------------------------------- drawing
 
@@ -43,8 +43,10 @@ function drawObjectiveGround(battle, ctx) {
 
 // Plan 033: the deployment ground, drawn only while the paused placement phase is up.
 // The player's side carries a faint friendly tint and a solid dashed frontier; the enemy's
-// frontier is fainter — informational, the player cannot place anything there. Presentation
-// only: reads battle.state/dragUnit, writes nothing.
+// frontier is fainter — informational, the player cannot place anything there.
+// Everything here derives from adx/ady, the same vector clampToDeployZone projects against,
+// so the tinted ground and the enforced ground cannot disagree (the string-keyed approach
+// table is not a second source of truth for this geometry).
 function drawDeployZones(battle, ctx) {
   if (battle.state !== 'deploy') return;
   const P = battle.palette;
@@ -52,15 +54,20 @@ function drawDeployZones(battle, ctx) {
   const fx = cx - battle.adx * D, fy = cy - battle.ady * D; // player frontier point
   const ex = cx + battle.adx * D, ey = cy + battle.ady * D; // enemy frontier point
   const px = -battle.ady, py = battle.adx;                  // along-frontier direction
-  const L = Math.max(battle.W, battle.H);
+  // Half-length of a frontier line: exactly the field's extent along the frontier plus a
+  // hair, not max(W,H) both ways — the dash pattern tessellates the whole stroked length,
+  // and ~80% of a 5000-unit line is off-camera every frame.
+  const L = (Math.abs(px) * battle.W + Math.abs(py) * battle.H) / 2 + 40;
   ctx.save();
-  // the player's ground: frontier back to the field edge behind him
+  // the player's ground: the half-plane behind his frontier, extruded away from the enemy
   ctx.globalAlpha = 0.06;
   ctx.fillStyle = P.friend;
-  if (battle.approach === 'E') ctx.fillRect(0, 0, fx, battle.H);
-  else if (battle.approach === 'W') ctx.fillRect(fx, 0, battle.W - fx, battle.H);
-  else if (battle.approach === 'S') ctx.fillRect(0, 0, battle.W, fy);
-  else ctx.fillRect(0, fy, battle.W, battle.H - fy);
+  ctx.beginPath();
+  ctx.moveTo(fx - px * L, fy - py * L);
+  ctx.lineTo(fx + px * L, fy + py * L);
+  ctx.lineTo(fx + px * L - battle.adx * L * 2, fy + py * L - battle.ady * L * 2);
+  ctx.lineTo(fx - px * L - battle.adx * L * 2, fy - py * L - battle.ady * L * 2);
+  ctx.closePath(); ctx.fill();
   ctx.lineWidth = 4;
   ctx.setLineDash([20, 14]);
   ctx.globalAlpha = 0.8;

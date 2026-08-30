@@ -6,17 +6,17 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=ra61468519e7e';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=ra61468519e7e';
-import { ACTIONS } from '../input-actions.js?v=ra61468519e7e';
+import { HERO } from '../data.js?v=r795695426ca8';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r795695426ca8';
+import { ACTIONS } from '../input-actions.js?v=r795695426ca8';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
   BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
-} from './constants.js?v=ra61468519e7e';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=ra61468519e7e';
+} from './constants.js?v=r795695426ca8';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r795695426ca8';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -556,10 +556,8 @@ export function updateTroopPhase(battle, dt, h) {
 
 export function updateEnemyPhase(battle, dt, h) {
   const P = battle.palette;
-  // Plan 033: the timed deploy window is gone. A fight that deserves setup time pauses on
-  // the deployment phase instead (battle.js updateDeployPhase), during which this phase
-  // never runs at all — so there is no frozen-enemies block to special-case here.
-  // ---- enemies
+  // ---- enemies (the pre-033 deploy window's frozen block is gone: the deployment phase
+  // pauses the whole tick pipeline in battle.js, so this phase simply does not run there)
   for (const e of battle.enemies) {
     e.cd -= dt;
     if (e.flash > 0) e.flash -= dt;

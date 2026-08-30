@@ -65,6 +65,20 @@ function runQaSuiteImpl() {
     g.tap('Enter');
   }
 
+  // Plan 033: a production-path battle pauses on the deployment phase after its intro.
+  // Step to the phase, let CONFIRM arm, and sound the advance — asserted at every edge so
+  // a record can never silently step a paused scene (the vacuous-measurement failure the
+  // deployment review found in three records). The 0.4 covers DEPLOY_ARM_T (0.35).
+  function soundAdvance() {
+    const b = G.scene;
+    let guard = 0;
+    while (b.state === 'intro' && guard++ < 50) g.step(0.1);
+    assert(b.state === 'deploy', 'expected the deployment pause after the intro, state=' + b.state);
+    g.step(0.4);
+    g.tap('Enter');
+    assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
+  }
+
   // Plan 029 helpers, named so the progression record reads as prose rather than as
   // repeated calls into two modules.
   const DATA = { playerStrength };
@@ -116,14 +130,7 @@ function runQaSuiteImpl() {
     const maxHp = G.scene.hero.maxHp;
     assert(totalEnemies === 3, 'expected battle_small totalEnemies=3, got ' + totalEnemies);
     g.tap('Digit2'); // charge — lands during the intro, survives the deploy confirm (Plan 033)
-    // Plan 033: a production-path battle pauses on the deployment phase after the intro.
-    // Sound the advance through the real CONFIRM press, past its arm delay.
-    let deployGuard = 0;
-    while (G.scene.state !== 'deploy' && deployGuard++ < 50) g.step(0.1);
-    assert(G.scene.state === 'deploy', 'battle_small should pause on deployment, state=' + G.scene.state);
-    g.step(0.4); // DEPLOY_ARM_T
-    g.tap('Enter');
-    assert(G.scene.state === 'fight', 'CONFIRM should sound the advance, state=' + G.scene.state);
+    soundAdvance();
     let sawVictory = false, steps = 0;
     const MAX_STEPS = 300; // up to 150 sim-seconds
     while (steps < MAX_STEPS) {
@@ -182,9 +189,7 @@ function runQaSuiteImpl() {
     // Plan 033: the intro hands over to the paused deployment phase, and the fight starts
     // on the armed CONFIRM press — the same production path a player takes.
     assert(b.state === 'deploy', 'the intro should hand over to deployment 1.3s in, state=' + b.state);
-    g.step(0.4); // DEPLOY_ARM_T
-    g.tap('Enter');
-    assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
+    soundAdvance();
 
     // Aim is derived from the pointer through the camera, so ask the game where it is
     // aiming and put the target on THAT ray. Re-deriving the camera transform in a test is
@@ -267,10 +272,7 @@ function runQaSuiteImpl() {
     const b = G.scene, h = b.hero;
     g.step(1.3);
     // Plan 033: past the intro the battle pauses on deployment; confirm through the armed press.
-    assert(b.state === 'deploy', 'the intro should hand over to deployment 1.3s in, state=' + b.state);
-    g.step(0.4); // DEPLOY_ARM_T
-    g.tap('Enter');
-    assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
+    soundAdvance();
     assert(b.approach === 'E', 'this record assumes battle_small keeps the default eastern approach, got ' + b.approach);
     // approach E puts your escape edge in the west: inside x < 70, steering left
     const toEdge = () => { h.x = 50; h.y = b.H / 2; };
@@ -1054,6 +1056,9 @@ function runQaSuiteImpl() {
     function runOnce() {
       g.scenario('battle_small');
       g.tap('Digit2');
+      // Plan 033: without the confirm this record compared two PAUSED deployment
+      // snapshots — spawn values on both sides — and asserted nothing about combat.
+      soundAdvance();
       g.step(10);
       const st = g.state();
       return { kills: st.battle.kills, hx: st.battle.hero.x, hy: st.battle.hero.y, enemies: st.battle.enemies, troops: G.scene.troops.length };
@@ -1075,6 +1080,9 @@ function runQaSuiteImpl() {
       g.effects(effectsEnabled);
       g.scenario('battle_small');
       g.tap('Digit2');
+      // Plan 033: the fight must actually run or the effects toggle is compared against
+      // a paused scene and fx-into-sim bleed would go undetected.
+      soundAdvance();
       g.step(4);
       const b = G.scene;
       assert(G.sceneName === 'battle', 'battle fixture ended before RNG comparison');
@@ -1136,12 +1144,15 @@ function runQaSuiteImpl() {
   // ======================================================================
   record('perf_smoke_200_half_second_steps', () => {
     g.scenario('battle_big'); // busiest scenario: 14 troops + 11 enemies
+    // Plan 033: past the deployment pause first, or this times 197 steps of a paused
+    // scene and the suite's only perf guard is silently disabled.
+    soundAdvance();
     const t0 = performance.now();
     for (let i = 0; i < 200; i++) g.step(0.5);
     const elapsedMs = performance.now() - t0;
     const BUDGET_MS = 8000;
     assert(elapsedMs < BUDGET_MS, '200 x step(0.5) took ' + elapsedMs.toFixed(0) + 'ms, exceeding budget of ' + BUDGET_MS + 'ms');
-    return '200 x step(0.5) (100 sim-seconds, battle_big) completed in ' + elapsedMs.toFixed(0) + 'ms';
+    return '200 x step(0.5) (100 sim-seconds of live battle_big) completed in ' + elapsedMs.toFixed(0) + 'ms';
   });
 
   // ======================================================================
@@ -1219,6 +1230,9 @@ function runQaSuiteImpl() {
       g.tap('Enter'); // the arm delay has long decayed during the 1.0s step above
       assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
       const seen = [];
+      // 20 half-second steps, not the pre-033 12: the formed line still marches ~500 units
+      // to the muster anchor before the assault doctrine can diverge, and CMD_FORM_MAX (6s)
+      // caps that march — so the first divergent row lands just past the old 6s window.
       for (let i = 0; i < 20; i++) {
         g.step(0.5);
         if (G.scene !== b || b.state === 'end') break;
@@ -1241,11 +1255,7 @@ function runQaSuiteImpl() {
     // keeping anyone on a stance that refuses to close.
     g.scenario('battle_big');
     const b = G.scene;
-    let guard = 0;
-    while (b.state === 'intro' && guard++ < 50) g.step(0.1);
-    g.step(0.4); // DEPLOY_ARM_T (Plan 033)
-    g.tap('Enter');
-    assert(b.state === 'fight', 'CONFIRM should sound the advance, state=' + b.state);
+    soundAdvance();
     b.bloodlust = true;
     g.step(1.0);
     for (const type of Object.keys(b.enemySquads)) {

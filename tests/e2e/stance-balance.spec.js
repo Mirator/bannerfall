@@ -82,7 +82,6 @@ async function runStance(page, fixtureName, stance, orders = null) {
       });
       const b = game.scene;
       b.state = 'fight';
-      b.deployT = 0;
       // An idle hero aims at the cursor, and FOLLOW formation slots hang off hero facing,
       // so the pointer is a real simulation input. Pin it to the canvas centre and clear
       // any residual camera shake, or a stray mouse position silently rewrites the result.
@@ -303,19 +302,23 @@ test.describe('stance balance', () => {
     // flipping an annotation on a margin inside the harness's own run-to-run drift is the
     // exact mistake Plan 019 had to retract. The annotation stays.
     //
-    // Plan 033 (the deployment phase) changed what BOTH columns of this sweep mean, and the
-    // finding survived it with a wider margin. "Pressing nothing" now includes the one press
-    // nobody can skip — confirming the deployment — after which the un-ordered warband HOLDS
-    // its placed line instead of following; and the enemy starts formed instead of scattered,
-    // so its assault arrives as one body from the first fight tick. Measured on this exact
-    // fixture (120 raids per policy): idle 67% (was 69.2%), chargeAll 52% (was 68%), split
-    // 35% (was 45%). The idle line barely moved — a held line at spawn is as competent an
-    // auto-battler as a following one — while charging into a pre-formed enemy lost sixteen
-    // points, so the deficit AGAINST commanding widened from one point to fifteen. The
-    // annotation stays, and the mechanism this sweep is waiting for is still positional:
-    // orders need something to buy that the default resolution cannot (see the facing/flank
-    // slice, plans/032).
-    test.fail();
+    // Plan 033 (the deployment phase) changed what BOTH columns of this sweep mean, and it
+    // is the change that finally resolved the finding. "Pressing nothing" now includes the
+    // one press nobody can skip — confirming the deployment — after which the un-ordered
+    // warband HOLDS its placed line instead of following, and both sides start formed. The
+    // plan's first commit measured idle 67 / chargeAll 52 / split 35 (annotation kept: the
+    // deficit against commanding had WIDENED). Its review pass then made the player's
+    // troops deploy formed instead of as the ride-in scatter, and the formed-tight line
+    // holding at spawn is a no-input baseline the enemy commander can actually punish:
+    // measured TWICE on this exact fixture, digit for digit both runs, idle 49 / chargeAll
+    // 60 / split 34. Commanding beats pressing nothing by eleven points — far outside the
+    // run-to-run drift every earlier margin drowned in (Plan 027's 0.0, Plan 029's -0.9).
+    //
+    // The `test.fail()` that sat here from Plan 019's retraction to Plan 033 is therefore
+    // removed on its own stated terms ("remove it only when commanding actually beats not
+    // commanding"), and the assertion below now GUARDS the property: a change that makes
+    // the idle default the best policy again fails this sweep, exactly as weakening any
+    // other guard would.
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked
     const camps = ['c1', 'c2', 'c3'];
@@ -351,7 +354,7 @@ test.describe('stance balance', () => {
             deploy: 0, approach: 'E', heroHp: 120, heroMaxHp: 120, onEnd: () => {},
           });
           const b = game.scene;
-          b.state = 'fight'; b.deployT = 0;
+          b.state = 'fight';
           let t = 0;
           while (b.state !== 'end' && t < timeoutS) { real(dt); t += dt; }
           return `${Math.round(t * 10) / 10}s/${b.startTroops - b.troops.length}lost/${Math.round(b.hero.hp)}hp`;

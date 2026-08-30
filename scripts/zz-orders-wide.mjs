@@ -46,15 +46,40 @@ async function raidSweep(page, orders, seeds, campIds) {
           world.save.gold = 500;
           world.hero.x = camp.x; world.hero.y = camp.y; world.grace = 0;
           game.input.injectMouse(640, 360, false);
+          // Battle entry mirrors tests/e2e/stance-balance.spec.js's raidSweep exactly, and
+          // every gate is ASSERTED rather than skipped: this harness once measured zero
+          // runs for months because Plan 030 put the site menu between KeyE and the brief
+          // and the old `continue` fell through silently. A thrown error is the honest
+          // failure mode for a measurement tool.
           game.input.injectKey('KeyE', true); real(dt); game.input.injectKey('KeyE', false);
+          // Plan 030: KeyE opens the site menu with the raid row selected; Enter confirms it.
+          if (game.sceneName === 'world' && world.screen && world.screen.kind === 'site') {
+            game.input.injectKey('Enter', true); real(dt); game.input.injectKey('Enter', false);
+          }
+          // Plan 021: the pre-battle brief sits behind that; Enter confirms into battle.
           if (game.sceneName === 'world' && world.screen && world.screen.kind === 'brief') {
             game.input.injectKey('Enter', true); real(dt); game.input.injectKey('Enter', false);
           }
-          if (game.sceneName !== 'battle') continue;
+          if (game.sceneName !== 'battle') {
+            throw new Error('camp assault did not reach a battle: scene=' + game.sceneName +
+              ', screen=' + ((world.screen || {}).kind || 'none'));
+          }
           const b = game.scene;
           game.camera.shakeT = 0; game.camera.shakeAmp = 0; game.camera.sx = 0; game.camera.sy = 0;
           let t = 0;
           while (b.state === 'intro' && t < 3) { real(dt); t += dt; }
+          // Plan 033: the battle pauses on the deployment phase; arm CONFIRM on its own
+          // clock (`t` already carries the intro wait), then press it. An idle player still
+          // sounds the advance, and his placed line holds by default — that is what
+          // "pressing nothing" means from Plan 033 on.
+          let armT = 0;
+          while (b.state === 'deploy' && armT < 0.5) { real(dt); t += dt; armT += dt; }
+          if (b.state === 'deploy') {
+            game.input.injectKey('Enter', true); real(dt); t += dt; game.input.injectKey('Enter', false);
+          }
+          if (b.state !== 'fight') {
+            throw new Error('the deploy confirm did not start the fight: state=' + b.state);
+          }
           const t0 = t;
           if (orders) for (const [squad, order] of Object.entries(orders)) b.issueCommand(order, squad);
           while (b.state !== 'end' && t < 95) { real(dt); t += dt; }

@@ -1,12 +1,12 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with one body-count
 // badge, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, WORLD, BALANCE, armySlots, rankOf } from '../data.js?v=ra61468519e7e';
-import { perkMods } from '../progression.js?v=ra61468519e7e';
-import { TAU, rrect, shadow } from '../engine.js?v=ra61468519e7e';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from '../region.js?v=ra61468519e7e';
-import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=ra61468519e7e';
-import { nearestSite, siteChipLabel } from './site-menu.js?v=ra61468519e7e';
+import { PAL, WORLD, BALANCE, armySlots, rankOf } from '../data.js?v=r795695426ca8';
+import { perkMods } from '../progression.js?v=r795695426ca8';
+import { TAU, rrect, shadow } from '../engine.js?v=r795695426ca8';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from '../region.js?v=r795695426ca8';
+import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r795695426ca8';
+import { nearestSite, siteChipLabel } from './site-menu.js?v=r795695426ca8';
 
 const P = PAL.world;
 const WORLD_LANDMARKS = [...WORLD.settlements, ...WORLD.camps];

@@ -2,42 +2,42 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=ra61468519e7e';
-import { perkMods } from './progression.js?v=ra61468519e7e';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=ra61468519e7e';
-import { SpatialGrid } from './battle/spatial-index.js?v=ra61468519e7e';
-import { ACTIONS } from './input-actions.js?v=ra61468519e7e';
+} from './data.js?v=r795695426ca8';
+import { perkMods } from './progression.js?v=r795695426ca8';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r795695426ca8';
+import { SpatialGrid } from './battle/spatial-index.js?v=r795695426ca8';
+import { ACTIONS } from './input-actions.js?v=r795695426ca8';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
   DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
-} from './battle/constants.js?v=ra61468519e7e';
+} from './battle/constants.js?v=r795695426ca8';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=ra61468519e7e';
-import { drawScene, drawProps } from './battle/render-scene.js?v=ra61468519e7e';
+} from './battle/terrain.js?v=r795695426ca8';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r795695426ca8';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=ra61468519e7e';
+} from './battle/separation.js?v=r795695426ca8';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=ra61468519e7e';
+} from './battle/ai-phases.js?v=r795695426ca8';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=ra61468519e7e';
+} from './battle/combat.js?v=r795695426ca8';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=ra61468519e7e';
+} from './battle/objectives.js?v=r795695426ca8';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
   placeEnemyDeployment as placeEnemyLine,
-} from './battle/enemy-command.js?v=ra61468519e7e';
+} from './battle/enemy-command.js?v=r795695426ca8';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -133,11 +133,16 @@ export class Battle {
     const heroMaxHp = Number.isFinite(setup.heroMaxHp) && setup.heroMaxHp > 0 ? setup.heroMaxHp : HERO.hp;
     const heroHp = Number.isFinite(setup.heroHp) ? Math.min(heroMaxHp, Math.max(0, setup.heroHp)) : heroMaxHp;
     this.hero = {
-      x: cx0 - adx * ENGAGE_GAP / 2, y: cy0 - ady * ENGAGE_GAP / 2, vx: 0, vy: 0, facing: 0,
+      // Plan 033: the hero opens facing the enemy on every approach, not hardcoded east —
+      // slotPos() hangs the formation off travelFacing, and the deployment phase places
+      // troops through it before anyone has moved, so "behind the commander" must mean
+      // away from the enemy on a W/N/S approach too.
+      x: cx0 - adx * ENGAGE_GAP / 2, y: cy0 - ady * ENGAGE_GAP / 2, vx: 0, vy: 0,
+      facing: Math.atan2(ady, adx),
       hp: heroHp, maxHp: heroMaxHp,
       swingT: 0, dashT: 0, dashCdT: 0, hurtT: 0, bob: 0, iframesT: 0,
       // last heading actually travelled - drives formation, unlike `facing` which follows aim
-      travelFacing: 0,
+      travelFacing: Math.atan2(ady, adx),
     };
 
     // terrain: obstacles, props, movement zones, LOS blockers, river crossings — built from
@@ -278,6 +283,11 @@ export class Battle {
     this.enemies = [];
     const ecx = enemyCx, ecy = enemyCy;
     const bcx = cx0 - adx * FLANK_GAP, bcy = cy0 - ady * FLANK_GAP; // behind you
+    // Plan 033: these scatter draws run for EVERY battle, deployment phase or not.
+    // placeEnemyDeployment overwrites the positions for a deploy-phase fight, but consuming
+    // the same two simRng() draws per enemy either way keeps the stream identical across
+    // both paths — spawnEnemy's cd draw and every consumer after it — so the ambush path
+    // replays pre-033 behaviour exactly. Do not delete them as dead code.
     (setup.enemies || []).forEach((e, i) => {
       const a = (i / Math.max(1, setup.enemies.length)) * TAU;
       let cx = ecx, cy = ecy;
@@ -313,8 +323,22 @@ export class Battle {
     this.deployEnabled = !setup.ambush && (setup.deploy == null || setup.deploy > 0);
     this.deployArmT = DEPLOY_ARM_T;
     this.dragUnit = null; // the body under the mouse while placing, deployment phase only
+    // Squad types the player explicitly ordered during the deployment phase (written by
+    // issueCommand). confirmDeploy reads it to tell a deliberate FOLLOW from the neutral
+    // default it promotes to HOLD — the stance string alone cannot make that distinction.
+    this._deployOrdered = new Set();
     if (this.deployEnabled) placeEnemyLine(this);
     this.assignSlots();
+    if (this.deployEnabled) {
+      // The player's men deploy formed too, on FOLLOW's own slot geometry, so the phase
+      // opens on a drawn-up line instead of the ride-in scatter (an instant confirm then
+      // holds a line, not a blob). The scatter draws in spawnTroop still ran — same
+      // stream-stability reason as the enemy side's, see the enemy spawn loop above.
+      for (const t of this.troops) {
+        const p = this.slotPos(t);
+        t.x = p.x; t.y = p.y;
+      }
+    }
   }
 
   // Plan 029: `vet` is the persisted battles-won count. Rank is derived here and folded
@@ -436,8 +460,14 @@ export class Battle {
     if (squadType && !this.troops.some(t => t.type === squadType)) return;
     const targets = squadType ? [squadType] : this.mannedSquads();
     if (!targets.length) return;
+    // Plan 033: an order pressed during the deployment phase is a deliberate choice even
+    // when it re-states the current stance — pressing 1 (FOLLOW) on the neutral default is
+    // exactly how a player refuses the confirm's hold-promotion, so it is recorded BEFORE
+    // the repeat no-op below, and the no-op itself is skipped there so the press is
+    // acknowledged with the usual horn and flash rather than silence.
+    if (this.state === 'deploy') for (const type of targets) this._deployOrdered.add(type);
     // Re-issuing the same order is a no-op except for HOLD, which re-anchors the line.
-    if (cmd !== 'hold' && targets.every(type => this.squads[type].stance === cmd)) return;
+    if (this.state !== 'deploy' && cmd !== 'hold' && targets.every(type => this.squads[type].stance === cmd)) return;
     for (const type of targets) this.squads[type].stance = cmd;
     this.command = this.aggregateStance();
     const sfx = this.game.sfx;
@@ -488,7 +518,7 @@ export class Battle {
       this.updateCommandPhase(this.game.input);
       // Plan 021 step 5: a fight reached through the pre-battle brief already showed
       // both rosters and the N vs M total once — shorten the intro so the beat isn't
-      // stated a third time (brief -> this banner -> the deploy countdown detail line).
+      // stated a third time (brief -> this banner -> the deployment panel).
       // Keyed strictly off setup.brief so scenario('battle_*') (never brief-routed) is
       // provably untouched.
       const introDur = this.setup.brief ? 0.6 : 1.1;
@@ -498,13 +528,20 @@ export class Battle {
         this.state = this.deployEnabled ? 'deploy' : 'fight';
         this.game.sfx.horn(175);
       }
-      this.updateCamera(dt);
-      this.particles.update(dt);
+      // Presentation keeps breathing through a paused state — including the command-flash
+      // decay, or an order issued here freezes its banner on screen (review of Plan 033).
+      this.updatePresentationPhase(dt);
       return true;
     }
     if (this.state === 'deploy') {
       this.updateDeployPhase(dt);
-      this.updateCamera(dt);
+      if (this.commandFlash.t > 0) this.commandFlash.t -= dt;
+      // The camera holds still while a body is being dragged: the fit-to-action camera
+      // follows the dragged body, which shifts toWorld(cursor) next frame and closes a
+      // feedback loop (measured 1.4-8.7x over-travel before the clamps arrest it). Frozen,
+      // the body tracks the cursor exactly; the fit resumes on release, which is also what
+      // walks the view toward the rear of the zone across successive drags.
+      if (!this.dragUnit) this.updateCamera(dt);
       this.particles.update(dt);
       return true;
     }
@@ -574,22 +611,47 @@ export class Battle {
 
   confirmDeploy() {
     if (this.state !== 'deploy') return;
+    const P = this.palette;
     this.state = 'fight';
     this.dragUnit = null;
-    // The placed line means something: every troop holds where the player put him until
-    // ordered otherwise. Squads the player already ordered during the phase keep that
-    // order; only the neutral default is promoted, so a deliberate pre-battle CHARGE is
-    // not silently overwritten.
-    for (const t of this.troops) { t.holdX = t.x; t.holdY = t.y; }
+    // The placed line means something: a squad the player gave NO order holds where he put
+    // it until ordered otherwise. `_deployOrdered` (written by issueCommand while the phase
+    // is up) is what separates the neutral default from a deliberate FOLLOW pressed during
+    // the phase — the stance string alone cannot, and silently overwriting a chosen order
+    // is the misfire issueCommand's own guard exists to prevent.
+    //
+    // This deliberately does NOT route through issueCommand('hold'): an order anchors the
+    // squad banner at the commander, but a deployment anchors each banner at the squad's
+    // own placed ground — the marker must point at the line the player just built, not at
+    // wherever the hero stands. Anything new the HOLD order path learns (see issueCommand)
+    // must be mirrored here.
     for (const type of this.mannedSquads()) {
       const squad = this.squads[type];
-      if (squad.stance !== 'follow') continue;
-      squad.stance = 'hold';
-      squad.holdX = this.hero.x; squad.holdY = this.hero.y;
+      const promoted = squad.stance === 'follow' && !this._deployOrdered.has(type);
+      if (promoted) squad.stance = 'hold';
+      if (squad.stance !== 'hold') continue;
+      let cx = 0, cy = 0, n = 0;
+      for (const t of this.troops) {
+        if (t.type !== type) continue;
+        t.holdX = t.x; t.holdY = t.y;
+        cx += t.x; cy += t.y; n++;
+        this.particles.ring(t.x, t.y, 16, P.cream, 0.3, 2);
+      }
+      // Re-anchored for pre-ordered HOLD squads too: their order-time anchor points at
+      // where the hero stood when the key was pressed, which dragging has since made stale.
+      squad.holdX = cx / n; squad.holdY = cy / n;
     }
     this.command = this.aggregateStance();
     this.game.sfx.horn(155);
     this.commandFlash = { text: 'THEY ADVANCE!', t: 1.0 };
+  }
+
+  // Plan 033: the deployment phase is a structural pause. main.js's campaign playT accrual
+  // duck-types this exact predicate off whatever scene is live (the world's modal freeze
+  // already defines it), and an unbounded pause must not inflate reported campaign time —
+  // the same rule the world-scene modals carry (see main.js's blocking gate).
+  isTimeFrozen() {
+    return this.state === 'deploy';
   }
 
   updateActivePhases(dt) {

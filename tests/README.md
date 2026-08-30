@@ -75,9 +75,12 @@ replay identically, that the wolf and raider fixtures keep their intended right 
 (the only stance properties measured to generalize across seeds), and that every stance
 can finish a winnable fight.
 
-It also carries one expected failure recording a confirmed defect: giving no order at all
-beats every deliberate order policy. Do not delete that annotation to make the suite look
-clean — it is the honest state of the mechanic.
+From Plan 019 to Plan 033 it carried one expected failure recording a confirmed defect:
+giving no order at all beat every deliberate order policy. Plan 033's deployment phase
+resolved it — with the un-ordered warband holding its placed formed line by default, the
+sweep measured idle 49% against chargeAll 60%, replayed digit for digit across two runs —
+and the `test.fail` annotation came off on its own stated terms. The assertion is now a
+guard: a change that makes the idle default the best policy again fails the sweep.
 
 Two harness rules matter and must not be dropped. The pointer is pinned to the canvas
 centre and camera shake is zeroed before each run, because an idle hero aims at the
