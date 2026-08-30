@@ -7,15 +7,15 @@
 // seam a row calls). It owns no drawing — world-screens.js draws the model — and it owns no
 // rules: every row commits through the method that already held the rule, so a row's price
 // tag and its charge cannot disagree.
-import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=r70b613c6e5cd';
-import { bannerCost, bannerLabel } from '../progression.js?v=r70b613c6e5cd';
-import { ACTIONS } from '../input-actions.js?v=r70b613c6e5cd';
+import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=r1a9e52c1bce3';
+import { bannerCost, bannerLabel } from '../progression.js?v=r1a9e52c1bce3';
+import { ACTIONS } from '../input-actions.js?v=r1a9e52c1bce3';
 import {
   OWNERSHIP, SPECIALIZATIONS, REGION,
   encounterObjective, strongholdModifiers, strongholdAdvantageLines, settlementRecord,
   STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r70b613c6e5cd';
-import { restAndHeal, expandArmy } from './settlement-interactions.js?v=r70b613c6e5cd';
+} from '../region.js?v=r1a9e52c1bce3';
+import { restAndHeal, expandArmy } from './settlement-interactions.js?v=r1a9e52c1bce3';
 
 const P = PAL.world;
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
@@ -319,6 +319,7 @@ export function updateSiteInteraction(world, inp) {
   const model = buildSiteModel(world, site);
   if (!model) return false;
   world.screen = model;
+  world.game.sfx.uiSelect();
   world.game.invalidate();
   return true;
 }

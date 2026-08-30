@@ -1,26 +1,26 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=r70b613c6e5cd';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r70b613c6e5cd';
-import { SAVE_VERSION } from './save.js?v=r70b613c6e5cd';
+} from './data.js?v=r1a9e52c1bce3';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r1a9e52c1bce3';
+import { SAVE_VERSION } from './save.js?v=r1a9e52c1bce3';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=r70b613c6e5cd';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r70b613c6e5cd';
+} from './region.js?v=r1a9e52c1bce3';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r1a9e52c1bce3';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=r70b613c6e5cd';
-import { drawScene } from './world/render-scene.js?v=r70b613c6e5cd';
+} from './progression.js?v=r1a9e52c1bce3';
+import { drawScene } from './world/render-scene.js?v=r1a9e52c1bce3';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r70b613c6e5cd';
+} from './world/battle-transition.js?v=r1a9e52c1bce3';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -30,16 +30,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=r70b613c6e5cd';
+} from './world/settlement-interactions.js?v=r1a9e52c1bce3';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=r70b613c6e5cd';
+} from './world/site-menu.js?v=r1a9e52c1bce3';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r70b613c6e5cd';
-import { WORLD_ART } from './world/visual-style.js?v=r70b613c6e5cd';
+} from './world/terrain.js?v=r1a9e52c1bce3';
+import { WORLD_ART } from './world/visual-style.js?v=r1a9e52c1bce3';
 
 const P = PAL.world;
 
@@ -664,7 +664,7 @@ export class World {
     // modal genuinely pauses the campaign rather than just visually covering it.
     // Plan 023 moved `this.time += dt` BELOW this gate, into updateWorldClock, so a modal
     // now freezes the ambient clock too — which is what that claim always implied.
-    if (this.updateWorldScreens(inp)) return;
+    if (this.updateWorldScreens(inp, dt)) return;
     // Hero movement ALWAYS runs, frozen or not: it owns the coast-down that DECIDES the
     // freeze, and a hero held mid-slide reads as a dropped frame rather than as a stop.
     this.updateHeroMovement(dt, inp, h);
@@ -1266,8 +1266,8 @@ export class World {
     return acceptBrief(this);
   }
 
-  updateWorldScreens(inp) {
-    return worldScreens(this, inp);
+  updateWorldScreens(inp, dt) {
+    return worldScreens(this, inp, dt);
   }
 
   say(text, t = 2.4) {

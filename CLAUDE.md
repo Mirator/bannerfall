@@ -85,6 +85,10 @@ replacing a delegator with a direct module call silently disables coverage.
 - **Terrain has one source.** Add a road or river only through
   `World.buildTerrainGeometry()` in `src/world/terrain.js`, or rendering,
   collision and navigation will diverge.
+- **Permanent choices arm before they commit.** The spec and perk modals refuse
+  `CONFIRM` for `CHOICE_ARM_T` after opening (`src/world-screens.js`), because they
+  appear unbidden on the tick the aftermath closes. Navigation disarms them. This is
+  the guard that makes `E` safe as both the map verb and the confirm key.
 - **Audio must not `console.error`.** No sound before a user gesture, no music
   started on a suspended `AudioContext`, and every file named in `src/audio.js`'s
   manifest must exist — an autoplay violation or a 404 fails every spec that calls

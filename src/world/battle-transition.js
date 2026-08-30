@@ -12,15 +12,15 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r70b613c6e5cd';
-import { dist2, clamp } from '../engine.js?v=r70b613c6e5cd';
-import { ACTIONS } from '../input-actions.js?v=r70b613c6e5cd';
-import { buildBriefModel } from '../world-screens.js?v=r70b613c6e5cd';
-import { sampleBattlefield } from './battlefield-brief.js?v=r70b613c6e5cd';
-import { FIELD } from '../battle/constants.js?v=r70b613c6e5cd';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r70b613c6e5cd';
-import { awardVeterancy, perkMods } from '../progression.js?v=r70b613c6e5cd';
-import { performSiteAction } from './site-menu.js?v=r70b613c6e5cd';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r1a9e52c1bce3';
+import { dist2, clamp } from '../engine.js?v=r1a9e52c1bce3';
+import { ACTIONS } from '../input-actions.js?v=r1a9e52c1bce3';
+import { buildBriefModel, veteranLine } from '../world-screens.js?v=r1a9e52c1bce3';
+import { sampleBattlefield } from './battlefield-brief.js?v=r1a9e52c1bce3';
+import { FIELD } from '../battle/constants.js?v=r1a9e52c1bce3';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r1a9e52c1bce3';
+import { awardVeterancy, perkMods } from '../progression.js?v=r1a9e52c1bce3';
+import { performSiteAction } from './site-menu.js?v=r1a9e52c1bce3';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -138,6 +138,8 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
         const st = world.save.camps.find(c => c.id === partyMeta.campId);
         if (st && st.garrison) st.garrison = removeDead(st.garrison);
       }
+      // Plan 031: what the fight cost, reported by the screen whose job is to report it.
+      let goldLost = 0;
       if (result.victory) {
         save.gold += result.loot;
         // Plan 029: veterancy is battles WON and walked out of. Awarded here and only
@@ -167,7 +169,12 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
         restoreRoamingParty();
       } else {
         // defeat: your surviving men carry you to the NEAREST village, not magically home
+        // Plan 031: the aftermath reports this. A player who loses 200 gold and finds out
+        // by noticing the HUD later has been told nothing by the screen whose whole job is
+        // to say what the fight cost.
+        const goldBeforeDefeat = save.gold;
         save.gold = Math.max(25, Math.round(save.gold * (1 - BALANCE.defeatGoldLoss)));
+        goldLost = goldBeforeDefeat - save.gold;
         save.troops = result.survivors || [];
         save.heroHp = Math.round(save.heroMaxHp * 0.5);
         let nearest = WORLD.settlements[0], bd = Infinity;
@@ -208,6 +215,10 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
           enemyCompSnapshot,
           heroHp: save.heroHp, // POST-regen — result.heroHp would contradict the HUD
           heroMaxHp: save.heroMaxHp,
+          goldLost,
+          // Veterancy is awarded above, before this payload is built, and the aftermath is
+          // the one screen where the rank was actually earned. It never said so.
+          veterans: veteranLine(save.troops, perkMods(save.perks).rankEarlier),
           consequence,
         };
       }
@@ -320,13 +331,21 @@ export function confirmBrief(world) {
 // individual option rects.
 function resolveChoiceInput(world, inp, btn, key, options) {
   const block = btn[key];
+  // A modal that just opened unbidden must not be committable by the burst of presses that
+  // dismissed whatever came before it. Navigation is deliberately still live — moving the
+  // selection is proof the player is looking at the screen, so it disarms immediately.
+  const armed = !(world.screen.armT > 0);
   if (inp.pressedAction(ACTIONS.MENU_UP)) {
     world.screen.index = (world.screen.index + options.length - 1) % options.length;
+    world.screen.armT = 0;
+    world.game.sfx.uiMove();
     world.game.invalidate();
     return null;
   }
   if (inp.pressedAction(ACTIONS.MENU_DOWN)) {
     world.screen.index = (world.screen.index + 1) % options.length;
+    world.screen.armT = 0;
+    world.game.sfx.uiMove();
     world.game.invalidate();
     return null;
   }
@@ -338,15 +357,33 @@ function resolveChoiceInput(world, inp, btn, key, options) {
       inp.mouse.y >= block.y && inp.mouse.y <= block.y + block.h) {
     const rows = block.rows || [];
     const i = rows.findIndex(r => inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h);
-    if (i >= 0 && options[i]) { world.screen.index = i; return options[i].id; }
+    // A click names its own row, so it is self-evidently deliberate — but it still waits out
+    // the arm, because a click aimed at the aftermath's CONTINUE button lands in the same
+    // screen space a choice row now occupies.
+    if (i >= 0 && options[i]) {
+      world.screen.index = i;
+      if (!armed) { world.screen.armT = 0; world.game.invalidate(); return null; }
+      world.game.sfx.uiSelect();
+      return options[i].id;
+    }
   }
-  if (inp.pressedAction(ACTIONS.CONFIRM)) return options[world.screen.index].id;
-  if (inp.pressedAction(ACTIONS.WITHDRAW)) return 'dismiss';
+  if (armed && inp.pressedAction(ACTIONS.CONFIRM)) {
+    world.game.sfx.uiSelect();
+    return options[world.screen.index].id;
+  }
+  // Dismissing is never destructive on any of these three, so it needs no arm.
+  if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.game.sfx.uiMove(); return 'dismiss'; }
   return null;
 }
 
-export function updateWorldScreens(world, inp) {
+export function updateWorldScreens(world, inp, dt = 0) {
   if (!world.screen) return false;
+  // The arm rides on the MODEL, not on the scene, so a screen that replaces another gets a
+  // fresh one for free — which is the whole case this guards (aftermath -> spec -> perk).
+  if (world.screen.armT > 0) {
+    world.screen.armT = Math.max(0, world.screen.armT - dt);
+    world.game.invalidate(); // the panel draws the arm, so the frame is not clean
+  }
   const btn = world.screenButtons || {};
   const clickedRect = (r) => !!r && inp.mouse.clicked &&
     inp.mouse.x >= r.x && inp.mouse.x <= r.x + r.w && inp.mouse.y >= r.y && inp.mouse.y <= r.y + r.h;
@@ -380,6 +417,7 @@ export function updateWorldScreens(world, inp) {
     // Permanent choice: navigate with the menu actions, commit with CONFIRM. Dismissing (X)
     // keeps the settlement owned but unchosen — the site menu at its gates reopens the
     // prompt later.
+    if (clickedRect(btn.defer)) { world.game.sfx.uiMove(); world.dismissSpecChoice(); return true; }
     const picked = resolveChoiceInput(world, inp, btn, 'spec', world.screen.options);
     if (picked === 'dismiss') world.dismissSpecChoice();
     else if (picked) world.chooseSpec(picked);
@@ -390,6 +428,7 @@ export function updateWorldScreens(world, inp) {
   // modal genuinely pauses the campaign (AGENTS.md), and reusing this is what buys that
   // for free rather than inventing a second pause.
   if (world.screen.kind === 'perk') {
+    if (clickedRect(btn.defer)) { world.game.sfx.uiMove(); world.dismissPerkChoice(); return true; }
     const picked = resolveChoiceInput(world, inp, btn, 'perk', world.screen.options);
     // X defers rather than spends: perkChoiceDue() still reports the point, so the next
     // World offers it again. There is no way to lose one.

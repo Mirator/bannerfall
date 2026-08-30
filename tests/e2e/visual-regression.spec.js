@@ -74,6 +74,19 @@ test('the camp site menu remains visually stable', async ({ page }) => {
   await expect(canvas).toHaveScreenshot('world-site-camp.png', VISUAL_OPTIONS);
 });
 
+// The two permanent-choice modals. They had no visual coverage at all until now, which is
+// why the shared-painter question could not honestly be settled: nothing would have caught
+// a regression in either.
+test('the specialization choice remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_choice', { kind: 'spec', seed: 424242 });
+  await expect(canvas).toHaveScreenshot('world-spec-choice.png', VISUAL_OPTIONS);
+});
+
+test('the perk choice remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world_choice', { kind: 'perk', seed: 424242 });
+  await expect(canvas).toHaveScreenshot('world-perk-choice.png', VISUAL_OPTIONS);
+});
+
 test('pre-battle brief for a fleeing party remains visually stable', async ({ page }) => {
   const canvas = await settle(page, 'world_brief', { kind: 'partyFlee', seed: 424242 });
   await expect(canvas).toHaveScreenshot('world-brief-party.png', VISUAL_OPTIONS);

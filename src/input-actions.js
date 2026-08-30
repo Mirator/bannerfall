@@ -11,9 +11,8 @@ export const ACTIONS = Object.freeze({
   CONFIRM: 'confirm', MENU_UP: 'menuUp', MENU_DOWN: 'menuDown', MENU_BACK: 'menuBack',
   CONTINUE_RUN: 'continueRun', NEW_HARD_RUN: 'newHardRun', PAUSE: 'pause', MUTE: 'mute', ABANDON_RUN: 'abandonRun',
   // Plan 021: cancel a pre-battle brief, and (Plan 030) close the site menu. Not
-  // WORLD_PRIMARY — the same held KeyE that opened the menu would also satisfy the battle
-  // intro's early-out — and not bound to Escape/PAUSE's keys (PAUSE already owns Escape
-  // and is handled first).
+  // WORLD_PRIMARY — see the CONFIRM note below — and not bound to Escape/PAUSE's keys
+  // (PAUSE already owns Escape and is handled first).
   WITHDRAW: 'withdraw',
 });
 
@@ -25,7 +24,16 @@ export const DEFAULT_BINDINGS = Object.freeze({
   // Tab is already in the engine's preventDefault list, so it cannot pull focus off the canvas.
   [ACTIONS.SQUAD_CYCLE]: ['Tab'],
   [ACTIONS.WORLD_PRIMARY]: ['KeyE'],
-  [ACTIONS.CONFIRM]: ['Enter'], [ACTIONS.MENU_UP]: ['KeyW', 'ArrowUp'], [ACTIONS.MENU_DOWN]: ['KeyS', 'ArrowDown'],
+  // Plan 031: E confirms as well as opens. The hand that opened the menu is already on E,
+  // and reaching for Enter to answer a prompt E raised is the wrong shape. This is the only
+  // pair in the table where one binding set is a SUBSET of another (WORLD_PRIMARY ⊂ CONFIRM)
+  // rather than being separated by scene, so it rests entirely on updateWorldScreens()
+  // returning true whenever a screen is open — never falling through to the site-menu phase
+  // in the same tick. world-screens.spec.js pins that; do not weaken it.
+  //
+  // Enter STAYS bound. It costs nothing, it is the universal confirm affordance, and it is
+  // what three tests drive through the real keydown listener.
+  [ACTIONS.CONFIRM]: ['Enter', 'KeyE'], [ACTIONS.MENU_UP]: ['KeyW', 'ArrowUp'], [ACTIONS.MENU_DOWN]: ['KeyS', 'ArrowDown'],
   [ACTIONS.MENU_BACK]: ['Escape'], [ACTIONS.CONTINUE_RUN]: ['KeyC'], [ACTIONS.NEW_HARD_RUN]: ['KeyH'],
   [ACTIONS.PAUSE]: ['Escape', 'KeyP'], [ACTIONS.MUTE]: ['KeyM'], [ACTIONS.ABANDON_RUN]: ['KeyR'],
   [ACTIONS.WITHDRAW]: ['KeyX'],

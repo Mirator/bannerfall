@@ -6,17 +6,119 @@
 import {
   PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS,
   weightText, armySlots, rankOf, rankName,
-} from './data.js?v=r70b613c6e5cd';
-import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r70b613c6e5cd';
-import { clamp, rrect } from './engine.js?v=r70b613c6e5cd';
-import { SQUAD_LABELS } from './battle/constants.js?v=r70b613c6e5cd';
+} from './data.js?v=r1a9e52c1bce3';
+import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r1a9e52c1bce3';
+import { clamp, rrect } from './engine.js?v=r1a9e52c1bce3';
+import { SQUAD_LABELS } from './battle/constants.js?v=r1a9e52c1bce3';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=r70b613c6e5cd';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r70b613c6e5cd';
+} from './region.js?v=r1a9e52c1bce3';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r1a9e52c1bce3';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
+
+// ---------------------------------------------------------------- modal primitives
+// Plan 031. Five panels drew the same scrim, the same frame and the same selectable row by
+// hand; drawSpecPanel and drawPerkPanel were 79% byte-identical. These four functions are
+// that shared shape, and they are deliberately pixel-exact with what they replaced — the
+// row's two text baselines round to the same y at every rowH the panels actually use, so
+// the brief, aftermath and site baselines did not move when this landed.
+
+// One flat wash over the whole canvas. The aftermath asks for a heavier one.
+function drawModalScrim(ctx, W, H, alpha = 0.72) {
+  ctx.fillStyle = `rgba(21,22,46,${alpha})`;
+  ctx.fillRect(0, 0, W, H);
+}
+
+// The panel body. The shadow is offset along the game's single light direction (down-right,
+// the same one WORLD_ART.shadow.direction declares) rather than drawn with ctx.shadowBlur,
+// which costs no beginPath but is genuinely expensive over a rect this size.
+function drawModalFrame(ctx, px, py, pw, ph) {
+  ctx.fillStyle = 'rgba(12,14,30,0.34)';
+  rrect(ctx, px + 5, py + 7, pw, ph, 14); ctx.fill();
+  ctx.fillStyle = P.ink;
+  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
+  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
+  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+}
+
+// A hairline under the header band with a diamond at each end — the same separator the main
+// menu draws around its list, which is the quality bar for canvas UI in this game. Costs no
+// beginPath: two fillRects and two rotated squares.
+function drawModalRule(ctx, cx, y, halfW) {
+  ctx.fillStyle = 'rgba(255,246,227,0.16)';
+  ctx.fillRect(cx - halfW, y, halfW * 2, 1);
+  ctx.fillStyle = P.hero;
+  for (const x of [cx - halfW, cx + halfW]) {
+    ctx.save(); ctx.translate(x, y + 0.5); ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-2.5, -2.5, 5, 5); ctx.restore();
+  }
+}
+
+// One selectable row. `alpha` dims a refused one; `labelPx` is the only genuine difference
+// between the site panel's rows and the two choice panels'.
+function drawModalRow(ctx, r, o) {
+  ctx.globalAlpha = o.alpha ?? 1;
+  ctx.fillStyle = o.selected ? P.cream : '#26304F';
+  rrect(ctx, r.x, r.y, r.w, r.h, 10); ctx.fill();
+  ctx.strokeStyle = o.selected ? P.hero : '#3A4A72'; ctx.lineWidth = o.selected ? 3 : 1.5;
+  rrect(ctx, r.x, r.y, r.w, r.h, 10); ctx.stroke();
+  const labelY = Math.round(r.y + r.h * 0.40), detailY = Math.round(r.y + r.h * 0.75);
+  // The marker sits in the gutter the rows already reserved between their left edge and the
+  // label, so adding it moved no existing glyph.
+  ctx.textAlign = 'left';
+  ctx.fillStyle = o.selected ? P.enemy : '#5A688F';
+  ctx.font = '800 12px Inter, system-ui, sans-serif';
+  ctx.fillText(o.selected ? '\u25B8' : '\u00B7', r.x + 8, labelY);
+  ctx.fillStyle = o.selected ? P.ink : P.cream;
+  ctx.font = `800 ${o.labelPx || 16}px Inter, system-ui, sans-serif`;
+  ctx.fillText(o.label, r.x + 20, labelY);
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = o.selected ? '#3A4A72' : '#B9C2DC';
+  ctx.fillText(fitText(ctx, o.detail, r.w - 32), r.x + 20, detailY);
+  ctx.globalAlpha = 1;
+}
+
+// The merged block updateWorldScreens() hit-tests against: the bbox of every row, plus the
+// rows themselves so a click can name one. Guards the empty case, which drawSpecPanel and
+// drawPerkPanel both used to index past.
+function rowBlock(rects, key) {
+  if (!rects.length) return { [key]: null };
+  const first = rects[0], last = rects[rects.length - 1];
+  return { [key]: { x: first.x, y: first.y, w: first.w, h: last.y + last.h - first.y, rows: rects } };
+}
+
+// While a permanent choice is still arming, say so instead of printing a commit key that
+// does nothing — a dead press with no explanation is worse than a short wait.
+function armHint(model, hint) {
+  return model.armT > 0 ? '↑↓ choose · read it first…' : hint;
+}
+
+// Truncate to fit rather than run past the panel border. The perk and brief panels both draw
+// copy that lives in progression.js and region.js — files edited for gameplay reasons by
+// people who are not looking at pixel budgets — so the panels defend themselves.
+function fitText(ctx, text, maxW) {
+  if (!text || ctx.measureText(text).width <= maxW) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(text.slice(0, mid) + '\u2026').width <= maxW) lo = mid; else hi = mid - 1;
+  }
+  return text.slice(0, lo).trimEnd() + '\u2026';
+}
+
+// Plan 031: how long a permanent-choice modal refuses to be committed after it opens.
+//
+// The specialization and the perk screens are the only two modals that appear UNBIDDEN —
+// they arrive on the tick the aftermath closes, which is the tick the player was already
+// pressing CONFIRM to clear that aftermath. A player clearing a victory screen at a normal
+// mashing rate lands the next press ~125ms later, on a permanent choice they have not read,
+// and takes option 0 for the rest of the campaign. Navigation is allowed immediately (moving
+// the selection is proof of reading); only the commit waits.
+//
+// The victory summary already guards itself the same way (main.js `victoryT > 1.5`).
+export const CHOICE_ARM_T = 0.4;
 const WORLD_LANDMARKS = [...WORLD.settlements, ...WORLD.camps];
 
 // Prose labels, derived from the type tables rather than hand-copied: adding a unit or
@@ -80,7 +182,7 @@ function troopBreakdown(troops) {
 // `earlier` is the Drillyard shift: the battle grants rank with it applied, so a panel
 // reading rank without it would tell a Drillyard campaign it has no veterans while the
 // battlefield draws their chevrons.
-function veteranLine(troops, earlier = 0) {
+export function veteranLine(troops, earlier = 0) {
   const counts = new Map();
   for (const t of troops || []) {
     const r = rankOf(t.vet, earlier);
@@ -225,6 +327,9 @@ export function buildBriefModel(descriptor, save) {
   const playerBodies = save.troops.length + 1;
   const earlier = perkMods(save.perks).rankEarlier;
   const playerStr = playerStrength(save.troops, earlier);
+  // Plan 031: the scrim puts the HUD's heart chip at 28% visibility, and riding into a camp
+  // assault at 22/120 is a decision made without the most important number on the board.
+  const heroHp = save.heroHp, heroMaxHp = save.heroMaxHp;
   const scouted = descriptor.comp != null || !!descriptor.revealDeployment;
   const enemyRoster = scouted ? enemyBreakdown(descriptor.comp) : 'unknown — unscouted';
   const enemyBodies = scouted ? descriptor.comp.length : null;
@@ -252,6 +357,7 @@ export function buildBriefModel(descriptor, save) {
     // what you are bringing that the odds number does NOT include — the same honesty rule
     // Plan 028 applied to the hero's sword.
     player: {
+      hp: heroHp, maxHp: heroMaxHp,
       roster: playerRoster, bodies: playerBodies, strength: playerStr,
       veterans: veteranLine(save.troops, earlier),
       perks: (save.perks || []).map(id => PERKS[id]).filter(Boolean).map(p => p.name),
@@ -286,8 +392,7 @@ export function drawBriefPanel(ctx, cam, model) {
   // it, so every world modal silently inherited it and would have shifted the moment the HUD
   // stopped leaking. Declared explicitly instead (Plan 030).
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(21,22,46,0.72)';
-  ctx.fillRect(0, 0, W, H);
+  drawModalScrim(ctx, W, H);
   // Milestone 025: objective/stronghold lines grow the panel instead of squeezing
   // the roster columns.
   const extraLines =
@@ -295,12 +400,9 @@ export function drawBriefPanel(ctx, cam, model) {
     (model.stronghold ? 1 + model.stronghold.advantages.length : 0);
   // Plan 029 added two roster lines on the player's column (veterans, perks), so the panel
   // is 40px taller before the objective/stronghold lines are counted.
-  const pw = Math.min(720, W - 60), ph = Math.min(460 + extraLines * 18, H - 60);
+  const pw = Math.min(720, W - 60), ph = Math.min(320 + extraLines * 18, H - 60);
   const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
-  ctx.fillStyle = P.ink;
-  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
-  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
-  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+  drawModalFrame(ctx, px, py, pw, ph);
   ctx.textAlign = 'center';
   ctx.fillStyle = P.cream;
   ctx.font = '900 26px Inter, system-ui, sans-serif';
@@ -319,14 +421,17 @@ export function drawBriefPanel(ctx, cam, model) {
   ctx.fillText('YOUR WARBAND', leftX - colW / 2, colY);
   ctx.fillText('THE ENEMY', rightX - colW / 2, colY);
   ctx.font = '600 13px Inter, system-ui, sans-serif';
-  ctx.fillText(model.player.roster, leftX - colW / 2, colY + 26);
+  ctx.fillText(`${model.player.roster}   ♥ ${model.player.hp}/${model.player.maxHp}`,
+    leftX - colW / 2, colY + 26);
   ctx.fillText(`${model.player.bodies} bodies · fighting weight ${weightText(model.player.strength)}`, leftX - colW / 2, colY + 46);
   // Plan 029: the veteran line sits under the weight because it is part OF the weight;
   // the perk line sits under that because it is not, and the brief says so by placing it
   // apart rather than by adding a caveat nobody reads.
   ctx.fillStyle = P.hero;
   ctx.fillText(model.player.veterans, leftX - colW / 2, colY + 64);
-  if (model.player.perks.length) ctx.fillText(`⚑ ${model.player.perks.join(' · ')}`, leftX - colW / 2, colY + 82);
+  if (model.player.perks.length) {
+    ctx.fillText(fitText(ctx, `⚑ ${model.player.perks.join(' · ')}`, colW), leftX - colW / 2, colY + 82);
+  }
   ctx.fillStyle = P.cream;
   ctx.fillText(model.enemy.roster, rightX - colW / 2, colY + 26);
   ctx.fillText(
@@ -368,7 +473,7 @@ export function drawBriefPanel(ctx, cam, model) {
   // same idiom src/main.js's menuHitRegions already uses).
   const footerY = py + ph - 30, btnH = 30;
   ctx.font = '800 13px Inter, system-ui, sans-serif';
-  const confirmLabel = 'ENTER — Confirm', withdrawLabel = 'X — Withdraw';
+  const confirmLabel = 'E — Confirm', withdrawLabel = 'X — Withdraw';
   const confirmW = ctx.measureText(confirmLabel).width + 28;
   let confirmRect, withdrawRect = null;
   if (model.canWithdraw) {
@@ -414,6 +519,7 @@ export function buildSpecModel(settlement, save) {
   });
   return {
     kind: 'spec',
+    armT: CHOICE_ARM_T,
     settlement: { id: settlement.id, name: settlement.name },
     alreadyChosen: !!(existing && existing.spec),
     chosenSpec: existing && existing.spec,
@@ -426,15 +532,16 @@ export function drawSpecPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.textBaseline = 'middle'; // see drawBriefPanel: declared, not inherited from drawHud
-  ctx.fillStyle = 'rgba(21,22,46,0.72)';
-  ctx.fillRect(0, 0, W, H);
-  const pw = Math.min(640, W - 60), rowH = 64, headH = 108, footH = 56;
-  const ph = headH + model.options.length * (rowH + 8) + footH;
-  const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
-  ctx.fillStyle = P.ink;
-  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
-  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
-  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+  drawModalScrim(ctx, W, H);
+  const pw = Math.min(640, W - 60), gap = 8, headH = 108, footH = 86;
+  const n = model.options.length;
+  // Clamped like the brief and the site menu: without this a fifth specialization would put
+  // the panel's own border off-canvas on a short window.
+  const maxPh = H - 32;
+  const rowH = Math.max(40, Math.min(64, Math.floor((maxPh - headH - footH) / Math.max(1, n)) - gap));
+  const ph = Math.min(headH + n * (rowH + gap) + footH, maxPh);
+  const px = W / 2 - pw / 2, py = Math.max(16, H / 2 - ph / 2);
+  drawModalFrame(ctx, px, py, pw, ph);
   ctx.textAlign = 'center';
   ctx.fillStyle = P.cream;
   ctx.font = '900 24px Inter, system-ui, sans-serif';
@@ -444,35 +551,29 @@ export function drawSpecPanel(ctx, cam, model) {
   ctx.fillText('Choose what it becomes — permanent for this campaign', W / 2, py + 62);
   ctx.font = '600 12px Inter, system-ui, sans-serif';
   ctx.fillStyle = '#9BA3BF';
-  ctx.fillText('↑↓ choose · ENTER commit · X decide later', W / 2, py + 86);
+  ctx.fillText(armHint(model, '\u2191\u2193 choose \u00b7 E commit \u00b7 X decide later'), W / 2, py + 86);
+  drawModalRule(ctx, W / 2, py + headH - 14, pw / 2 - 24);
 
   const rects = [];
   model.options.forEach((opt, i) => {
-    const y = py + headH + i * (rowH + 8);
-    const selected = i === model.index;
-    ctx.fillStyle = selected ? P.cream : '#26304F';
-    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.fill();
-    ctx.strokeStyle = selected ? P.hero : '#3A4A72'; ctx.lineWidth = selected ? 3 : 1.5;
-    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.stroke();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = selected ? P.ink : P.cream;
-    ctx.font = '800 16px Inter, system-ui, sans-serif';
-    ctx.fillText(`${opt.glyph}  ${opt.name}`, px + 44, y + 26);
-    ctx.font = '600 12px Inter, system-ui, sans-serif';
-    ctx.fillStyle = selected ? '#3A4A72' : '#B9C2DC';
-    ctx.fillText(`${opt.immediate}  ·  later visits: ${opt.ongoing}`, px + 44, y + 48);
-    rects.push({ x: px + 24, y, w: pw - 48, h: rowH });
+    const r = { x: px + 24, y: py + headH + i * (rowH + gap), w: pw - 48, h: rowH };
+    drawModalRow(ctx, r, {
+      selected: i === model.index,
+      label: `${opt.glyph}  ${opt.name}`,
+      detail: `${opt.immediate}  \u00b7  later visits: ${opt.ongoing}`,
+    });
+    rects.push(r);
   });
 
-  const footerY = py + ph - footH / 2;
   ctx.textAlign = 'center';
   ctx.font = '600 12px Inter, system-ui, sans-serif';
   ctx.fillStyle = '#9BA3BF';
-  ctx.fillText('A captured settlement pays its benefit only while it flies your banner', W / 2, footerY);
+  ctx.fillText('A captured settlement pays its benefit only while it flies your banner',
+    W / 2, py + ph - footH + 20);
+  const defer = { x: W / 2 - 78, y: py + ph - 44, w: 156, h: 28 };
+  drawButton(ctx, defer, 'DECIDE LATER  (X)', false);
   ctx.textBaseline = 'alphabetic';
-  // updateWorldScreens() hit-tests clicks against these; `index` mirrors the hovered row.
-  const first = rects[0];
-  return { spec: { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects } };
+  return { defer, ...rowBlock(rects, 'spec') };
 }
 
 // ---------------------------------------------------------------- perk choice
@@ -487,6 +588,7 @@ export function buildPerkModel(save) {
   const taken = (save.perks || []).map(id => PERKS[id]).filter(Boolean);
   return {
     kind: 'perk',
+    armT: CHOICE_ARM_T,
     index: 0,
     options,
     taken: taken.map(p => p.name),
@@ -501,15 +603,16 @@ export function drawPerkPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.textBaseline = 'middle'; // see drawBriefPanel: declared, not inherited from drawHud
-  ctx.fillStyle = 'rgba(21,22,46,0.72)';
-  ctx.fillRect(0, 0, W, H);
-  const pw = Math.min(660, W - 60), rowH = 64, headH = 112, footH = 56;
-  const ph = headH + model.options.length * (rowH + 8) + footH;
-  const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
-  ctx.fillStyle = P.ink;
-  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
-  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
-  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+  drawModalScrim(ctx, W, H);
+  const pw = Math.min(660, W - 60), gap = 8, headH = 112, footH = 86;
+  const n = model.options.length;
+  // Five perks are a normal mid-campaign state once two tiers are open, and unclamped that
+  // put the panel's header and footer off-canvas on a short window.
+  const maxPh = H - 32;
+  const rowH = Math.max(40, Math.min(64, Math.floor((maxPh - headH - footH) / Math.max(1, n)) - gap));
+  const ph = Math.min(headH + n * (rowH + gap) + footH, maxPh);
+  const px = W / 2 - pw / 2, py = Math.max(16, H / 2 - ph / 2);
+  drawModalFrame(ctx, px, py, pw, ph);
   ctx.textAlign = 'center';
   ctx.fillStyle = P.cream;
   ctx.font = '900 24px Inter, system-ui, sans-serif';
@@ -519,34 +622,34 @@ export function drawPerkPanel(ctx, cam, model) {
   ctx.fillText('Choose one — permanent for this campaign', W / 2, py + 62);
   ctx.font = '600 12px Inter, system-ui, sans-serif';
   ctx.fillStyle = '#9BA3BF';
-  ctx.fillText(model.taken.length ? `Already yours: ${model.taken.join(', ')}` : 'Your first', W / 2, py + 84);
-  ctx.fillText('↑↓ choose · ENTER commit · X decide later', W / 2, py + 102);
+  // buildPerkModel has always computed `earned` and `spent` and the panel has never drawn
+  // either, so a player could not see how many points they had banked.
+  const banked = Math.max(0, model.earned - model.spent);
+  const held = model.taken.length ? `Already yours: ${model.taken.join(', ')}` : 'Your first';
+  ctx.fillText(fitText(ctx, `${held}  \u00b7  ${banked} point${banked === 1 ? '' : 's'} banked`, pw - 60),
+    W / 2, py + 84);
+  ctx.fillText(armHint(model, '\u2191\u2193 choose \u00b7 E commit \u00b7 X decide later'), W / 2, py + 102);
+  drawModalRule(ctx, W / 2, py + headH - 14, pw / 2 - 24);
 
   const rects = [];
   model.options.forEach((opt, i) => {
-    const y = py + headH + i * (rowH + 8);
-    const selected = i === model.index;
-    ctx.fillStyle = selected ? P.cream : '#26304F';
-    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.fill();
-    ctx.strokeStyle = selected ? P.hero : '#3A4A72'; ctx.lineWidth = selected ? 3 : 1.5;
-    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.stroke();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = selected ? P.ink : P.cream;
-    ctx.font = '800 16px Inter, system-ui, sans-serif';
-    ctx.fillText(`${opt.glyph}  ${opt.name}`, px + 44, y + 26);
-    ctx.font = '600 12px Inter, system-ui, sans-serif';
-    ctx.fillStyle = selected ? '#3A4A72' : '#B9C2DC';
-    ctx.fillText(`${opt.text}  ·  ${opt.note}`, px + 44, y + 48);
-    rects.push({ x: px + 24, y, w: pw - 48, h: rowH });
+    const r = { x: px + 24, y: py + headH + i * (rowH + gap), w: pw - 48, h: rowH };
+    drawModalRow(ctx, r, {
+      selected: i === model.index,
+      label: `${opt.glyph}  ${opt.name}`,
+      detail: `${opt.text}  \u00b7  ${opt.note}`,
+    });
+    rects.push(r);
   });
 
   ctx.textAlign = 'center';
   ctx.font = '600 12px Inter, system-ui, sans-serif';
   ctx.fillStyle = '#9BA3BF';
-  ctx.fillText('Every one of these pays only when you give an order', W / 2, py + ph - footH / 2);
+  ctx.fillText('Every one of these pays only when you give an order', W / 2, py + ph - footH + 20);
+  const defer = { x: W / 2 - 78, y: py + ph - 44, w: 156, h: 28 };
+  drawButton(ctx, defer, 'DECIDE LATER  (X)', false);
   ctx.textBaseline = 'alphabetic';
-  const first = rects[0];
-  return { perk: { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects } };
+  return { defer, ...rowBlock(rects, 'perk') };
 }
 
 // ---------------------------------------------------------------- site menu
@@ -574,10 +677,7 @@ export function drawSitePanel(ctx, cam, model) {
   const rowH = Math.max(34, Math.min(52, Math.floor((maxPh - headH - footH) / n) - gap));
   const ph = Math.min(headH + n * (rowH + gap) + footH, maxPh);
   const px = W / 2 - pw / 2, py = Math.max(16, H / 2 - ph / 2);
-  ctx.fillStyle = P.ink;
-  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
-  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
-  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+  drawModalFrame(ctx, px, py, pw, ph);
 
   ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   ctx.fillStyle = P.cream;
@@ -594,32 +694,23 @@ export function drawSitePanel(ctx, cam, model) {
   ctx.fillText(`⛃ ${purse.gold}    ⚔ ${purse.slots}/${purse.cap}    ♥ ${purse.hp}/${purse.maxHp}`, W / 2, py + 84);
   ctx.font = '600 12px Inter, system-ui, sans-serif';
   ctx.fillStyle = '#9BA3BF';
-  ctx.fillText(model.rows.length ? '↑↓ choose · ENTER do it · X leave' : 'X leave', W / 2, py + 104);
+  ctx.fillText(model.rows.length ? '↑↓ choose · E do it · X leave' : 'X leave', W / 2, py + 104);
+  drawModalRule(ctx, W / 2, py + headH - 12, pw / 2 - 24);
 
   const rects = [];
   model.rows.forEach((row, i) => {
-    const y = py + headH + i * (rowH + gap);
-    const selected = i === model.index;
+    const r = { x: px + 24, y: py + headH + i * (rowH + gap), w: pw - 48, h: rowH };
     // A refused row still draws, still selects and still commits: the service method owns
     // the refusal and says it in the notice line, which is what keeps `enabled` from ever
     // drifting away from the actual rule.
-    ctx.globalAlpha = row.enabled ? 1 : 0.55;
-    ctx.fillStyle = selected ? P.cream : '#26304F';
-    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.fill();
-    ctx.strokeStyle = selected ? P.hero : '#3A4A72'; ctx.lineWidth = selected ? 3 : 1.5;
-    rrect(ctx, px + 24, y, pw - 48, rowH, 10); ctx.stroke();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = selected ? P.ink : P.cream;
-    ctx.font = '800 15px Inter, system-ui, sans-serif';
-    // Proportional to rowH so a shrunk row keeps both lines inside it. At the full 52px
-    // these round to the same y + 21 / y + 39 the baselines were captured at.
-    ctx.fillText(row.label, px + 44, Math.round(y + rowH * 0.40));
-    ctx.font = '600 12px Inter, system-ui, sans-serif';
-    ctx.fillStyle = selected ? '#3A4A72' : '#B9C2DC';
-    ctx.fillText(row.enabled ? row.detail : `${row.detail}  ·  ${row.disabledReason}`,
-      px + 44, Math.round(y + rowH * 0.75));
-    ctx.globalAlpha = 1;
-    rects.push({ x: px + 24, y, w: pw - 48, h: rowH });
+    drawModalRow(ctx, r, {
+      selected: i === model.index,
+      alpha: row.enabled ? 1 : 0.55,
+      labelPx: 15,
+      label: row.label,
+      detail: row.enabled ? row.detail : `${row.detail}  ·  ${row.disabledReason}`,
+    });
+    rects.push(r);
   });
 
   // Anchored to the panel, not to the row count: the notice and the LEAVE button stay on
@@ -634,13 +725,7 @@ export function drawSitePanel(ctx, cam, model) {
   const leave = { x: W / 2 - 60, y: footTop + 30, w: 120, h: 34 };
   drawButton(ctx, leave, 'LEAVE  (X)', false);
   ctx.textBaseline = 'alphabetic';
-  const first = rects[0];
-  return {
-    leave,
-    site: first
-      ? { ...first, h: rects[rects.length - 1].y + rects[rects.length - 1].h - first.y, rows: rects }
-      : null,
-  };
+  return { leave, ...rowBlock(rects, 'site') };
 }
 
 // ---------------------------------------------------------------- campaign summary
@@ -702,6 +787,8 @@ export function buildAftermathModel(payload) {
   const enemyLosses = countRows(payload.deadTypes, ENEMY_LABELS, ENEMY_LABELS_PLURAL);
   return {
     kind: 'aftermath',
+    goldLost: payload.goldLost || 0,
+    veterans: payload.veterans || null,
     victory: !!payload.victory,
     retreated: !!payload.retreated,
     loot: payload.loot || 0,
@@ -717,14 +804,16 @@ export function drawAftermathPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.textBaseline = 'middle'; // see drawBriefPanel: declared, not inherited from drawHud
-  ctx.fillStyle = 'rgba(21,22,46,0.78)';
-  ctx.fillRect(0, 0, W, H);
-  const pw = Math.min(680, W - 60), ph = Math.min(440, H - 60);
+  drawModalScrim(ctx, W, H, 0.78);
+  // Sized to what it actually reports. A victory with no losses used to reserve 440px for
+  // roughly 200 of content and read as a mostly-empty box.
+  const lossRows = Math.max(
+    (model.playerLosses || []).length || 1, (model.enemyLosses || []).length || 1);
+  const consequenceLines = model.consequence ? Math.ceil(model.consequence.length / 62) : 0;
+  const pw = Math.min(680, W - 60);
+  const ph = Math.min(196 + lossRows * 18 + (model.veterans ? 22 : 0) + consequenceLines * 18, H - 60);
   const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
-  ctx.fillStyle = P.ink;
-  rrect(ctx, px, py, pw, ph, 14); ctx.fill();
-  ctx.strokeStyle = P.cream; ctx.lineWidth = 2;
-  rrect(ctx, px, py, pw, ph, 14); ctx.stroke();
+  drawModalFrame(ctx, px, py, pw, ph);
   ctx.textAlign = 'center';
   const headline = model.victory ? 'VICTORY' : model.retreated ? 'WITHDRAWN' : 'DEFEAT';
   ctx.fillStyle = model.victory ? P.good : model.retreated ? P.cream : P.enemy;
@@ -751,9 +840,17 @@ export function drawAftermathPanel(ctx, cam, model) {
   y += 22 + rows * 18 + 20;
   ctx.font = '700 14px Inter, system-ui, sans-serif';
   ctx.fillStyle = P.hero;
-  ctx.fillText(`Loot: +${model.loot || 0} gold`, leftX, y);
+  // A defeat's real headline is what it took, not the loot it did not earn.
+  ctx.fillText(model.goldLost > 0 ? `Lost: −${model.goldLost} gold` : `Loot: +${model.loot || 0} gold`,
+    leftX, y);
   ctx.fillText(`Hero HP: ${model.heroHp}/${model.heroMaxHp}`, rightX, y);
-  y += 30;
+  y += 22;
+  if (model.veterans) {
+    ctx.font = '600 12px Inter, system-ui, sans-serif';
+    ctx.fillStyle = '#B9C2DC';
+    ctx.fillText(fitText(ctx, model.veterans, pw - 80), leftX, y);
+  }
+  y += 24;
   if (model.consequence) {
     ctx.font = '600 13px Inter, system-ui, sans-serif';
     ctx.fillStyle = P.cream;
@@ -772,7 +869,7 @@ export function drawAftermathPanel(ctx, cam, model) {
     if (line) ctx.fillText(line, W / 2, lineY);
   }
   ctx.textAlign = 'center';
-  const continueLabel = 'ENTER — Continue';
+  const continueLabel = 'E — Continue';
   ctx.font = '800 13px Inter, system-ui, sans-serif';
   const btnW = ctx.measureText(continueLabel).width + 28, btnH = 30, footerY = py + ph - 24;
   const confirmRect = { x: W / 2 - btnW / 2, y: footerY - btnH / 2, w: btnW, h: btnH };
