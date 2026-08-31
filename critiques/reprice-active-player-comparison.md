@@ -9,8 +9,8 @@ the sword stays the player's margin over what the map showed him.
 
 Instruments: `scripts/zz-tier035-probe.mjs` (ratio ladder, both encounter paths, four
 policies) and `scripts/zz-camp035-curve.mjs` (the camp tier ladder on its own `tier` values).
-Raw rows in `scripts/zz-party035a.json`, `zz-party035b.json`, `zz-scout2.json`,
-`zz-camp035-after.json`.
+Raw rows in `scripts/zz-party035a.json`, `zz-party035b.json`, `zz-party035c.json`,
+`zz-scout2.json`, `zz-camp035-after.json`.
 
 ## 0. Why a new probe
 
@@ -64,7 +64,7 @@ doubt.** It leads idle by 23 points at 1.00, 9 at 1.15 and 7 at 1.25, and by not
 a different path and at nearly three times the sweep's sample size.
 
 **The old `even` band was a walkover.** It ran 0.95-1.20. At 1.00 a commanding player wins
-77.3%; the top of the band, 1.20, is about 44%. The measured 50% crossing is at **ratio
+77.3%; the top of the band, 1.20, interpolates to about 46%. The measured 50% crossing is at **ratio
 1.18**, not at 1.00 as Plan 028's comment claimed — that comment was accurate for an idle
 player before Plan 033 and has been false since.
 
@@ -105,7 +105,10 @@ raid entry, 60 seeds per cell, `chargeAll`:
 
 It spans. c1 is a free win at every roster, c2 and c3 are real fights, and the hold is 0%
 without the hero swinging at all three rosters — which is what a stronghold assault gated
-behind its own modifiers should be. Two side notes worth recording rather than fixing here:
+behind its own modifiers should be. The stronghold's realised ratio is also an
+UNDERSTATEMENT: it is read off the starting force, and every one of the 60 stronghold runs
+per cell carried one reserve wave on top of it. Three side notes worth recording rather than
+fixing here:
 
 * The curve is **not monotonic in tier for a starting warband** (c2 at 0.9 measures 38%,
   c3 at 1.1 measures 50%). Camp identity — arena, terrain, objective — moves the outcome
@@ -116,12 +119,23 @@ behind its own modifiers should be. Two side notes worth recording rather than f
 * The stronghold's realised ratio for a fresh warband is 1.97, not 1.5, because
   `campWeightPerSize` (size 10 x 0.9 = 9.0) floors it above `mine x 1.5`. That is the floor
   doing its documented job.
+* **The camp path does not reproduce the roaming path's clean charging dominance, and that
+  is worth stating rather than glossing.** `idle` out-reads `chargeAll` at c3 for all three
+  rosters (73 vs 50 fresh, 43 vs 25 mid, 50 vs 22 late) and at c2 for a starting warband
+  (73 vs 38); `chargeAll` wins decisively at c2 for mid and late (60 vs 45 and 60 vs 10),
+  which is exactly where idle's own stalls concentrate (17 of 60 idle runs at mid/c2, 15 at
+  late/c2). Camp identity moves the outcome more than either the ratio or the policy does.
+  This is why nothing in this slice tunes a camp knob from a policy comparison.
 
 ## 5. Effect on the shipped sweep
 
 `deliberate orders beat giving no order at all` is a hard guard and had to keep holding. It
-does, and its numbers moved the way re-pricing predicts — see `plans/035` for the
-before/after table and the two consecutive runs.
+does — and its numbers did not move at all: idle 53 / chargeAll 60 / split 37, twice, digit
+for digit against the baseline measured on the same machine before any `src/` edit. The plan
+expected them to move because re-pricing changes garrison sizes. It does not: the sweep
+measures CAMP raids, sized by `WORLD.camps[].tier`, and this slice changed only the
+roaming-party generator. An unchanged sweep is therefore the evidence that the change is
+confined to the path it was meant to touch, not a sign the change did nothing.
 
 One property of that sweep is worth stating because it was not visible before this slice
 replicated it exactly. On the baseline, over the fights that CLOSED, idle and chargeAll are

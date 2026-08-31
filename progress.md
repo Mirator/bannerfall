@@ -998,7 +998,7 @@ the roaming-party path the tier bands actually govern, driven through the produc
 battle entry (party clash -> brief confirm -> deployment confirm, every edge asserted),
 330 battles per ratio and policy across three rosters and six sampled battlefields: a
 player who charges all three squads wins 77.3% at a ratio of 1.00 and crosses 50% at
-1.18. The old `even` band ran 0.95-1.20, so it ran from a 77% fight to a 44% one.
+1.18. The old `even` band ran 0.95-1.20, so it ran from a 77% fight to about a 46% one.
 
 The whole ladder moved up 0.10 and nothing else changed: weak 0.55-0.80 -> 0.65-0.90,
 even 0.95-1.20 -> 1.05-1.30, strong 1.40-1.85 -> 1.50-1.95, `beatablePartyRatio`
@@ -1027,7 +1027,12 @@ the path they govern.
 
 The sweep is digit-identical to the baseline, twice: idle 53 / chargeAll 60 / split 37.
 That is the right result rather than a missed effect - the sweep measures camp raids,
-sized by `camp.tier`, and this slice changed only the roaming-party generator. Gate
+sized by `camp.tier`, and this slice changed only the roaming-party generator. The
+baseline was re-measured here before any src/ edit rather than quoted: on the same code
+this machine reads 53/60/37 where Plan 034's entry above records 52/58/38, so the sweep
+drifts a point or two across environments despite pinned seeds and a fixed timestep. The
+before/after comparison within one environment is exact; a single absolute figure quoted
+from another machine is not. Gate
 189/190; the one failure is `battle-break.png`, confirmed as the documented Windows-only
 drift by stashing every src/ change and watching it fail identically.
 

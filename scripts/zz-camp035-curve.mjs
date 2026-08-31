@@ -82,8 +82,13 @@ const runBattle = async ({ job, rosters, policies, dt }) => {
     }
     const b = game.scene;
     // Read the garrison off the SCENE rather than off the roll: a stronghold's modifiers
-    // thin it and add reserve waves at confirm time, so the roll is not what is fought.
+    // thin it at confirm time, so the roll is not what is fought. NOTE the limit of this:
+    // `b.enemies` is the STARTING force, so a stronghold's reserve waves (which arrive at
+    // STRONGHOLD_WAVE_AT) are not in the reported `bodies` or `ratio`. The win rate is
+    // measured on the whole fight either way; only the ratio column understates a
+    // stronghold that has waves.
     const comp = b.enemies.map(e => e.type);
+    const waves = b.pendingWaves ? b.pendingWaves.length : 0;
     game.camera.shakeT = 0; game.camera.shakeAmp = 0; game.camera.sx = 0; game.camera.sy = 0;
     let t = 0;
     while (b.state === 'intro' && t < 3) { real(dt); t += dt; }
@@ -97,7 +102,7 @@ const runBattle = async ({ job, rosters, policies, dt }) => {
     while (b.state !== 'end' && t < 95) { real(dt); t += dt; }
     return {
       rosterName: job.rosterName, campId: job.campId, policy: job.policy, seed: job.seed,
-      tier: camp.tier, bodies: comp.length,
+      tier: camp.tier, bodies: comp.length, waves,
       mine: Math.round(1000 * mine) / 1000,
       ratio: Math.round(1000 * enemyStrength(comp) / mine) / 1000,
       resolved: b.state === 'end', victory: !!b.victory,
@@ -139,7 +144,7 @@ const seOf = (p, den) => (den ? 100 * Math.sqrt((p / 100) * (1 - p / 100) / den)
 const fmt = (num, den) => (den
   ? (100 * num / den).toFixed(1).padStart(5) + '+/-' + seOf(100 * num / den, den).toFixed(1).padEnd(4)
   : '     -    ');
-console.log('\nroster camp   tier  policy      bodies  ratio  win%(closed)  win%(all)   stall');
+console.log('\nroster camp   tier  policy      bodies  ratio  win%(closed)  win%(all)   stall  waves');
 for (const rosterName of ROSTER_NAMES) {
   for (const campId of CAMPS) {
     for (const policy of POLICY_NAMES) {
@@ -152,7 +157,8 @@ for (const rosterName of ROSTER_NAMES) {
         (a.reduce((x, r) => x + r.ratio, 0) / a.length).toFixed(3) + '  ' +
         fmt(c.filter(r => r.victory).length, c.length) + '  ' +
         fmt(a.filter(r => r.victory).length, a.length) +
-        String(a.length - c.length).padStart(6));
+        String(a.length - c.length).padStart(6) +
+        String(a.reduce((x, r) => x + r.waves, 0)).padStart(7));
     }
   }
 }

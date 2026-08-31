@@ -165,7 +165,7 @@ Scoring an unresolved 95s window as a loss, which is what the shipped sweep's
 
 The 50% crossing for a commanding player is at ratio **1.18**, not at 1.00 as
 Plan 028's comment claimed. The old `even` band therefore ran from a 77% fight to
-a 44% one — the walkover the complaint named.
+about a 46% one — the walkover the complaint named.
 
 ### Definition of done, item by item
 
@@ -191,7 +191,12 @@ a 44% one — the walkover the complaint named.
   precisely so the tier record's gap-midpoint classification still works.
 * **The sweep guard holds, twice, digit for digit:** idle 53 / chargeAll 60 /
   split 37 on both runs — identical to the pre-change baseline measured on this
-  machine. That is the correct result, not a missed effect: the sweep measures
+  machine before any `src/` edit. Worth recording that the baseline itself is not
+  identical to the number `progress.md` carries for Plan 034 on the same code
+  (52 / 58 / 38): the sweep drifts a point or two across environments even though
+  its seeds are pinned and its timestep fixed. The before/after comparison inside
+  one environment is exact, which is what the guard needs; a single absolute
+  figure quoted from another machine is not. That is the correct result, not a missed effect: the sweep measures
   CAMP raids, whose garrisons are sized by `camp.tier`, and this slice changed
   only the roaming-party generator. The plan predicted the numbers would move;
   they did not, and that is the evidence the change is confined to the path it
