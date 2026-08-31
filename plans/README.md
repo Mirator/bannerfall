@@ -46,6 +46,9 @@ conditions, and update its status row when done.
 | 028 | Rebase the encounter generator on measured combat power | P0 | L | 020, 021, 027 | DONE — premise corrected by measurement, see plan |
 | 029 | Unit identity, and something to build between fights | P0 | XL | 019, 021, 027, 028 | DONE — one self-inflicted regression measured and closed inside the slice, see plan |
 | 032 | Make where a man is standing worth something | P0 | M | 019, 027, 029 | DONE — measured a tie pre-033; combined with Plan 033 the sweep guard holds, see plan |
+| 033 | The deployment phase | P0 | L | 019, 027 | DONE - resolved the orders-vs-idle finding; the sweep assertion is a hard guard now, see plan |
+| 034 | Terrain legibility, and crossings crossable only where drawn | P0 | M | 024, 033 | DONE - five geometry attempts, each measured, see plan |
+| 035 | Price the fight against a player who plays | P0 | M | 028, 032, 033 | READY - handoff plan for a fresh session, self-contained |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
