@@ -245,11 +245,16 @@ const rows = (await Promise.all(slices.map(async (slice) => {
 }))).flat();
 await browser.close();
 
+// One line per row rather than JSON.stringify(x, null, 2): a run is thousands of rows, and
+// indenting them costs more repository than it buys readability. Still a plain diffable
+// text file with one battle per line.
+const head = {
+  label: LABEL, ratios: RATIOS, seeds: SEEDS, paths: PATHS,
+  rosters: ROSTER_NAMES, camps: CAMPS, partySpots: PARTY_SPOTS,
+};
 writeFileSync('scripts/zz-' + LABEL + '.json',
-  JSON.stringify({
-    label: LABEL, ratios: RATIOS, seeds: SEEDS, paths: PATHS,
-    rosters: ROSTER_NAMES, camps: CAMPS, partySpots: PARTY_SPOTS, rows,
-  }, null, 2));
+  '{\n' + Object.entries(head).map(([k, v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v)).join(',\n') +
+  ',\n  "rows": [\n' + rows.map(r => '    ' + JSON.stringify(r)).join(',\n') + '\n  ]\n}\n');
 console.log(rows.length + ' battles, wrote scripts/zz-' + LABEL + '.json');
 
 const unresolved = rows.filter(r => !r.resolved);

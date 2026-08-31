@@ -180,8 +180,16 @@ about a 46% one — the walkover the complaint named.
 * **The idle rate recorded beside it.** 46.7% before / 42.4% after — below 50, as
   the plan expected. But see contradiction 2 below: on the honest "who beat whom"
   metric idle reads 77%, and the difference is a 39% stall rate.
-* **The beatable floor** moved with the even band's top, as mandated. A fight at
-  the floor measures 27.9% for a charging player.
+* **The beatable floor** moved with the even band's top, as mandated. Flagged for
+  whoever picks this up next: a fight at the floor now measures **27.9%** for a
+  charging player, where the old 1.20 floor was about 46%. The pin to
+  `even.max` is followed here because the plan mandates it and the invariant it
+  protects is real ("beatable" and "a fair fight" must be one number), but the
+  invariant is now doing something it did not do before — the band is wide enough
+  that its top is a 28% fight. Pinning to the even band's CENTRE (1.175, a
+  measured coin flip) would express "beatable" better and is the obvious next
+  question; it was not taken here because it would silently redefine a documented
+  invariant rather than move a calibrated number.
 * **The camp curve** was measured on its own tiers rather than assumed, 60 seeds
   per cell, `chargeAll`: c1 (0.7) 100% at every roster, c2 (0.9) 38/60/60 for
   fresh/mid/late, c3 (1.1) 50/25/22, Wolfsjaw Hold (1.5) 0% at all three. It

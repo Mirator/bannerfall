@@ -134,8 +134,11 @@ const rows = (await Promise.all(slices.map(async (slice) => {
 }))).flat();
 await browser.close();
 
+// One line per row — see the same note in zz-tier035-probe.mjs.
+const head = { label: LABEL, seeds: SEEDS, rosters: ROSTER_NAMES, policies: POLICY_NAMES };
 writeFileSync('scripts/zz-' + LABEL + '.json',
-  JSON.stringify({ label: LABEL, seeds: SEEDS, rosters: ROSTER_NAMES, policies: POLICY_NAMES, rows }, null, 2));
+  '{\n' + Object.entries(head).map(([k, v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v)).join(',\n') +
+  ',\n  "rows": [\n' + rows.map(r => '    ' + JSON.stringify(r)).join(',\n') + '\n  ]\n}\n');
 console.log(rows.length + ' battles, wrote scripts/zz-' + LABEL + '.json');
 
 const g = {};
