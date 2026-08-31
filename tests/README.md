@@ -9,7 +9,7 @@ in `#qa-status`, so it is useful both to a human opening the page and to
 Playwright.
 
 `tests/e2e/qa.spec.js` is the exit-code-bearing Playwright layer. It starts the
-existing Python server, checks browser/runtime errors, verifies all 25 record
+existing Python server, checks browser/runtime errors, verifies all 28 record
 names, and proves that running QA preserves `bf_save` while using
 `bf_save_test`.
 
@@ -440,7 +440,7 @@ data and are passed into the page, because module imports do not exist on
 
 ## Legacy check inventory
 
-The 26 deterministic records cover:
+The 28 deterministic records cover:
 
 1. menu-to-world transition;
 2. battle invariants and victory;
@@ -470,18 +470,24 @@ The 26 deterministic records cover:
     `strong` as camps are razed (Plan 020; the tier boundaries are derived from
     `BALANCE.partyTiers` since Plan 028 rather than hardcoded, so they follow
     the bands);
-19. the spawn timer itself: armed at 30s, a 40s cadence after that, filling to
+19. the odds vocabulary itself (Plan 035): the three words are distinct and all
+    three reachable, `oddsFavored` sits below `oddsStronger`, the label is
+    monotonic in enemy weight, and the even WORD band brackets the even TIER
+    band while the weak and strong tiers fall outside it. Added because nothing
+    in the gate touched `oddsWord` — both thresholds could be moved by any
+    amount, or crossed over each other, with the suite still green;
+20. the spawn timer itself: armed at 30s, a 40s cadence after that, filling to
     `partyCap()` and stopping there, with the roster persisted;
-20. break-off-and-raid: occupying a settlement suspends its service, and
+21. break-off-and-raid: occupying a settlement suspends its service, and
     defeating the occupier there restores it (Plan 020);
-21. the deadlock floor guarantee, driven at its worst case: nothing beatable on
+22. the deadlock floor guarantee, driven at its worst case: nothing beatable on
     the map still yields a winnable target, and the last unclaimed settlement
     is never claimed (Plan 020, the plan's STOP-condition risk);
-22. seeded battle determinism;
-23. the RNG-domain effects-independence check;
-24. the 200-step performance smoke budget;
-25. river-pursuit movement without freezing;
-26. enemy command symmetry (Plan 027): every enemy type has a squad, all of them
+23. seeded battle determinism;
+24. the RNG-domain effects-independence check;
+25. the 200-step performance smoke budget;
+26. river-pursuit movement without freezing;
+27. enemy command symmetry (Plan 027): every enemy type has a squad, all of them
     start on the neutral order, none of them takes an order while the Plan 033
     deployment phase is up (the phase pauses the tick pipeline outright, which is
     also what keeps the 1.5s battle visual baselines out of the commander's
@@ -489,6 +495,9 @@ The 26 deterministic records cover:
     identical runs produce an identical order sequence, and `bloodlust` collapses
     every enemy squad back to the press so the no-death stall clock's guarantee
     always outranks the commander.
+28. veterancy, the banner ceiling and the brace latch (Plan 029): rank is earned
+    only by a battle won and walked out of, the banner buys a ceiling rather than
+    a bonus, and the rebuilt brace actually fires.
 
 ## Visual baselines are captured on Linux, on purpose
 

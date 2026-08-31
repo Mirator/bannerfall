@@ -397,23 +397,47 @@ export const BALANCE = {
   // on the headcount scale and delivered roughly 0.72-0.90 of real power — a band the
   // player could not lose, which is why nothing downstream of the generator could make an
   // idle hero lose. `even` now straddles 1.00 on purpose.
-  // Measured over 768 rolled encounters (scripts/zz-power-probe2.mjs): an idle hero wins
-  // about 95% at a ratio of 0.7, about 60% at 1.0, about 44% at 1.1 and about 24% at 1.2.
-  // `even` therefore straddles the measured coin flip rather than sitting below it, `weak`
-  // stays a foothold a starting warband can actually take, and `strong` is a fight the
-  // player has to bring something to.
+  //
+  // PLAN 035 MOVED THE WHOLE LADDER UP BY 0.10 AND CHANGED WHO IT IS PRICED FOR. Plan 028
+  // deliberately priced every encounter against a player who does NOTHING, because idle was
+  // then the strongest policy. Since Plan 033's deployment phase it is not: measured on the
+  // roaming-party path this band governs, at a ratio of 1.00 a player who charges all three
+  // squads wins 77.3% and a player who presses only the deployment confirm wins 54.5%. A
+  // band whose top was 1.20 was therefore a walkover for anyone who gave one order.
+  //
+  // Re-measured over 6930 roaming-party encounters driven through the PRODUCTION battle
+  // entry (`scripts/zz-tier035-probe.mjs`, 330 per ratio and policy, three rosters, six
+  // sampled battlefields, every confirm edge asserted), scoring an unresolved 95s window as
+  // a loss exactly as the shipped sweep's winPct does. Charging all squads:
+  //
+  //     ratio  0.78   1.00   1.05   1.15   1.175  1.25   1.30   1.725
+  //     win %  93.6   77.3   67.9   52.7   52.1   38.8   27.9     3.9
+  //
+  // The 50% crossing is at ratio 1.18, not 1.00. `even` therefore straddles 1.18 (measured
+  // 52.1% +/- 2.7 at its centre, and 55.7% +/- 2.8 counting only fights that closed — a
+  // coin flip under either convention). `weak` stays a foothold a starting warband takes
+  // with orders (93.6% at its centre). `strong` is the tier the SWORD decides: 3.9% at its
+  // centre with no hero input at all, which is as far as a harness that cannot script the
+  // hero can price it — see plans/035 for why hero credit is not put into the metric.
+  //
+  // Every band width and every gap between bands is unchanged from Plan 028; only the
+  // ladder's position moved. The gaps matter structurally: qa_suite's tier record classifies
+  // a draw by the MIDPOINT of the empty gap between two bands, so the gaps must stay wider
+  // than the one body a comp can overshoot by.
   partyTiers: {
-    weak:   { min: 0.55, max: 0.80 },
-    even:   { min: 0.95, max: 1.20 },
-    strong: { min: 1.40, max: 1.85 },
+    weak:   { min: 0.65, max: 0.90 },
+    even:   { min: 1.05, max: 1.30 },
+    strong: { min: 1.50, max: 1.95 },
   },
   // Floor guarantee: if no live party (including one occupying a settlement) sits at or
   // under this ratio, World.enforceBeatableFloor() adds (or, at the party cap, downgrades
   // to) an even-tier fight, so the campaign can never reach a state with nothing on the
   // map the player can beat. It stays pinned to the TOP OF THE EVEN BAND — "beatable" and
   // "a fair fight" have to mean the same number, which was Plan 020's rationale and is
-  // still the right one now that the number means something.
-  beatablePartyRatio: 1.20,
+  // still the right one now that the number means something. Plan 035 moved the even band,
+  // so this moved with it; a fight at the floor measures 27.9% for a charging player, which
+  // is the hardest fight the campaign promises always to have on offer, not the easiest.
+  beatablePartyRatio: 1.30,
   // Hard bounds on any generated encounter's fighting weight, replacing Plan 020's [2, 24]
   // strength-point clamp. The floor stops a wiped-out warband from being offered a fight
   // with nothing in it; the ceiling stops a maxed knight army from summoning a party the
@@ -453,13 +477,25 @@ export const BALANCE = {
   // Odds-word bands: above `oddsStronger` they outmatch you, below `oddsFavored` you are
   // favoured, between is an even fight. Retuning these retunes every odds label at once
   // (party pill, camp prompt, hover panel, pre-battle brief, party badge) — see oddsWord().
-  // Unchanged by Plan 028, and that is the point: they are ratios of fighting weight now,
-  // and a ratio of 1.0 is a measured coin flip, so "an even fight" finally is one. The
-  // party badge's outmatched marker used to carry its own hardcoded 1.3 in
+  // The party badge's outmatched marker used to carry its own hardcoded 1.3 in
   // world/render-actors.js; it reads `oddsStronger` now so one threshold decides the word
   // and the colour.
-  oddsStronger: 1.15,
-  oddsFavored: 0.85,
+  //
+  // Plan 028 left these at 0.85/1.15 on the stated grounds that "a ratio of 1.0 is a
+  // measured coin flip, so 'an even fight' finally is one". Plan 035 re-measured that
+  // premise and it no longer holds: on the roaming-party path a player who commands wins
+  // 77.3% at a ratio of 1.00 and the coin flip is at 1.18. Keeping the words where they were
+  // would have the map call a 77% fight "even" and a 53% fight "⚠ they outmatch you".
+  //
+  // They are now set to the SAME interval as partyTiers.even (1.05-1.30), which is the one
+  // choice that makes the word and the generator's tier describe the same fight — an
+  // even-tier party is labelled an even fight, and the measured coin flip (1.18) sits near
+  // the middle of the band rather than at its top. Measured across the band for a charging
+  // player: 67.9% at 1.05, 52.1% at 1.175, 27.9% at 1.30; 77.3% just below it at 1.00.
+  // They stay independent literals rather than being derived from partyTiers, because
+  // oddsWord() also labels camp garrisons, which partyTiers does not size.
+  oddsStronger: 1.30,
+  oddsFavored: 1.05,
   // Enemy-composition roll weights, per source. Two tables, deliberately different: a
   // roaming party leans bandit-heavy with no brute ceiling, a camp garrison rolls brutes
   // slightly more often but caps them by camp size. They sit side by side so retuning one

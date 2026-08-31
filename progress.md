@@ -989,3 +989,67 @@ trees), hills a ground-contact disc at their true collider/LOS radius, scrub
 its zone edge — all baked into the static tile layer, zero per-frame cost, and
 visible on the deployment screen. A structural test samples the shoulder water
 for coverage holes and the opening for blockage on both crossing kinds.
+
+## Plan 035: pricing the fight against a player who plays (2026-08-31)
+
+Plan 028 priced every encounter against a commander who gives no orders, which was
+honest when idle was the strongest policy. Since Plan 033 it is not. Re-measured on
+the roaming-party path the tier bands actually govern, driven through the production
+battle entry (party clash -> brief confirm -> deployment confirm, every edge asserted),
+330 battles per ratio and policy across three rosters and six sampled battlefields: a
+player who charges all three squads wins 77.3% at a ratio of 1.00 and crosses 50% at
+1.18. The old `even` band ran 0.95-1.20, so it ran from a 77% fight to a 44% one.
+
+The whole ladder moved up 0.10 and nothing else changed: weak 0.55-0.80 -> 0.65-0.90,
+even 0.95-1.20 -> 1.05-1.30, strong 1.40-1.85 -> 1.50-1.95, `beatablePartyRatio`
+1.20 -> 1.30 (still pinned to the top of even). Every band width and every gap between
+bands is identical, which is what lets the qa tier record's gap-midpoint classification
+keep working unedited. No unit stat, no efficiency multiplier, no formula touched.
+Measured at the new band centres: weak 93.6%, even 52.1% +/- 2.7 (48.8% on a second
+independent draw after the change), strong 3.9% - the tier the sword decides, and the
+one the harness cannot price further because it cannot script hero input.
+
+The odds words moved with it, 0.85/1.15 -> 1.05/1.30. Plan 028 left them alone on the
+stated grounds that "a ratio of 1.0 is a measured coin flip"; that premise is false now,
+and keeping them would have the map call a 77% fight even and a 53% fight
+"they outmatch you". They are set to the same interval as the even tier band, so the
+word and the generator's tier describe one fight and the coin flip sits near the middle
+of the band instead of past its top.
+
+`WORLD.camps[].tier` was left alone and measured rather than assumed: 60 seeds per cell
+through the same production raid entry, chargeAll, c1 (0.7) 100% at every roster, c2
+(0.9) 38/60/60 fresh/mid/late, c3 (1.1) 50/25/22, Wolfsjaw Hold (1.5) 0% at all three.
+It spans winnable to punishing. Two things worth recording: the camp curve is not
+monotonic in tier for a starting warband (c2 at 0.9 is harder than c3 at 1.1 - camp
+identity moves the outcome more than 0.2 of ratio does), and camp raids are uniformly
+harder than roaming fights at the same ratio, which is why the bands are calibrated on
+the path they govern.
+
+The sweep is digit-identical to the baseline, twice: idle 53 / chargeAll 60 / split 37.
+That is the right result rather than a missed effect - the sweep measures camp raids,
+sized by `camp.tier`, and this slice changed only the roaming-party generator. Gate
+189/190; the one failure is `battle-break.png`, confirmed as the documented Windows-only
+drift by stashing every src/ change and watching it fail identically.
+
+Two places measurement contradicted the plan's premises, both recorded rather than
+smoothed over. First, replicating the sweep's own fixture exactly reproduces its 53 and
+60 to the digit and shows the margin is almost entirely stall avoidance: 12 idle
+non-resolutions against 2, and over fights that closed the two policies are 59.3% and
+61.0%, within noise. Second, the plan expected idle at the even centre to sit clearly
+below 50, and it does under the sweep's convention (46.7%) but not under the honest one
+(77.0%) - the reconciliation is that an idle line fails to close 39% of roaming fights
+against a charging line's 6%. It is not winning those; nobody is. Both columns are in
+`critiques/reprice-active-player-comparison.md`.
+
+Coverage: `odds_words_are_ordered_and_bracket_the_even_tier_band`. The handoff plan
+believed world-hover.spec.js asserted odds words; it does not, and nothing else in the
+gate touched `oddsWord` - both thresholds could be moved by any amount, or crossed over
+each other, with the suite green. The record asserts the vocabulary's contract, not a
+tuning value, and fails on the pre-change pair, a narrowed pair and a crossed pair.
+
+Out of scope, found while measuring: world (1600, 900) - the coordinate the
+`world_aftermath` scenario uses - samples a battlefield with six r=60 trees walled
+across the engagement axis at x 1090-1170. Both lines freeze ~80px apart and neither
+ever closes; 3/3 seeds ran the full 95s window with every surviving enemy at full hit
+points. `STALL_NO_DEATH` arms `bloodlust` and `bloodlust` orders the enemy in, but
+nothing makes it able to. Same mechanism as the 39% idle stall rate above.
