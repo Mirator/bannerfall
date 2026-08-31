@@ -1028,11 +1028,13 @@ the path they govern.
 The sweep is digit-identical to the baseline, twice: idle 53 / chargeAll 60 / split 37.
 That is the right result rather than a missed effect - the sweep measures camp raids,
 sized by `camp.tier`, and this slice changed only the roaming-party generator. The
-baseline was re-measured here before any src/ edit rather than quoted: on the same code
-this machine reads 53/60/37 where Plan 034's entry above records 52/58/38, so the sweep
-drifts a point or two across environments despite pinned seeds and a fixed timestep. The
-before/after comparison within one environment is exact; a single absolute figure quoted
-from another machine is not. Gate
+baseline was re-measured here before any src/ edit rather than quoted, and CI's own sweep
+check reproduced it a fourth time on a Linux runner - all twelve reported figures identical
+to the Windows host, so the sweep is environment-independent and not merely locally
+repeatable. One loose end left loose: the Plan 034 entry above records 52/58/38 as shipped
+and this tree measures 53/60/37 four times over, which cannot both describe the same code.
+Most likely that figure was written before that slice's review pass rather than after it;
+it was not chased down, and the baseline used here is the measured one, not a quoted one. Gate
 189/190; the one failure is `battle-break.png`, confirmed as the documented Windows-only
 drift by stashing every src/ change and watching it fail identically.
 

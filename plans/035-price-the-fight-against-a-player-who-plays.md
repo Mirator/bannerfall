@@ -199,12 +199,17 @@ about a 46% one — the walkover the complaint named.
   precisely so the tier record's gap-midpoint classification still works.
 * **The sweep guard holds, twice, digit for digit:** idle 53 / chargeAll 60 /
   split 37 on both runs — identical to the pre-change baseline measured on this
-  machine before any `src/` edit. Worth recording that the baseline itself is not
-  identical to the number `progress.md` carries for Plan 034 on the same code
-  (52 / 58 / 38): the sweep drifts a point or two across environments even though
-  its seeds are pinned and its timestep fixed. The before/after comparison inside
-  one environment is exact, which is what the guard needs; a single absolute
-  figure quoted from another machine is not. That is the correct result, not a missed effect: the sweep measures
+  machine before any `src/` edit, and reproduced a fourth time by the PR's own
+  `sweep` check on CI — Linux runner, Windows host, all twelve reported figures
+  identical (53 / 4.8 / 62, 60 / 5.1 / 73, 37 / 5.7 / 45). The sweep is
+  environment-independent, not merely locally repeatable.
+  One loose end left honestly loose: `progress.md`'s Plan 034 entry records
+  52 / 58 / 38 as shipped, and this commit's tree measures 53 / 60 / 37 four
+  times over. Those numbers cannot both describe this code. The likely
+  explanation is that 52 / 58 / 38 was written down before that slice's own
+  review pass rather than after it, but this was not chased down, and the
+  baseline used here is the one measured on this tree rather than any quoted
+  figure. That is the correct result, not a missed effect: the sweep measures
   CAMP raids, whose garrisons are sized by `camp.tier`, and this slice changed
   only the roaming-party generator. The plan predicted the numbers would move;
   they did not, and that is the evidence the change is confined to the path it
