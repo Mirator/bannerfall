@@ -285,6 +285,20 @@ cost two measurements and both are load-bearing:
   knockback impulse every landed hit applies is larger than most bodies' locomotion. Any
   rule keyed in that band means "I hit it, therefore it charged me".
 
+**Facing is a damage term now (Plan 032), and the hero is outside it on purpose.** `FRONT_ARC`
+(±110°) is the half-angle of the cone a body faces. A MELEE blow landing outside it pays
+`FLANK_BONUS`, and the brace above pays only against a rush that arrives INSIDE it — one
+predicate (`inFrontArc` in `ai-phases.js`), both rules, both sides, and the enemy reads the
+shipped constants rather than anything a perk can move. Three exclusions are deliberate and
+each has a reason: an arrow resolves against whoever is nearest where it FALLS, long after it
+was loosed, so it has no honest incoming direction; a brute's slam is an AoE ring, which is why
+it is already excluded from the brace; and the HERO is exempt as attacker and as defender,
+because his facing comes from the cursor through `Camera.toWorld` and a flankable hero would
+put fight outcomes back under the mouse — the defect `battle outcomes are independent of canvas
+size and cursor position` exists to catch. Do not extend the rule to any of the three without
+re-measuring the `@sweep` fixture; `FLANK_BONUS` at 1.60 makes that assertion pass and was
+rejected for it (plans/032 finding 3).
+
 So `markRush(unit, commanded)` in `ai-phases.js` is the single writer and it is called ONLY
 from the branch that is steering toward a hostile, with the commanded speed BEFORE terrain
 scaling. `BRACE_SPEED` (130) is the "inherently fast body" clause — wolf 158, knight 175 —
@@ -727,15 +741,17 @@ from the final save (`buildSummaryModel`).
 ## Expected failures and test debt
 
 The campaign spec has AUDIT-02, AUDIT-03 and AUDIT-05 as normal passing
-regressions. The one active `test.fail` annotation in the suite is `deliberate
-orders beat giving no order at all` in `tests/e2e/stance-balance.spec.js`, which
-records the measured finding that Plan 019's premise is not met: over organic camp
-raids, pressing no order wins more often than any deliberate squad order. Remove
-that annotation only when commanding actually beats not commanding, and remove it
-in the same change that makes it true. An unexpected pass is useful drift that
-signals the test debt is ready to retire; never weaken the assertion or add a skip
-to make the gate green. Expected failures are always `test.fail` with a plan or
-finding reference — never `skip` or `fixme`.
+regressions. The suite currently carries NO active `test.fail` annotation.
+`deliberate orders beat giving no order at all` in
+`tests/e2e/stance-balance.spec.js` carried one from Plan 019 to Plan 033,
+recording the measured finding that pressing no order won more often than any
+deliberate squad order; Plan 033's deployment phase resolved it (idle 49% against
+chargeAll 60%, replayed digit for digit across two runs) and the annotation came
+off in the same change, on its own stated terms. The assertion is a hard guard
+now: a change that makes the idle default the best policy again fails the sweep,
+and it must never be weakened or skipped to make that gate green. Expected
+failures are always `test.fail` with a plan or finding reference — never `skip`
+or `fixme`.
 
 Plan 027 attacked that finding from the other side (an enemy commander rather than more
 player affordances) and **did not** overturn it, so the annotation stays. It did close the
@@ -744,10 +760,21 @@ pressing nothing went from 75% to 77.5% — a 10-point deficit became a tie. The
 a strict inequality and a tie does not satisfy it. See `critiques/enemy-command-comparison.md`
 for the full before/after table and plans/027 for why the idle win rate did not move.
 
+Plan 032 (facing and flank arcs) produced the second tie. Over the same 120 organic camp
+raids: idle 69 -> 68, chargeAll 68 -> 68, split 45 -> 48, so the best deliberate policy went
+from one point behind pressing nothing to level with it, and the idle rate FELL rather than
+rose. Both figures replayed digit for digit across two runs. Those numbers predate Plan 033
+(the annotation still stood when they were taken), and the 1.60 probe belongs to that era:
+a `FLANK_BONUS` of 1.60 made the then-expected-failure pass on one point of idle erosion
+while commanding was unchanged between the two values, so the value that flipped the test
+was rejected rather than shipped — the constant had to earn its value, not the assertion.
+`plans/032-facing-and-flank-arcs.md`
+carries the tables and the reasoning.
+
 That sweep is also the most expensive test in the repository, so it is tagged
 `@sweep` and split out of the `chromium` project the PR gate runs. `npm test`
 no longer runs it; `Balance sweep` (`.github/workflows/balance-sweep.yml`) and
-`npm run test:balance` do, and both keep the `test.fail` annotation. Splitting
+`npm run test:balance` do, and both run its assertion as the hard guard it is. Splitting
 it out is not permission to stop reading it: check that run whenever a change
 touches stance behaviour, squad orders or battle balance.
 

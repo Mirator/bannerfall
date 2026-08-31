@@ -302,6 +302,28 @@ test.describe('stance balance', () => {
     // flipping an annotation on a margin inside the harness's own run-to-run drift is the
     // exact mistake Plan 019 had to retract. The annotation stays.
     //
+    // Plan 032 (facing and flank arcs) was the FIFTH attempt, measured against pre-033 main,
+    // and it moved the margin to zero for the second time in this finding's history. It named
+    // what the previous four were working around: nothing in the damage arithmetic read
+    // `facing`, so a blow landed for the same number from in front and from directly behind,
+    // and Plan 027's flanking muster changed only where the enemy walked rather than what the
+    // walk was worth. A melee blow from outside the defender's front arc now pays FLANK_BONUS,
+    // and a set line cannot brace against what reaches it from behind — both rules symmetric,
+    // both reading the shipped constants on the enemy side. Measured on this exact fixture
+    // (pre-033 baseline): idle 69 -> 68, chargeAll 68 -> 68, split 45 -> 48, so the best
+    // deliberate policy went from one point behind pressing nothing to LEVEL with it. Both
+    // replayed digit for digit across two consecutive runs. Idle FELL, which was the failure
+    // mode the slice was watching for: both sides encircle, but a camp garrison outnumbers
+    // the warband, so the extra blows land on the player at least as often.
+    //
+    // A tie is not a strict inequality and the annotation stayed at that point. Worth
+    // recording because it is the near miss: FLANK_BONUS = 1.60 made this assertion PASS
+    // (67 / 68 / 43, chargeAll ahead by one). It was rejected rather than shipped —
+    // commanding does not improve between 1.35 and 1.60 (chargeAll is 68 at both) and split
+    // is five points worse, so the whole crossing was one point of erosion on idle, inside
+    // the noise of 120 raids. Picking the constant that produces it would have been choosing
+    // a value to satisfy this line. See `plans/032-facing-and-flank-arcs.md` finding 3.
+    //
     // Plan 033 (the deployment phase) changed what BOTH columns of this sweep mean, and it
     // is the change that finally resolved the finding. "Pressing nothing" now includes the
     // one press nobody can skip — confirming the deployment — after which the un-ordered

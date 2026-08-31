@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r795695426ca8';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r866af952ef00';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -66,6 +66,76 @@ export const BRACE_CHARGE_MUL = 1.10;
 // also why a hit-and-run wolf keeps earning it and a brute in a grind does not.
 export const BRACE_MEMORY = 1.6;
 export const BRACE_BONUS = 1.8;
+// Plan 032 added the second half of the rule: the bonus pays only against a rush that comes
+// in through the braced body's OWN front arc (FRONT_ARC below — the same cone the flank
+// multiplier reads). A line cannot set itself against something that arrives behind it.
+// Because a body squares up on whatever it is fighting inside about a fifth of a second,
+// what this gate actually costs the brace is the FIRST blow against a rusher that closed
+// from behind while the man was still turned on somebody else — which is exactly the blow a
+// set line has not earned.
+
+// ---------------------------------------------------------------- Plan 032: facing and flanks
+// Every body has carried a `facing` since the first battle build, and until this plan NOTHING
+// in the damage arithmetic read it. Contact resolved identically from every direction, so an
+// idle blob and a formed line took the same hits, and Plan 027's flanking muster changed only
+// where the enemy walked, never what the walk was worth. That is the mechanical reason four
+// plans in a row measured pressing nothing as a competitive policy.
+//
+// FRONT_ARC is the half-angle of the cone a body is actually facing; a MELEE blow landing
+// outside it is a flank and is multiplied by FLANK_BONUS. +/-110 degrees leaves a 140-degree
+// rear wedge rather than splitting the body in half, and that width is deliberate: a unit
+// turns onto its target at 1 - exp(-8 dt) (troops) or 1 - exp(-6 dt) (enemies), so it is
+// square to whatever it CHOSE to fight almost immediately. The arc therefore does not price
+// "which way is he pointing", it prices "he is already committed to somebody else" — the
+// second man onto a body, and the man who arrives while it is winding up on someone behind
+// him. A narrower cone would fire on nearly every contact in a scrum and stop meaning
+// anything; a wider one would only fire on a literal back-stab and stop firing at all.
+//
+// 1.35 is deliberately the same number as CHARGE_EXPOSURE. Both are "your formation is open
+// and it costs you", they are the two positional prices in the game, and pricing them
+// differently would be a claim neither measurement supports.
+//
+// MELEE ONLY. Three exclusions, each an answer to "from where did this land":
+//   * An ARROW resolves against whoever is nearest WHERE IT FALLS, hundreds of milliseconds
+//     after it was loosed and after the target has turned. There is no honest incoming
+//     direction at that instant, and the bow line already buys its identity on a different
+//     axis (steady aim, and the declared bonusVs counter).
+//   * A brute's SLAM is an AoE ring centred on the brute; the bodies inside it have no
+//     incoming direction either. The slam is already excluded from BRACE_BONUS for the same
+//     reason, and a 1.35x slam is a lethality change, which is what the phase-4 audit
+//     measured and rejected.
+//   * The HERO is outside the rule in BOTH directions, which is what keeps it symmetric
+//     rather than merely applied to both teams. His facing comes from the cursor through
+//     Camera.toWorld, so making his back a damage multiplier would put fight outcomes back
+//     under the mouse — the defect `battle outcomes are independent of canvas size and cursor
+//     position` exists to catch. He also has no stance, which is why damageFriendly already
+//     exempts him from charge exposure.
+//
+// Both sides read these two constants directly, per Plan 027's symmetry rule, and no perk
+// moves either one — deliberately: the flank is geometry, and a perk that made the player's
+// own back safer would be the flat aura Plan 029's perk rule forbids.
+//
+// Measured on the 120-raid camp-raid sweep in stance-balance.spec.js, against PRE-033 main
+// (the deployment phase landed while this slice was in flight), idle / chargeAll / split
+// win %: 69 / 68 / 45 before, 68 / 68 / 48 after. Idle did NOT rise, which was the failure
+// mode this slice was watching for — both sides surround, and a camp garrison outnumbers
+// the warband, so the extra second-man-on-a-defender blows land on the player at least as
+// often as on the enemy. 1.60 was probed then and REJECTED: it flipped the sweep's (then
+// expected-failure) assertion on one point of idle erosion while commanding was unchanged
+// between the two values — the constant had to earn its value, not the assertion. Combined
+// with Plan 033 (troops deploy formed and hold by default), the sweep reads 51 / 59 / 38,
+// twice, digit for digit: the post-033 guard (best deliberate policy beats idle) holds with
+// the arcs live, and split — the mixed-order policy — is where the flank pays the most.
+//
+// Two accepted properties of the shipped rule, priced here so a retune reads them:
+//   * The multipliers STACK: a braced blow on a charging body reached from behind is
+//     bonus x FLANK_BONUS x CHARGE_EXPOSURE = 1.8 x 1.35 x 1.35 ~ 3.28x — the most
+//     punishing single blow in the game. Moving either 1.35 moves that ceiling.
+//   * updateTroopPhase runs before updateEnemyPhase, so a troop's facing is one lerp step
+//     fresher when the enemy tests it than an enemy's is when a troop tests it — a small
+//     fixed asymmetry inside the frame, bounded by one tick's 6-12.5% turn.
+export const FRONT_ARC = 110 * Math.PI / 180;
+export const FLANK_BONUS = 1.35;
 // How far from the hero the Warlord perk's dash rally reaches (plans/029). Wider than the
 // hero's own swing (86) because a rally is an order, not a blow, and narrower than the
 // FOLLOW formation's own spread so it rewards riding INTO the line rather than past it.

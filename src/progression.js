@@ -11,7 +11,7 @@
 // owns every balance table and imports nothing. This module reads it.
 //
 // Nothing here reads presentation, draws, or touches an RNG.
-import { BALANCE, MAX_RANK, VET_RANKS, rankOf, rankName } from './data.js?v=r795695426ca8';
+import { BALANCE, MAX_RANK, VET_RANKS, rankOf, rankName } from './data.js?v=r866af952ef00';
 
 // ---------------------------------------------------------------- banner
 // A CEILING rather than a bonus. `vet` stops ACCRUING at the ceiling rather than being
@@ -67,13 +67,13 @@ export const PERKS = Object.freeze({
   setSpears: Object.freeze({
     id: 'setSpears', tier: 1, glyph: '⩓', name: 'Set Spears',
     text: 'Braced spears hit for 2.2x instead of 1.8x',
-    note: 'pays only when you order HOLD',
+    note: 'pays only on HOLD, against a rush into the line’s front',
     mods: Object.freeze({ braceBonus: 2.2 }),
   }),
   steadyHands: Object.freeze({
     id: 'steadyHands', tier: 1, glyph: '◎', name: 'Steady Hands',
     text: 'Your bows on HOLD group 40% tighter',
-    note: 'pays only when you order HOLD',
+    note: 'pays only on HOLD, against a rush into the line’s front',
     mods: Object.freeze({ bowSpreadBracedMul: 0.6 }),
   }),
   warhorn: Object.freeze({

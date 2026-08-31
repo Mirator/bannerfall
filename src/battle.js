@@ -2,42 +2,42 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=r795695426ca8';
-import { perkMods } from './progression.js?v=r795695426ca8';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r795695426ca8';
-import { SpatialGrid } from './battle/spatial-index.js?v=r795695426ca8';
-import { ACTIONS } from './input-actions.js?v=r795695426ca8';
+} from './data.js?v=r866af952ef00';
+import { perkMods } from './progression.js?v=r866af952ef00';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r866af952ef00';
+import { SpatialGrid } from './battle/spatial-index.js?v=r866af952ef00';
+import { ACTIONS } from './input-actions.js?v=r866af952ef00';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
   DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
-} from './battle/constants.js?v=r795695426ca8';
+} from './battle/constants.js?v=r866af952ef00';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=r795695426ca8';
-import { drawScene, drawProps } from './battle/render-scene.js?v=r795695426ca8';
+} from './battle/terrain.js?v=r866af952ef00';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r866af952ef00';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=r795695426ca8';
+} from './battle/separation.js?v=r866af952ef00';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=r795695426ca8';
+} from './battle/ai-phases.js?v=r866af952ef00';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=r795695426ca8';
+} from './battle/combat.js?v=r866af952ef00';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=r795695426ca8';
+} from './battle/objectives.js?v=r866af952ef00';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
   placeEnemyDeployment as placeEnemyLine,
-} from './battle/enemy-command.js?v=r795695426ca8';
+} from './battle/enemy-command.js?v=r866af952ef00';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -366,7 +366,12 @@ export class Battle {
       vx: 0, vy: 0, hp: hp != null ? Math.min(hp, maxHp) : maxHp, maxHp,
       cd: this.simRng() * d.cooldown,
       vet: vet || 0, rank, vetMul: mul,
-      facing: 0, slot: null, target: null, lunge: 0, bob: this.fxRng() * TAU, holdX: null, holdY: null, flash: 0,
+      // Plan 032 made `facing` load-bearing (the flank arc reads it on every landed melee
+      // blow), so a body must open facing the enemy on every approach — the hardcoded east
+      // it used to carry gave the enemy a deterministic 1.35x opening tax on three of four
+      // approaches, and drew the deployment tableau standing backwards.
+      facing: Math.atan2(this.ady, this.adx),
+      slot: null, target: null, lunge: 0, bob: this.fxRng() * TAU, holdX: null, holdY: null, flash: 0,
       exposedT: 0,
       // Plan 029: seconds left on this body's "came in at a rush" latch (the brace read)
       // and on the Warlord rally window. Both stay 0 for a body that never charges and a
@@ -381,7 +386,10 @@ export class Battle {
     const d = ENEMY_TYPES[type];
     this.enemies.push({
       type, team: 'enemy', d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
-      cd: 0.5 + this.simRng() * d.cooldown, windupT: 0, facing: Math.PI,
+      // Facing the player's side of the field for any approach (the old hardcoded west was
+      // only right for 'E'); the rear half of an ambush pincer self-corrects within ticks,
+      // exactly as it always did.
+      cd: 0.5 + this.simRng() * d.cooldown, windupT: 0, facing: Math.atan2(-this.ady, -this.adx),
       target: null, lunge: 0, bob: this.fxRng() * TAU, flash: 0, slamT: 0,
       blindT: 0, // Phase 5: only a ranged enemy (raider) ever moves this off 0.
       // Plan 027, mirroring the troop record: charge exposure lingers after the order

@@ -76,11 +76,30 @@ replay identically, that the wolf and raider fixtures keep their intended right 
 can finish a winnable fight.
 
 From Plan 019 to Plan 033 it carried one expected failure recording a confirmed defect:
-giving no order at all beat every deliberate order policy. Plan 033's deployment phase
-resolved it — with the un-ordered warband holding its placed formed line by default, the
-sweep measured idle 49% against chargeAll 60%, replayed digit for digit across two runs —
-and the `test.fail` annotation came off on its own stated terms. The assertion is now a
-guard: a change that makes the idle default the best policy again fails the sweep.
+giving no order at all beat every deliberate order policy. Its comment block is the running
+record of every attempt on that finding — including Plan 032, which brought the margin to
+zero and documents a constant value that WOULD have made the assertion pass and was rejected
+for it. Plan 033's deployment phase resolved it — with the un-ordered warband holding its
+placed formed line by default, the sweep measured idle 49% against chargeAll 60%, replayed
+digit for digit across two runs — and the `test.fail` annotation came off on its own stated
+terms. The assertion is now a guard: a change that makes the idle default the best policy
+again fails the sweep.
+
+`tests/e2e/facing-flank.spec.js` owns the Plan 032 mechanic itself: the sweep says what the
+rule did to a campaign, this spec says what the rule IS. Four two-body fixtures, each stepped
+exactly as far as it takes for one blow to land — a melee blow from outside the defender's
+front arc paying `FLANK_BONUS` and one from the front paying the declared damage exactly, the
+same pair with the enemy swinging (Plan 027's symmetry rule), a braced line paying
+`BRACE_BONUS` against a rush inside its front arc and nothing against one behind it, and the
+two "melee only" exclusions (a brute's slam and an archer's arrow both land for their
+declared damage on a target with its back turned). Two bodies rather than a warband because
+the claim is arithmetic about a single strike; fight-scale questions belong to the balance
+harness. Three properties of the pipeline make one tick enough and are worth knowing before
+adding a fixture here: `updateTroopPhase` runs before `updateEnemyPhase`, a body turns onto
+its target by only 12.5% of the remaining angle per tick, and the enemy commander cannot
+have issued anything before `CMD_TICK` (0.8s), so no stance term is in play at t = 0. The
+hero is parked far away in every fixture because he is deliberately outside the flank rule
+in both directions.
 
 Two harness rules matter and must not be dropped. The pointer is pinned to the canvas
 centre and camera shake is zeroed before each run, because an idle hero aims at the
