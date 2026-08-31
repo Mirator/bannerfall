@@ -6,14 +6,14 @@
 import {
   PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS,
   weightText, armySlots, rankOf, rankName,
-} from './data.js?v=r866af952ef00';
-import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r866af952ef00';
-import { clamp, rrect } from './engine.js?v=r866af952ef00';
-import { SQUAD_LABELS } from './battle/constants.js?v=r866af952ef00';
+} from './data.js?v=ra9c0449dbe2f';
+import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=ra9c0449dbe2f';
+import { clamp, rrect } from './engine.js?v=ra9c0449dbe2f';
+import { SQUAD_LABELS } from './battle/constants.js?v=ra9c0449dbe2f';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=r866af952ef00';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r866af952ef00';
+} from './region.js?v=ra9c0449dbe2f';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=ra9c0449dbe2f';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
