@@ -119,6 +119,42 @@ test('world rendering stays within its own budget with hover latched on and a br
   expect(runtimeErrors).toEqual([]);
 });
 
+test('a brief-derived river battle renders within its own budget', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await page.goto('/');
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  await page.evaluate(() => window.game.scenario('battle_river'));
+  const result = await page.evaluate(() => {
+    const g = window.__g;
+    // Plan 034: every other battle budget runs the briefless template path, so the
+    // brief-derived geometry — river chain, crossing plugs, zone floors, hills — was
+    // structurally unreachable by any budget. The 'none' colliders must also stay out of
+    // the depth sort: entriesActive is asserted against the non-'none' obstacle count.
+    const battle = g.scene;
+    battle.state = 'fight';
+    const solid = battle.obstacles.filter(o => o.kind !== 'none').length;
+    let beginPath = 0;
+    const original = CanvasRenderingContext2D.prototype.beginPath;
+    CanvasRenderingContext2D.prototype.beginPath = function (...args) { beginPath++; return original.apply(this, args); };
+    for (let i = 0; i < 20; i++) g.draw();
+    CanvasRenderingContext2D.prototype.beginPath = original;
+    return {
+      beginPath,
+      solid,
+      entriesActive: battle._drawEntriesActive,
+      units: battle.troops.length + battle.enemies.length + 1,
+    };
+  });
+  // Fixed structural ceiling, measured like the others (11780 on capture — the brief
+  // path draws more per frame than the camp-arena case: hill silhouettes, reeds, and the
+  // brief terrain's own props); never raise it to get green.
+  expect(result.beginPath).toBeLessThan(13000);
+  // The depth sort carries only bodies and DRAWN obstacles — 'none' colliders (river
+  // chain + crossing plugs) must not re-enter it.
+  expect(result.entriesActive).toBeLessThanOrEqual(result.solid + result.units);
+  expect(runtimeErrors).toEqual([]);
+});
+
 test('deployment-phase rendering stays within the battle budget', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await page.goto('/');

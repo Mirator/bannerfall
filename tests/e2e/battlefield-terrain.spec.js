@@ -415,6 +415,14 @@ test('a crossing is passable only where it is drawn: the water beside it is wall
   // the difference. Structural, not simulated: every sample point in the shoulder band must
   // sit inside some obstacle footprint (the plug grid's worst-case interior gap is 25.4
   // units against plug r 26), and the crossing's own opening must stay obstacle-free.
+  // The sampler walks the RIVER'S OWN POLYLINE, not the builder's crossing-tangent frame —
+  // a lattice laid in the frame the wall was generated from can only ever measure the
+  // wall's interior spacing, never a hole where the frame drifted off a bending channel or
+  // where the plug band hands off to the resumed chain (the seam depends on the chain's
+  // sample phase). Every water point outside a crossing's opening must sit inside some
+  // obstacle footprint; the opening's own centreline must stay clear. The band between
+  // (open) and (walled) — the plug lattice's leading edge — is a 26-unit transition annulus
+  // with no assertion, matching the geometry contract in plugCrossingShoulders.
   const result = await page.evaluate(async () => {
     const g = window.__g;
     const { CROSSING_OPEN_HALF, channelAt } = await import('/src/battle/terrain.js');
@@ -423,39 +431,55 @@ test('a crossing is passable only where it is drawn: the water beside it is wall
       window.game.scenario(name);
       const b = g.scene;
       b.state = 'fight';
-      // The riverPoly props carry the same {pts, width, widths} shape channelAt reads, so
-      // the test measures against the exact channel the plugs were built for.
       const rivers = b.props.filter(p => p.kind === 'riverPoly');
-      for (const c of b.crossings) {
-        const ch = channelAt(rivers, c.x, c.y);
-        const tx = ch.tx, ty = ch.ty, nx = -ty, ny = tx;
-        const openHalf = CROSSING_OPEN_HALF[c.kind];
-        const inObstacle = (x, y) => b.obstacles.some(o => (x - o.x) ** 2 + (y - o.y) ** 2 <= o.r * o.r);
-        const acrossMax = ch.half - 8; // inside the water: the plugs end at the bank, not on it
-        let holes = 0, blockedOpen = 0, sampled = 0;
-        for (const side of [-1, 1]) {
-          for (let along = openHalf + 13; along <= c.w - 56; along += 12) {
+      const inObstacle = (x, y) => b.obstacles.some(o => (x - o.x) ** 2 + (y - o.y) ** 2 <= o.r * o.r);
+      let holes = 0, blockedOpen = 0, walled = 0, open = 0;
+      const holeAt = [];
+      for (const river of rivers) {
+        const pts = river.pts;
+        for (let i = 1; i < pts.length; i++) {
+          const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
+          const n = Math.max(1, Math.round(Math.hypot(bx - ax, by - ay) / 14));
+          for (let k = 0; k <= n; k++) {
+            const x = ax + (bx - ax) * (k / n), y = ay + (by - ay) * (k / n);
+            if (x < 60 || y < 60 || x > b.W - 60 || y > b.H - 60) continue; // map-edge run-out
+            let dmin = Infinity, cn = null;
+            for (const c of b.crossings) {
+              const d = Math.hypot(x - c.x, y - c.y);
+              if (d < dmin) { dmin = d; cn = c; }
+            }
+            const openHalf = cn ? CROSSING_OPEN_HALF[cn.kind] : 0;
+            if (cn && dmin <= openHalf - 12) {
+              open++;
+              if (inObstacle(x, y)) blockedOpen++;
+              continue;
+            }
+            if (cn && dmin < openHalf + 14) continue; // transition annulus, no assertion
+            const local = channelAt(rivers, x, y);
+            const nx = -local.ty, ny = local.tx;
+            const acrossMax = local.half - 14;
             for (let across = -acrossMax; across <= acrossMax; across += 12) {
-              sampled++;
-              if (!inObstacle(c.x + tx * along * side + nx * across, c.y + ty * along * side + ny * across)) holes++;
+              walled++;
+              if (!inObstacle(x + nx * across, y + ny * across)) {
+                holes++;
+                if (holeAt.length < 4) holeAt.push({ x: Math.round(x), y: Math.round(y), across: Math.round(across), dmin: Math.round(dmin) });
+              }
             }
           }
         }
-        for (const side of [-1, 0, 1]) {
-          const along = side * (openHalf - 30);
-          if (inObstacle(c.x + tx * along, c.y + ty * along)) blockedOpen++;
-        }
-        out.push({ name, kind: c.kind, sampled, holes, blockedOpen });
       }
+      out.push({ name, crossings: b.crossings.length, open, walled, holes, blockedOpen, holeAt });
     }
     return out;
   });
 
-  expect(result.length).toBeGreaterThan(0);
+  expect(result.length).toBe(2);
   for (const r of result) {
-    expect(r.error, `${r.name} ${r.kind}`).toBeUndefined();
-    expect(r.holes, `${r.name} ${r.kind}: open water beside the crossing (${r.holes}/${r.sampled} samples uncovered)`).toBe(0);
-    expect(r.blockedOpen, `${r.name} ${r.kind}: the crossing's own opening is blocked`).toBe(0);
+    expect(r.crossings, `${r.name}: the fixture must sample at least one crossing`).toBeGreaterThan(0);
+    expect(r.walled, `${r.name}: the sampler must cover real walled water`).toBeGreaterThan(200);
+    expect(r.open, `${r.name}: the sampler must cover the opening`).toBeGreaterThan(2);
+    expect(r.holes, `${r.name}: open water outside a crossing (${r.holes}/${r.walled}) at ${JSON.stringify(r.holeAt)}`).toBe(0);
+    expect(r.blockedOpen, `${r.name}: a crossing's own opening is blocked`).toBe(0);
   }
 
   assertNoRuntimeErrors(runtimeErrors);

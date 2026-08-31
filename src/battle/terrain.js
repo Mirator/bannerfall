@@ -21,8 +21,8 @@
 // never from `fxRng` (decoration only). The pre-existing area-scaled rock/tree scatter below
 // keeps using `simRng` exactly as it did before this phase — it is not new, and its draw count
 // and order are unchanged, so it does not shift anything downstream.
-import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=rf0428fde8b3b';
-import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=rf0428fde8b3b';
+import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=ra9c0449dbe2f';
+import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=ra9c0449dbe2f';
 
 // See the corridor-safety comment above the hill loop in buildFromBrief for the measurement
 // behind these two numbers.
@@ -218,13 +218,15 @@ export function crossingWaypoint(battle, x, y, tx, ty) {
   // Degenerate cases: the unit is already standing in a crossing, or its target is — a unit
   // wading a ford or crossing a bridge should resume steering at its real goal, not loop back
   // onto the crossing centre it is already occupying (or about to arrive at anyway).
-  // Plan 034: the "already there" radius is the crossing's own OPENING, not c.w — the c.w
-  // disc used to be all open water, but plugCrossingShoulders now walls its shoulders, so a
-  // unit released from its waypoint at 200 out steered a straight line into the plug wall
-  // and ground against it. Inside the opening the straight line is genuinely clear.
+  // Plan 034: the "already there" radius is INSIDE the crossing's opening, not c.w — the
+  // c.w disc used to be all open water, but plugCrossingShoulders now walls its shoulders,
+  // so a unit released from its waypoint at 200 out steered a straight line into the plug
+  // wall and ground against it. Releasing only well inside the corridor (opening minus a
+  // plug radius) also keeps a released unit's straight line to an off-axis far-bank goal
+  // exiting through the opening rather than diagonally through the plug band.
   for (let i = 0; i < crossings.length; i++) {
     const c = crossings[i];
-    const nearR = CROSSING_OPEN_HALF[c.kind] ?? 70;
+    const nearR = Math.max(30, (CROSSING_OPEN_HALF[c.kind] ?? 70) - PLUG_R);
     if (dist2(x, y, c.x, c.y) < nearR * nearR) return null;
     if (dist2(tx, ty, c.x, c.y) < nearR * nearR) return null;
   }
@@ -416,28 +418,6 @@ function toSegments(pointLists) {
   return segs;
 }
 
-// Unit tangent of whichever river polyline passes nearest (x, y), used to orient the
-// ford/bridge prop across the actual flow direction instead of assuming a fixed axis.
-function riverTangentAt(pointLists, x, y) {
-  let best = Infinity, tx = 1, ty = 0;
-  for (const pts of pointLists) {
-    for (let i = 1; i < pts.length; i++) {
-      const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
-      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy || 1;
-      let t = ((x - ax) * dx + (y - ay) * dy) / len2;
-      t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const px = ax + dx * t, py = ay + dy * t;
-      const d2 = (px - x) * (px - x) + (py - y) * (py - y);
-      if (d2 < best) {
-        best = d2;
-        const L = Math.hypot(dx, dy) || 1;
-        tx = dx / L; ty = dy / L;
-      }
-    }
-  }
-  return { x: tx, y: ty };
-}
-
 // A chain of `kind:'none'` obstacle circles along the river polyline (r = half the visible
 // channel width, stepped at r*0.9 so consecutive circles overlap into a solid wall), skipping
 // any circle within `crossing.w` of a crossing so the crossing stays genuinely passable.
@@ -475,7 +455,7 @@ const PLUG_R = 26;
 // (idle 51 -> 20, fights grinding past their windows). Confining the plugs to the measured
 // channel is what makes a hard wall compatible with the Plan 024 pathability boundary.
 export function channelAt(rivers, x, y) {
-  let best = Infinity, tx = 1, ty = 0, half = 44;
+  let best = Infinity, tx = 1, ty = 0, half = 44, cx = x, cy = y;
   for (const river of rivers) {
     const pts = river.pts;
     for (let i = 1; i < pts.length; i++) {
@@ -491,39 +471,58 @@ export function channelAt(rivers, x, y) {
         tx = dx / L; ty = dy / L;
         const w = river.widths ? (river.widths[i - 1] + river.widths[i]) / 2 : river.width;
         half = w / 2;
+        cx = px; cy = py; // the projection itself: the channel centreline point
       }
     }
   }
-  return { tx, ty, half };
+  return { tx, ty, half, x: cx, y: cy };
 }
 
 function plugCrossingShoulders(battle, rivers, crossings) {
   for (const c of crossings) {
-    const ch = channelAt(rivers, c.x, c.y);
-    const nx = -ch.ty, ny = ch.tx; // across the river: the direction a crossing unit travels
     const openHalf = CROSSING_OPEN_HALF[c.kind] ?? 70;
-    // Rows span the channel exactly: outermost centres at ±(half - r) so the outermost
-    // footprints END at the bank, never on it. Columns run from the opening's edge out to
-    // where the resumed chain's own footprint takes over (survivors sit at >= c.w with
-    // r ~ half, reaching back to ~c.w - half). 36 spacing against 52 diameters overlaps in
-    // both directions, so no unit-wide seam exists anywhere in the covered band.
-    // +6 outward tolerance on the outermost rows: the plug frame is the straight tangent at
-    // the crossing while the channel curves, and a 6-unit footprint overhang onto the bank
-    // is harmless where the 34-unit overhang of the first version was not (it walled the
-    // approach lanes). Column step 30 for the same curvature slop along the tangent.
-    const maxOff = Math.max(0, ch.half - PLUG_R + 6);
-    const rows = Math.max(1, Math.ceil((2 * maxOff) / 34));
     for (const side of [-1, 1]) {
-      for (let along = openHalf + 16; along <= c.w - 50; along += 30) {
+      // March column by column ALONG THE RIVER, re-projecting onto the centreline at every
+      // step: a wall built in the crossing's single straight-tangent frame drifts off a
+      // bending or widening channel within its own length and leaves a wadable lane on the
+      // inside of the bend. Each column reads its OWN local tangent and half-width.
+      //
+      // Geometry contract, in unit-clearance terms (smallest melee radius 8, common 10-13):
+      //   * The first column sits at arc openHalf + 38, so its footprint begins at
+      //     openHalf + 12 and pushOutOf keeps a unit CENTRE at or inside ±openHalf — the
+      //     drawn deck/ford IS the passable window for unit centres, not 20-odd units less.
+      //   * Columns step 30 against 52-unit footprints and rows step <=34, so no interior
+      //     seam fits a unit.
+      //   * The march continues until arc >= c.w + 0.9 * local half. buildRiverChain's
+      //     first surviving circle sits anywhere in [c.w, c.w + 0.9*localR) depending on
+      //     sample phase, so ending at a fixed c.w-relative offset left a phase-dependent
+      //     open window between the last plug and the survivor; marching past the worst
+      //     case closes it structurally, for every phase.
+      const start = channelAt(rivers, c.x, c.y);
+      let colX = c.x + start.tx * (openHalf + 38) * side;
+      let colY = c.y + start.ty * (openHalf + 38) * side;
+      let arc = openHalf + 38;
+      for (let guard = 0; guard < 26; guard++) {
+        const local = channelAt(rivers, colX, colY);
+        const nx = -local.ty, ny = local.tx;
+        const maxOff = Math.max(0, local.half - PLUG_R + 6);
+        const rows = Math.max(1, Math.ceil((2 * maxOff) / 34));
         for (let ri = 0; ri <= rows; ri++) {
           const across = -maxOff + (2 * maxOff) * (ri / rows);
           battle.obstacles.push({
             kind: 'none',
-            x: c.x + ch.tx * along * side + nx * across,
-            y: c.y + ch.ty * along * side + ny * across,
+            x: local.x + nx * across,
+            y: local.y + ny * across,
             r: PLUG_R,
           });
         }
+        if (arc >= c.w + local.half * 0.9) break;
+        // Next column: 30 further along the LOCAL tangent, oriented away from the crossing
+        // (the polyline's own tangent sign is arbitrary), then re-projected next iteration.
+        const away = local.tx * (local.x - c.x) + local.ty * (local.y - c.y) >= 0 ? 1 : -1;
+        colX = local.x + local.tx * 30 * away;
+        colY = local.y + local.ty * 30 * away;
+        arc += 30;
       }
     }
   }
@@ -543,8 +542,11 @@ function buildFromBrief(battle, field, terrainRng, fxRng) {
   plugCrossingShoulders(battle, field.rivers, field.crossings);
   for (const c of field.crossings) {
     battle.crossings.push({ x: c.x, y: c.y, w: c.w, kind: c.kind });
-    const t = riverTangentAt(riverPtLists, c.x, c.y);
-    battle.props.push({ kind: c.kind === 'bridge' ? 'bridgeSpan' : 'ford', x: c.x, y: c.y, w: c.w, tx: t.x, ty: t.y });
+    // channelAt is the ONE nearest-segment scan (the old tangent-only helper was byte-
+    // identical minus the width and was deleted): the deck orients off the same segment
+    // the plug wall was built from, so the two cannot rotate apart.
+    const t = channelAt(field.rivers, c.x, c.y);
+    battle.props.push({ kind: c.kind === 'bridge' ? 'bridgeSpan' : 'ford', x: c.x, y: c.y, w: c.w, tx: t.tx, ty: t.ty });
     if (c.kind === 'ford') {
       // Wading a ford costs speed; a built bridge does not.
       battle.zones.push({ kind: 'ford', x: c.x, y: c.y, r: c.w * 0.55, mul: FORD_SPEED });

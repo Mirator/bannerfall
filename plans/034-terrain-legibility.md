@@ -73,3 +73,53 @@ both failures were caught by the balance sweep rather than the fixtures:
   crossing walled. The structural coverage test samples the shoulder band
   against the real channel (channelAt) and the opening for blockage, on both
   the bridge and the ford fixtures.
+
+## Review pass (second commit)
+
+A four-angle review with verified findings landed before the PR:
+
+- The plug wall was a straight-tangent lattice with two structural holes the
+  first coverage test could not see, because it sampled in the same frame the
+  builder generated: a phase-dependent seam between the last plug column and
+  the resumed chain's first survivor (the survivor lands anywhere in
+  [c.w, c.w + 0.9*localR)), and frame drift off a bending or widening channel.
+  The wall now MARCHES along the polyline — every column re-projects onto the
+  centreline via channelAt and reads its own local tangent and half-width —
+  and continues until arc >= c.w + 0.9*local half, past every possible survivor
+  position. The coverage test walks the river's own polyline instead of the
+  builder's frame, asserts every water point outside an opening is covered
+  (chain, plug band and seam alike), asserts the opening's centreline is clear,
+  and asserts non-vacuity (walled > 200 samples, open > 2, crossings > 0).
+- The passable window was ~22 units per side narrower than the drawn deck
+  (first plug column at openHalf+16 with unit clearance 38). Columns start at
+  openHalf+38 now, so a unit CENTRE passes anywhere inside ±openHalf — the
+  drawn window — and crossingWaypoint releases at openHalf - PLUG_R so a
+  released unit's line to an off-axis goal exits through the opening.
+- The renderer imports CROSSING_OPEN_HALF instead of restating 70/90 as
+  literals, so a retune moves the deck and ford art with the wall.
+- The woodFloor rim moved from the zone radius to 0.8r — the LOS blocker's
+  radius. One rim at r overstated arrow cover by 25%; the fill stays at r (the
+  slow ground), and the comment names which circle is which.
+- The deployment drag refuses to place a body inside any collider footprint
+  (the plug lattice has no feasible interior, so a body dropped there would be
+  ejected to an arbitrary bank at the horn with its hold anchor baked in the
+  wall; the same guard keeps hold anchors out of rocks).
+- 'none' colliders (chain + plugs, ~80 on a river fight) no longer enter the
+  per-frame depth sort — they drew nothing after sorting. channelAt replaced
+  riverTangentAt (a byte-identical scan minus the width), so one nearest-segment
+  scan orients both the wall and the deck.
+
+Accepted, recorded: plugs stay in battle.obstacles, so a <=128-unit river fight
+pays the legacy separation loop's linear scan over ~40-70 extra circles
+(~10-flop pushOutOf calls; the perf smoke and battle budgets stayed green) and
+steerAroundObstacle sees denser candidates at the funnel, bounded by
+STEER_MAX_ACTIVE exactly as Plan 024 designed. objectives.js's clearOf has
+always exempted kind 'none', so a hold zone can in principle overlap walled
+water — pre-existing for the chain, noted for a future objective-placement
+slice. Baseline provenance: battle-river-crossing.png and
+battle-bridge-settlement.png were recaptured in the CI-equivalent container
+(24/24 verified) after the deck/ford widening; the other seven battle scenes
+compare clean against their existing baselines, which is the unchanged-control
+statement; the floor alphas were raised (wood 0.16->0.28, hill 0.22->0.38 fill)
+after the first values measured a 9-channel pixel delta at the hill's edge —
+invisible.

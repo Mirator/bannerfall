@@ -1,12 +1,13 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rf0428fde8b3b';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=rf0428fde8b3b';
-import { stableSortPrefix } from './spatial-index.js?v=rf0428fde8b3b';
-import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=rf0428fde8b3b';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=rf0428fde8b3b';
-import { drawHud } from './hud.js?v=rf0428fde8b3b';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=ra9c0449dbe2f';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=ra9c0449dbe2f';
+import { stableSortPrefix } from './spatial-index.js?v=ra9c0449dbe2f';
+import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=ra9c0449dbe2f';
+import { CROSSING_OPEN_HALF } from './terrain.js?v=ra9c0449dbe2f';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=ra9c0449dbe2f';
+import { drawHud } from './hud.js?v=ra9c0449dbe2f';
 
 // ------------------------------------------------------------- drawing
 
@@ -213,6 +214,10 @@ export function drawScene(battle, ctx) {
   const oldDrawLength = draws.length;
   let drawCount = 0;
   for (const o of battle.obstacles) {
+    // Plan 034: 'none' colliders (river chain, crossing plugs) draw nothing — skipping
+    // them HERE, not just in drawObstacle, keeps ~80 no-op entries per river fight out of
+    // the per-frame stable sort and out of the orderingItems counter the perf specs read.
+    if (o.kind === 'none') continue;
     const entry = draws[drawCount] || (draws[drawCount] = { y: 0, kind: 0, ref: null });
     entry.y = o.y; entry.kind = 0; entry.ref = o; drawCount++;
   }
@@ -450,12 +455,14 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // A shallow crossing: a pale patch across the channel with stepping stones, oriented
       // across the real flow direction (`tx,ty`) rather than a fixed axis.
       const acrossA = Math.atan2(p.ty, p.tx) + Math.PI / 2;
-      // Plan 034: the shallows span ±90 along the tangent, matching CROSSING_OPEN_HALF.ford
-      // — the pale patch IS the wadable window now that the water beside it is plugged.
+      // Plan 034: the shallows span ±CROSSING_OPEN_HALF.ford along the tangent — imported,
+      // not restated: the pale patch IS the wadable window now that the water beside it is
+      // plugged, and a retune of the opening must move the art with it.
+      const fordHalf = CROSSING_OPEN_HALF.ford;
       ctx.save();
       ctx.translate(p.x, p.y); ctx.rotate(acrossA);
       ctx.globalAlpha = 0.85; ctx.fillStyle = shade(P.cream, 0.85);
-      ctx.fillRect(-p.w / 2, -90, p.w, 180);
+      ctx.fillRect(-p.w / 2, -fordHalf, p.w, fordHalf * 2);
       ctx.globalAlpha = 1;
       ctx.fillStyle = P.rock;
       for (let i = 0; i < 6; i++) {
@@ -467,20 +474,21 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // Same built-wooden-thing style as the legacy fixed bridge, oriented across the real
       // flow direction (`tx,ty`) at the Brief's real crossing width, instead of a fixed axis.
       const acrossA = Math.atan2(p.ty, p.tx) + Math.PI / 2;
-      // Plan 034: the deck spans ±70 along the tangent, matching CROSSING_OPEN_HALF.bridge
-      // (terrain.js) exactly — the drawn deck IS the passable window now that the shoulders
-      // beside it are plugged, so the two must move together.
+      // Plan 034: the deck spans ±CROSSING_OPEN_HALF.bridge along the tangent — imported,
+      // not restated, because the drawn deck IS the passable window for unit centres and a
+      // retune of the opening must move the art with it.
+      const deckHalf = CROSSING_OPEN_HALF.bridge;
       ctx.save();
       ctx.translate(p.x, p.y); ctx.rotate(acrossA);
       for (let pi = 0; pi < 8; pi++) {
         ctx.fillStyle = pi % 2 ? '#BE9245' : '#DDB870';
-        ctx.fillRect(-p.w / 2 + pi * (p.w / 8), -70, p.w / 8, 140);
+        ctx.fillRect(-p.w / 2 + pi * (p.w / 8), -deckHalf, p.w / 8, deckHalf * 2);
       }
       ctx.strokeStyle = P.ink; ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.moveTo(-p.w / 2, -70); ctx.lineTo(p.w / 2, -70); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-p.w / 2, 70); ctx.lineTo(p.w / 2, 70); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-p.w / 2, -deckHalf); ctx.lineTo(p.w / 2, -deckHalf); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-p.w / 2, deckHalf); ctx.lineTo(p.w / 2, deckHalf); ctx.stroke();
       ctx.fillStyle = P.ink;
-      for (const [px, py] of [[-p.w / 2, -70], [p.w / 2, -70], [-p.w / 2, 70], [p.w / 2, 70]]) {
+      for (const [px, py] of [[-p.w / 2, -deckHalf], [p.w / 2, -deckHalf], [-p.w / 2, deckHalf], [p.w / 2, deckHalf]]) {
         ctx.beginPath(); ctx.arc(px, py, 6, 0, TAU); ctx.fill();
       }
       ctx.restore();
@@ -490,21 +498,25 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // pass — this branch never sees those, so there is no double-draw.
       tree(ctx, p.x, p.y, p.r * 1.15, P.tree, P.treeShade, P.groundShade);
     } else if (p.kind === 'woodFloor') {
-      // Plan 034: a wood's whole zone footprint — the slow ground and the arrow cover —
-      // drawn instead of implied by a handful of trees. Baked into the static tiles once,
-      // so the alpha work costs nothing per frame.
+      // Plan 034: a wood's zone footprint, drawn instead of implied by a handful of trees.
+      // TWO radii on purpose, because the wood has two: the filled disc is the slow ground
+      // (zone r), the dashed rim is the ARROW COVER line (the LOS blocker is 0.8r —
+      // terrain.js pushes both). Drawing one rim at r overstated cover by 25%. Baked into
+      // the static tiles once, so the alpha work costs nothing per frame.
       ctx.save();
       ctx.globalAlpha = 0.28;
       ctx.fillStyle = P.treeShade;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
       ctx.globalAlpha = 0.75;
       ctx.strokeStyle = P.treeShade; ctx.lineWidth = 3; ctx.setLineDash([14, 10]);
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.8, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
     } else if (p.kind === 'hillFoot') {
-      // Plan 034: the hill's true collider/LOS disc as a ground-contact footprint under the
-      // silhouette (whose ground line is a strip, not a circle). Same static-bake terms as
+      // Plan 034: the hill's collider — which is also its LOS blocker — as a ground-contact
+      // footprint under the silhouette (whose ground line is a strip, not a circle):
+      // one circle, because obstacle, blocker and footprint genuinely share this r. Same
+      // static-bake terms as
       // woodFloor above.
       ctx.save();
       ctx.globalAlpha = 0.38;

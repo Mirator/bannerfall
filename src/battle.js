@@ -2,42 +2,42 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=rf0428fde8b3b';
-import { perkMods } from './progression.js?v=rf0428fde8b3b';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=rf0428fde8b3b';
-import { SpatialGrid } from './battle/spatial-index.js?v=rf0428fde8b3b';
-import { ACTIONS } from './input-actions.js?v=rf0428fde8b3b';
+} from './data.js?v=ra9c0449dbe2f';
+import { perkMods } from './progression.js?v=ra9c0449dbe2f';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=ra9c0449dbe2f';
+import { SpatialGrid } from './battle/spatial-index.js?v=ra9c0449dbe2f';
+import { ACTIONS } from './input-actions.js?v=ra9c0449dbe2f';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
   DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
-} from './battle/constants.js?v=rf0428fde8b3b';
+} from './battle/constants.js?v=ra9c0449dbe2f';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=rf0428fde8b3b';
-import { drawScene, drawProps } from './battle/render-scene.js?v=rf0428fde8b3b';
+} from './battle/terrain.js?v=ra9c0449dbe2f';
+import { drawScene, drawProps } from './battle/render-scene.js?v=ra9c0449dbe2f';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=rf0428fde8b3b';
+} from './battle/separation.js?v=ra9c0449dbe2f';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=rf0428fde8b3b';
+} from './battle/ai-phases.js?v=ra9c0449dbe2f';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=rf0428fde8b3b';
+} from './battle/combat.js?v=ra9c0449dbe2f';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=rf0428fde8b3b';
+} from './battle/objectives.js?v=ra9c0449dbe2f';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
   placeEnemyDeployment as placeEnemyLine,
-} from './battle/enemy-command.js?v=rf0428fde8b3b';
+} from './battle/enemy-command.js?v=ra9c0449dbe2f';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -600,8 +600,21 @@ export class Battle {
     if (!inp.mouse.down) this.dragUnit = null;
     if (this.dragUnit) {
       const p = this.clampToDeployZone(mw.x, mw.y);
-      this.dragUnit.x = p.x; this.dragUnit.y = p.y;
-      this.dragUnit.vx = 0; this.dragUnit.vy = 0;
+      // Plan 034: never place a body inside a collider. The river wall is the sharp case —
+      // its plug lattice has no feasible interior, so a body dropped there would be ejected
+      // by pushOutOf to an arbitrary side of the river at the horn, with its hold anchor
+      // baked inside the wall — but the same guard keeps hold anchors out of rocks and
+      // trees. The drag simply refuses to move onto blocked ground and holds its last
+      // valid spot; O(obstacles) once per drag frame.
+      const ur = this.dragUnit.d ? this.dragUnit.d.radius : 14;
+      let blocked = false;
+      for (const o of this.obstacles) {
+        if (dist2(p.x, p.y, o.x, o.y) < (o.r + ur) * (o.r + ur)) { blocked = true; break; }
+      }
+      if (!blocked) {
+        this.dragUnit.x = p.x; this.dragUnit.y = p.y;
+        this.dragUnit.vx = 0; this.dragUnit.vy = 0;
+      }
     }
     if (this.deployArmT <= 0 && inp.pressedAction(ACTIONS.CONFIRM)) this.confirmDeploy();
   }
