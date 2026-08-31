@@ -21,8 +21,8 @@
 // never from `fxRng` (decoration only). The pre-existing area-scaled rock/tree scatter below
 // keeps using `simRng` exactly as it did before this phase — it is not new, and its draw count
 // and order are unchanged, so it does not shift anything downstream.
-import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r866af952ef00';
-import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r866af952ef00';
+import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=rf0428fde8b3b';
+import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=rf0428fde8b3b';
 
 // See the corridor-safety comment above the hill loop in buildFromBrief for the measurement
 // behind these two numbers.
@@ -218,10 +218,15 @@ export function crossingWaypoint(battle, x, y, tx, ty) {
   // Degenerate cases: the unit is already standing in a crossing, or its target is — a unit
   // wading a ford or crossing a bridge should resume steering at its real goal, not loop back
   // onto the crossing centre it is already occupying (or about to arrive at anyway).
+  // Plan 034: the "already there" radius is the crossing's own OPENING, not c.w — the c.w
+  // disc used to be all open water, but plugCrossingShoulders now walls its shoulders, so a
+  // unit released from its waypoint at 200 out steered a straight line into the plug wall
+  // and ground against it. Inside the opening the straight line is genuinely clear.
   for (let i = 0; i < crossings.length; i++) {
     const c = crossings[i];
-    if (dist2(x, y, c.x, c.y) < c.w * c.w) return null;
-    if (dist2(tx, ty, c.x, c.y) < c.w * c.w) return null;
+    const nearR = CROSSING_OPEN_HALF[c.kind] ?? 70;
+    if (dist2(x, y, c.x, c.y) < nearR * nearR) return null;
+    if (dist2(tx, ty, c.x, c.y) < nearR * nearR) return null;
   }
   const minX = Math.min(x, tx), maxX = Math.max(x, tx);
   const minY = Math.min(y, ty), maxY = Math.max(y, ty);
@@ -453,6 +458,77 @@ function buildRiverChain(battle, pts, r, crossings, widths = null) {
   }
 }
 
+// Plan 034: the passable window at a crossing is the DRAWN crossing. buildRiverChain's
+// skip radius (c.w) is untouched — it exists so the big r~88 chain circles never leave a
+// survivor footprint inside the crossing, a measured stall boundary (see BRIDGE_W's comment
+// in battlefield-brief.js) — but the hole it opens is ~2*c.w of open water along the river,
+// against a deck drawn 140 wide. These shoulders plug the difference with small circles,
+// from the crossing's own opening out to where the resumed chain's footprint takes over, so
+// a warband can no longer wade beside the bridge (screenshot-reproduced before this).
+export const CROSSING_OPEN_HALF = Object.freeze({ bridge: 70, ford: 90 });
+const PLUG_R = 26;
+
+// Tangent AND local channel half-width of whichever river passes nearest (x, y) — the plug
+// wall below must fill the water and ONLY the water. The first version padded a fixed ±96
+// across the polyline; against a ±88 channel that walled 34 units of BANK on each side,
+// right where crossingWaypoint funnels both armies, and the camp-raid sweep collapsed
+// (idle 51 -> 20, fights grinding past their windows). Confining the plugs to the measured
+// channel is what makes a hard wall compatible with the Plan 024 pathability boundary.
+export function channelAt(rivers, x, y) {
+  let best = Infinity, tx = 1, ty = 0, half = 44;
+  for (const river of rivers) {
+    const pts = river.pts;
+    for (let i = 1; i < pts.length; i++) {
+      const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
+      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy || 1;
+      let t = ((x - ax) * dx + (y - ay) * dy) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const px = ax + dx * t, py = ay + dy * t;
+      const d2 = (px - x) * (px - x) + (py - y) * (py - y);
+      if (d2 < best) {
+        best = d2;
+        const L = Math.hypot(dx, dy) || 1;
+        tx = dx / L; ty = dy / L;
+        const w = river.widths ? (river.widths[i - 1] + river.widths[i]) / 2 : river.width;
+        half = w / 2;
+      }
+    }
+  }
+  return { tx, ty, half };
+}
+
+function plugCrossingShoulders(battle, rivers, crossings) {
+  for (const c of crossings) {
+    const ch = channelAt(rivers, c.x, c.y);
+    const nx = -ch.ty, ny = ch.tx; // across the river: the direction a crossing unit travels
+    const openHalf = CROSSING_OPEN_HALF[c.kind] ?? 70;
+    // Rows span the channel exactly: outermost centres at ±(half - r) so the outermost
+    // footprints END at the bank, never on it. Columns run from the opening's edge out to
+    // where the resumed chain's own footprint takes over (survivors sit at >= c.w with
+    // r ~ half, reaching back to ~c.w - half). 36 spacing against 52 diameters overlaps in
+    // both directions, so no unit-wide seam exists anywhere in the covered band.
+    // +6 outward tolerance on the outermost rows: the plug frame is the straight tangent at
+    // the crossing while the channel curves, and a 6-unit footprint overhang onto the bank
+    // is harmless where the 34-unit overhang of the first version was not (it walled the
+    // approach lanes). Column step 30 for the same curvature slop along the tangent.
+    const maxOff = Math.max(0, ch.half - PLUG_R + 6);
+    const rows = Math.max(1, Math.ceil((2 * maxOff) / 34));
+    for (const side of [-1, 1]) {
+      for (let along = openHalf + 16; along <= c.w - 50; along += 30) {
+        for (let ri = 0; ri <= rows; ri++) {
+          const across = -maxOff + (2 * maxOff) * (ri / rows);
+          battle.obstacles.push({
+            kind: 'none',
+            x: c.x + ch.tx * along * side + nx * across,
+            y: c.y + ch.ty * along * side + ny * across,
+            r: PLUG_R,
+          });
+        }
+      }
+    }
+  }
+}
+
 function buildFromBrief(battle, field, terrainRng, fxRng) {
   const fwd = { x: battle.adx, y: battle.ady }, side = { x: -battle.ady, y: battle.adx };
   const riverPtLists = field.rivers.map(r => r.pts);
@@ -464,6 +540,7 @@ function buildFromBrief(battle, field, terrainRng, fxRng) {
     scatterReeds(battle, river.pts, river.width, fxRng, river.widths);
   }
   battle.riverSegs = toSegments(riverPtLists);
+  plugCrossingShoulders(battle, field.rivers, field.crossings);
   for (const c of field.crossings) {
     battle.crossings.push({ x: c.x, y: c.y, w: c.w, kind: c.kind });
     const t = riverTangentAt(riverPtLists, c.x, c.y);
@@ -501,12 +578,20 @@ function buildFromBrief(battle, field, terrainRng, fxRng) {
     if (dCorridor - r < HILL_CORRIDOR_MARGIN) r = Math.min(r, HILL_SAFE_R);
     battle.obstacles.push({ kind: 'hill', x: h.x, y: h.y, r });
     battle.blockers.push({ x: h.x, y: h.y, r });
+    // Plan 034: the silhouette's ground contact is a horizontal strip while the collider
+    // (and LOS blocker) is this disc — the footprint prop is what makes the circle units
+    // path around, and arrows stop at, the circle the player sees. Static, baked once.
+    battle.props.push({ kind: 'hillFoot', x: h.x, y: h.y, r });
   }
 
   // ---- Woods: zone + blocker (0.8x radius) + 4-8 tree props, only the 2 largest collide --
   for (const w of field.woods) {
     battle.zones.push({ kind: 'wood', x: w.x, y: w.y, r: w.r, mul: WOOD_SPEED });
     battle.blockers.push({ x: w.x, y: w.y, r: w.r * 0.8 });
+    // Plan 034: the zone's whole reach, drawn — the slow ground and the arrow cover used to
+    // be an invisible circle implied by a handful of trees. Pushed before this clump's
+    // trees so the floor bakes under them.
+    battle.props.push({ kind: 'woodFloor', x: w.x, y: w.y, r: w.r });
     const n = 4 + Math.floor(terrainRng() * 5); // 4-8
     const trees = [];
     for (let i = 0; i < n; i++) {

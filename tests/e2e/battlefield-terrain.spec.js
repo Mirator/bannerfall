@@ -406,6 +406,61 @@ test('units near a river either reach a crossing or steadily close on one over a
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('a crossing is passable only where it is drawn: the water beside it is walled', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await bootWorld(page, { seed: 7 });
+
+  // Plan 034: buildRiverChain's skip radius opens ~2*c.w of water around a crossing while
+  // the drawn deck/shallows span only 2*CROSSING_OPEN_HALF — plugCrossingShoulders walls
+  // the difference. Structural, not simulated: every sample point in the shoulder band must
+  // sit inside some obstacle footprint (the plug grid's worst-case interior gap is 25.4
+  // units against plug r 26), and the crossing's own opening must stay obstacle-free.
+  const result = await page.evaluate(async () => {
+    const g = window.__g;
+    const { CROSSING_OPEN_HALF, channelAt } = await import('/src/battle/terrain.js');
+    const out = [];
+    for (const name of ['battle_river', 'battle_settlement']) {
+      window.game.scenario(name);
+      const b = g.scene;
+      b.state = 'fight';
+      // The riverPoly props carry the same {pts, width, widths} shape channelAt reads, so
+      // the test measures against the exact channel the plugs were built for.
+      const rivers = b.props.filter(p => p.kind === 'riverPoly');
+      for (const c of b.crossings) {
+        const ch = channelAt(rivers, c.x, c.y);
+        const tx = ch.tx, ty = ch.ty, nx = -ty, ny = tx;
+        const openHalf = CROSSING_OPEN_HALF[c.kind];
+        const inObstacle = (x, y) => b.obstacles.some(o => (x - o.x) ** 2 + (y - o.y) ** 2 <= o.r * o.r);
+        const acrossMax = ch.half - 8; // inside the water: the plugs end at the bank, not on it
+        let holes = 0, blockedOpen = 0, sampled = 0;
+        for (const side of [-1, 1]) {
+          for (let along = openHalf + 13; along <= c.w - 56; along += 12) {
+            for (let across = -acrossMax; across <= acrossMax; across += 12) {
+              sampled++;
+              if (!inObstacle(c.x + tx * along * side + nx * across, c.y + ty * along * side + ny * across)) holes++;
+            }
+          }
+        }
+        for (const side of [-1, 0, 1]) {
+          const along = side * (openHalf - 30);
+          if (inObstacle(c.x + tx * along, c.y + ty * along)) blockedOpen++;
+        }
+        out.push({ name, kind: c.kind, sampled, holes, blockedOpen });
+      }
+    }
+    return out;
+  });
+
+  expect(result.length).toBeGreaterThan(0);
+  for (const r of result) {
+    expect(r.error, `${r.name} ${r.kind}`).toBeUndefined();
+    expect(r.holes, `${r.name} ${r.kind}: open water beside the crossing (${r.holes}/${r.sampled} samples uncovered)`).toBe(0);
+    expect(r.blockedOpen, `${r.name} ${r.kind}: the crossing's own opening is blocked`).toBe(0);
+  }
+
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('no unit ends up embedded in an obstacle after a stepped fight', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await bootWorld(page, { seed: 7 });

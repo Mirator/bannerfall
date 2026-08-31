@@ -1,12 +1,12 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r866af952ef00';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r866af952ef00';
-import { stableSortPrefix } from './spatial-index.js?v=r866af952ef00';
-import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=r866af952ef00';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r866af952ef00';
-import { drawHud } from './hud.js?v=r866af952ef00';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rf0428fde8b3b';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=rf0428fde8b3b';
+import { stableSortPrefix } from './spatial-index.js?v=rf0428fde8b3b';
+import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=rf0428fde8b3b';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=rf0428fde8b3b';
+import { drawHud } from './hud.js?v=rf0428fde8b3b';
 
 // ------------------------------------------------------------- drawing
 
@@ -450,10 +450,12 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // A shallow crossing: a pale patch across the channel with stepping stones, oriented
       // across the real flow direction (`tx,ty`) rather than a fixed axis.
       const acrossA = Math.atan2(p.ty, p.tx) + Math.PI / 2;
+      // Plan 034: the shallows span ±90 along the tangent, matching CROSSING_OPEN_HALF.ford
+      // — the pale patch IS the wadable window now that the water beside it is plugged.
       ctx.save();
       ctx.translate(p.x, p.y); ctx.rotate(acrossA);
       ctx.globalAlpha = 0.85; ctx.fillStyle = shade(P.cream, 0.85);
-      ctx.fillRect(-p.w / 2, -22, p.w, 44);
+      ctx.fillRect(-p.w / 2, -90, p.w, 180);
       ctx.globalAlpha = 1;
       ctx.fillStyle = P.rock;
       for (let i = 0; i < 6; i++) {
@@ -465,17 +467,20 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // Same built-wooden-thing style as the legacy fixed bridge, oriented across the real
       // flow direction (`tx,ty`) at the Brief's real crossing width, instead of a fixed axis.
       const acrossA = Math.atan2(p.ty, p.tx) + Math.PI / 2;
+      // Plan 034: the deck spans ±70 along the tangent, matching CROSSING_OPEN_HALF.bridge
+      // (terrain.js) exactly — the drawn deck IS the passable window now that the shoulders
+      // beside it are plugged, so the two must move together.
       ctx.save();
       ctx.translate(p.x, p.y); ctx.rotate(acrossA);
       for (let pi = 0; pi < 8; pi++) {
         ctx.fillStyle = pi % 2 ? '#BE9245' : '#DDB870';
-        ctx.fillRect(-p.w / 2 + pi * (p.w / 8), -48, p.w / 8, 96);
+        ctx.fillRect(-p.w / 2 + pi * (p.w / 8), -70, p.w / 8, 140);
       }
       ctx.strokeStyle = P.ink; ctx.lineWidth = 6;
-      ctx.beginPath(); ctx.moveTo(-p.w / 2, -48); ctx.lineTo(p.w / 2, -48); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-p.w / 2, 48); ctx.lineTo(p.w / 2, 48); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-p.w / 2, -70); ctx.lineTo(p.w / 2, -70); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-p.w / 2, 70); ctx.lineTo(p.w / 2, 70); ctx.stroke();
       ctx.fillStyle = P.ink;
-      for (const [px, py] of [[-p.w / 2, -48], [p.w / 2, -48], [-p.w / 2, 48], [p.w / 2, 48]]) {
+      for (const [px, py] of [[-p.w / 2, -70], [p.w / 2, -70], [-p.w / 2, 70], [p.w / 2, 70]]) {
         ctx.beginPath(); ctx.arc(px, py, 6, 0, TAU); ctx.fill();
       }
       ctx.restore();
@@ -484,7 +489,40 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // get a real obstacle collider instead and are drawn via drawObstacle's depth-sorted
       // pass — this branch never sees those, so there is no double-draw.
       tree(ctx, p.x, p.y, p.r * 1.15, P.tree, P.treeShade, P.groundShade);
+    } else if (p.kind === 'woodFloor') {
+      // Plan 034: a wood's whole zone footprint — the slow ground and the arrow cover —
+      // drawn instead of implied by a handful of trees. Baked into the static tiles once,
+      // so the alpha work costs nothing per frame.
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = P.treeShade;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.75;
+      ctx.strokeStyle = P.treeShade; ctx.lineWidth = 3; ctx.setLineDash([14, 10]);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    } else if (p.kind === 'hillFoot') {
+      // Plan 034: the hill's true collider/LOS disc as a ground-contact footprint under the
+      // silhouette (whose ground line is a strip, not a circle). Same static-bake terms as
+      // woodFloor above.
+      ctx.save();
+      ctx.globalAlpha = 0.38;
+      ctx.fillStyle = P.rockShade;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = P.rockShade; ctx.lineWidth = 3; ctx.setLineDash([14, 10]);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
     } else if (p.kind === 'scrub') {
+      // Plan 034: the faint disc is the scrub ZONE's true edge (its 0.92x ground was
+      // invisible); the two ellipses are the bushes that always drew.
+      ctx.save();
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = P.treeShade;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
+      ctx.restore();
       ctx.fillStyle = P.treeShade;
       ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r * 0.9, p.r * 0.6, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = P.tree;

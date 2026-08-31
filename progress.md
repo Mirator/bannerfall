@@ -971,3 +971,21 @@ Set Spears texts now name the front-arc condition; four documents' stale
 CI container passes 24/24). Sweep with arcs live on the deployment phase:
 idle 51 / chargeAll 59 / split 38, twice, digit for digit — the post-033 guard
 holds, and split is where the flank pays most (34 -> 38).
+
+## Plan 034: terrain legibility, and crossings you can only cross where drawn (2026-08-31)
+
+The river wall's skip radius opened ~2*c.w of water around each crossing while
+the drawn deck spanned 96 — a warband waded beside the bridge
+(screenshot-reproduced). plugCrossingShoulders walls the shoulders with small
+circles confined to the channel (channelAt reads the river's local width), the
+deck widens to 140 and the ford's patch to 180 so the drawn crossing IS the
+passable window, and crossingWaypoint's release radius shrinks from c.w to the
+opening so nobody steers a straight line into the new wall. It took three
+passes to land without re-crossing Plan 024's pathability boundary — the first
+walled 34 units of bank and collapsed the sweep to 20/32/6, the second left the
+waypoint jam at 28/58/7; shipped is 52/58/38, within a point of the pre-034
+baseline. Woods draw their zone footprint (floor disc + dashed rim under the
+trees), hills a ground-contact disc at their true collider/LOS radius, scrub
+its zone edge — all baked into the static tile layer, zero per-frame cost, and
+visible on the deployment screen. A structural test samples the shoulder water
+for coverage holes and the opening for blockage on both crossing kinds.
