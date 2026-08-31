@@ -210,9 +210,10 @@ about a 46% one — the walkover the complaint named.
   they did not, and that is the evidence the change is confined to the path it
   was meant to touch.
 * **Gate:** 189/190 (`npm test`). The one failure is `battle-break.png`, the
-  documented Windows-only rasterization drift — confirmed by stashing every
-  `src/` change and watching it fail identically on unmodified code. No visual
-  baseline was updated by this slice.
+  documented Windows-only rasterization drift — confirmed twice over: by stashing
+  every `src/` change and watching it fail identically on unmodified code, and by
+  `npm run test:visual:linux`, which passes 24/24 in the CI-equivalent container
+  including that PNG. No visual baseline was updated by this slice.
 * **Hero trim (step 3): NOT taken.** The re-pricing absorbed the surplus it was
   meant to: at the new even centre a commanding player with an idle sword is at
   50%, so `swingMaxTargets` and the dash i-frames are untouched and no
