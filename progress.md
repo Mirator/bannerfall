@@ -833,6 +833,71 @@ the name is centred within 3px. Verified to fail on the pre-fix renderer. A sing
 visual baseline cannot catch this class of bug - it only ever records one of the two
 states.
 
+## Plan 033: the deployment phase (2026-08-30)
+
+The timed deploy window is gone. A non-ambush battle now hands over from the intro to a
+paused `deploy` state: no phases run, no clock advances, and the fight starts on an armed
+CONFIRM (Enter/E, `DEPLOY_ARM_T` 0.35s). The player places his men (hero included) by
+dragging them inside his deployment ground — his side of the field up to `DEPLOY_NO_MANS`
+(220) short of the midline — and squad orders still land during the phase. On confirm,
+every troop's hold anchor is set where he was placed and squads still on the neutral
+`follow` are promoted to HOLD, so the placement survives the first fight tick instead of
+being walked back to formation slots. Squads explicitly ordered during the phase keep
+their order.
+
+The enemy deploys too: a battle with the phase spawns its force already formed (melee
+ranks by the Plan 027 RANK table, raiders behind, wolves on the wings) via
+`placeEnemyDeployment` in `src/battle/enemy-command.js` — pure eslot geometry, no RNG, so
+the simRng draw order is untouched. Ambush and caught-fleeing fights (`deploy: 0`) keep
+the legacy scatter and skip the phase entirely; `battle_bridge` is unchanged. Because the
+force starts formed, the commander's first `form` doctrine is a short march to the muster
+rather than a scatter walking to slots and standing.
+
+Deleted with the window: the frozen-enemies block at the top of `updateEnemyPhase`, the
+four FIRST BLOOD early-outs, the countdown HUD (replaced by the FORM YOUR LINE panel),
+and `deployT`/`deployMax`. Five qa_suite records were updated to the new mechanic (the
+three battle-flow records take the production Enter path; record 26 re-reads its silence
+clause against the paused state; the brace-latch fixture forces `state='fight'` like the
+e2e fixtures). The eight non-ambush battle visual baselines change by design — the 1.5s
+settle frame now shows the paused deployment screen — and are recaptured through the
+Visual baselines workflow.
+
+Measured after landing: npm test 181/181 passed with the recaptured baselines
+(battle_bridge unchanged — the scatter-path control). The 360-raid sweep now
+crosses the deployment phase through the real CONFIRM press; the first fix
+reused the fixture's cumulative clock for the arm wait and test.fail reported
+green in 2.0s on a thrown guard — re-fixed with a dedicated arm clock. Numbers
+on the fixed sweep (120 raids/policy): idle 67 (was 69.2), chargeAll 52 (was 68), split 35
+(was 45). The orders-vs-idle finding stands, margin widened to fifteen points
+against commanding: a held line at spawn auto-battles as well as a following
+one, and charging a pre-formed enemy is far worse than charging a scatter. The
+test.fail annotation stays; the positional slice (plans/032) is what aims at it.
+
+Review pass on the same branch (second commit): an eight-angle review with
+per-candidate verification confirmed ten defects; all fixed. The three vacuous
+qa records (perf smoke, determinism, RNG domains) confirm the deployment phase
+through a shared soundAdvance() helper and measure live combat again; the
+formed enemy line stands 70 behind objective guards; a deliberate FOLLOW
+pressed during the phase survives the confirm; hold pennants anchor at each
+squad's placed centroid; the camera holds still during a drag (measured
+1.4-8.7x over-travel from the fit-camera feedback loop); Battle.isTimeFrozen()
+stops playT accruing through the pause; the command flash decays in paused
+states; Input.clear() resets mouse.down; player troops deploy formed on slot
+geometry with the hero facing the enemy on every approach. A perf budget case
+now covers the deploy render path (measured 13020 beginPath over 20 draws —
+higher than the fight case because the deployment camera fits both lines, so
+its own ceiling is 15000). Windows-local npm test shows one battle-break.png
+diff that the CI-equivalent container does not (24/24 there) — the documented
+Windows/Linux rasterization drift.
+
+The troop pre-formation resolved the orders-vs-idle finding: sweep measured
+twice, digit for digit, idle 49 / chargeAll 60 / split 34. The test.fail
+annotation carried since Plan 019 is removed on its own stated terms and the
+assertion now guards the property. The fixed zz-orders-wide.mjs harness
+(dead since Plan 030) measured the first commit at 360 raids/policy: idle
+66.7+/-2.5, chargeAll 54.7+/-2.6, paired margin -11.9+/-3.2 — preserved as
+scripts/zz-orders-033-deploy.json; re-run it after this branch merges for the
+post-fix paired margin.
 
 ## Facing and flank arcs (2026-08-30)
 

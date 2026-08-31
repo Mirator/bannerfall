@@ -82,7 +82,6 @@ async function runStance(page, fixtureName, stance, orders = null) {
       });
       const b = game.scene;
       b.state = 'fight';
-      b.deployT = 0;
       // An idle hero aims at the cursor, and FOLLOW formation slots hang off hero facing,
       // so the pointer is a real simulation input. Pin it to the canvas centre and clear
       // any residual camera shake, or a stray mouse position silently rewrites the result.
@@ -167,6 +166,19 @@ async function raidSweep(page, orders, seeds, campIds) {
           let t = 0;
           // orders issued during `intro` are discarded, so wait the banner out first
           while (b.state === 'intro' && t < 3) { real(dt); t += dt; }
+          // Plan 033: production-path battles pause on the deployment phase. Arm CONFIRM
+          // (DEPLOY_ARM_T), then press it — asserted like the two confirms above, so the
+          // sweep can never silently measure a fight that was paused the whole window.
+          // The confirm's hold-promotion is part of what "pressing nothing" now means: an
+          // idle player still sounds the advance, and his placed line holds by default.
+          let armT = 0; // its own clock: `t` already carries the intro wait
+          while (b.state === 'deploy' && armT < 0.5) { real(dt); t += dt; armT += dt; }
+          if (b.state === 'deploy') {
+            game.input.injectKey('Enter', true); real(dt); t += dt; game.input.injectKey('Enter', false);
+          }
+          if (b.state !== 'fight') {
+            throw new Error('the deploy confirm did not start the fight: state=' + b.state);
+          }
           if (orders) for (const [squad, order] of Object.entries(orders)) b.issueCommand(order, squad);
           while (b.state !== 'end' && t < 95) { real(dt); t += dt; }
           totals.runs++;
@@ -290,28 +302,45 @@ test.describe('stance balance', () => {
     // flipping an annotation on a margin inside the harness's own run-to-run drift is the
     // exact mistake Plan 019 had to retract. The annotation stays.
     //
-    // Plan 032 (facing and flank arcs) is the FIFTH attempt and it moved the margin to zero
-    // for the second time in this finding's history. It named what the previous four were
-    // working around: nothing in the damage arithmetic read `facing`, so a blow landed for the
-    // same number from in front and from directly behind, and Plan 027's flanking muster
-    // changed only where the enemy walked rather than what the walk was worth. A melee blow
-    // from outside the defender's front arc now pays FLANK_BONUS, and a set line cannot brace
-    // against what reaches it from behind — both rules symmetric, both reading the shipped
-    // constants on the enemy side. Measured on this exact fixture: idle 69 -> 68, chargeAll 68
-    // -> 68, split 45 -> 48, so the best deliberate policy went from one point behind pressing
-    // nothing to LEVEL with it. Both the before and the after replayed digit for digit across
-    // two consecutive runs, so those are answers rather than drift. Idle FELL, which was the
-    // failure mode the slice was watching for: both sides encircle, but a camp garrison
-    // outnumbers the warband, so the extra blows land on the player at least as often.
+    // Plan 032 (facing and flank arcs) was the FIFTH attempt, measured against pre-033 main,
+    // and it moved the margin to zero for the second time in this finding's history. It named
+    // what the previous four were working around: nothing in the damage arithmetic read
+    // `facing`, so a blow landed for the same number from in front and from directly behind,
+    // and Plan 027's flanking muster changed only where the enemy walked rather than what the
+    // walk was worth. A melee blow from outside the defender's front arc now pays FLANK_BONUS,
+    // and a set line cannot brace against what reaches it from behind — both rules symmetric,
+    // both reading the shipped constants on the enemy side. Measured on this exact fixture
+    // (pre-033 baseline): idle 69 -> 68, chargeAll 68 -> 68, split 45 -> 48, so the best
+    // deliberate policy went from one point behind pressing nothing to LEVEL with it. Both
+    // replayed digit for digit across two consecutive runs. Idle FELL, which was the failure
+    // mode the slice was watching for: both sides encircle, but a camp garrison outnumbers
+    // the warband, so the extra blows land on the player at least as often.
     //
-    // A tie is not a strict inequality and the annotation stays, for the same reason Plan 027
-    // gave. Worth recording because it is the near miss: FLANK_BONUS = 1.60 makes this
-    // assertion PASS (67 / 68 / 43, chargeAll ahead by one). It was rejected rather than
-    // shipped — commanding does not improve between 1.35 and 1.60 (chargeAll is 68 at both)
-    // and split is five points worse, so the whole crossing is one point of erosion on idle,
-    // inside the noise of 120 raids. Picking the constant that produces it would be choosing a
-    // value to satisfy this line. See `plans/032-facing-and-flank-arcs.md` finding 3.
-    test.fail();
+    // A tie is not a strict inequality and the annotation stayed at that point. Worth
+    // recording because it is the near miss: FLANK_BONUS = 1.60 made this assertion PASS
+    // (67 / 68 / 43, chargeAll ahead by one). It was rejected rather than shipped —
+    // commanding does not improve between 1.35 and 1.60 (chargeAll is 68 at both) and split
+    // is five points worse, so the whole crossing was one point of erosion on idle, inside
+    // the noise of 120 raids. Picking the constant that produces it would have been choosing
+    // a value to satisfy this line. See `plans/032-facing-and-flank-arcs.md` finding 3.
+    //
+    // Plan 033 (the deployment phase) changed what BOTH columns of this sweep mean, and it
+    // is the change that finally resolved the finding. "Pressing nothing" now includes the
+    // one press nobody can skip — confirming the deployment — after which the un-ordered
+    // warband HOLDS its placed line instead of following, and both sides start formed. The
+    // plan's first commit measured idle 67 / chargeAll 52 / split 35 (annotation kept: the
+    // deficit against commanding had WIDENED). Its review pass then made the player's
+    // troops deploy formed instead of as the ride-in scatter, and the formed-tight line
+    // holding at spawn is a no-input baseline the enemy commander can actually punish:
+    // measured TWICE on this exact fixture, digit for digit both runs, idle 49 / chargeAll
+    // 60 / split 34. Commanding beats pressing nothing by eleven points — far outside the
+    // run-to-run drift every earlier margin drowned in (Plan 027's 0.0, Plan 029's -0.9).
+    //
+    // The `test.fail()` that sat here from Plan 019's retraction to Plan 033 is therefore
+    // removed on its own stated terms ("remove it only when commanding actually beats not
+    // commanding"), and the assertion below now GUARDS the property: a change that makes
+    // the idle default the best policy again fails this sweep, exactly as weakening any
+    // other guard would.
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked
     const camps = ['c1', 'c2', 'c3'];
@@ -347,7 +376,7 @@ test.describe('stance balance', () => {
             deploy: 0, approach: 'E', heroHp: 120, heroMaxHp: 120, onEnd: () => {},
           });
           const b = game.scene;
-          b.state = 'fight'; b.deployT = 0;
+          b.state = 'fight';
           let t = 0;
           while (b.state !== 'end' && t < timeoutS) { real(dt); t += dt; }
           return `${Math.round(t * 10) / 10}s/${b.startTroops - b.troops.length}lost/${Math.round(b.hero.hp)}hp`;

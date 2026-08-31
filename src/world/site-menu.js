@@ -7,15 +7,15 @@
 // seam a row calls). It owns no drawing — world-screens.js draws the model — and it owns no
 // rules: every row commits through the method that already held the rule, so a row's price
 // tag and its charge cannot disagree.
-import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=rf856e1bc4599';
-import { bannerCost, bannerLabel } from '../progression.js?v=rf856e1bc4599';
-import { ACTIONS } from '../input-actions.js?v=rf856e1bc4599';
+import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=r040c1e5b1560';
+import { bannerCost, bannerLabel } from '../progression.js?v=r040c1e5b1560';
+import { ACTIONS } from '../input-actions.js?v=r040c1e5b1560';
 import {
   OWNERSHIP, SPECIALIZATIONS, REGION,
   encounterObjective, strongholdModifiers, strongholdAdvantageLines, settlementRecord,
   STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=rf856e1bc4599';
-import { restAndHeal, expandArmy } from './settlement-interactions.js?v=rf856e1bc4599';
+} from '../region.js?v=r040c1e5b1560';
+import { restAndHeal, expandArmy } from './settlement-interactions.js?v=r040c1e5b1560';
 
 const P = PAL.world;
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
@@ -275,7 +275,8 @@ function requestSiteAssault(world, camp) {
       arena: 'camp',
       ambush: false,
       approach: world.approachTo(camp.x, camp.y),
-      deploy: 4, // YOU are storming THEM — they scramble to arms, not a parade formup
+      // No `deploy` field: absent means the Plan 033 deployment phase opens the assault —
+      // you chose this fight. Only `deploy: 0` (you caught them) or an ambush skips it.
       comp: st.garrison ? st.garrison.slice() : null,
       // The razed-camp guard reduction is part of the fight itself, not just the brief
       // prose: the objective carries mods.guards, so "2 defensive guards remain" is
@@ -294,7 +295,6 @@ function requestSiteAssault(world, camp) {
     arena: 'camp',
     ambush: false,
     approach: world.approachTo(camp.x, camp.y),
-    deploy: 4,
     comp: st.garrison ? st.garrison.slice() : null,
     objective: encounterObjective('camp'),
     canWithdraw: true,

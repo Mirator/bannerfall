@@ -58,7 +58,7 @@ test('a hill capped only when it fouls the corridor between the two forces still
         deploy: 0, approach: 'E', heroHp: 120, heroMaxHp: 120, field, onEnd: () => {},
       });
       const b = g.scene;
-      b.state = 'fight'; b.deployT = 0;
+      b.state = 'fight';
       const centreHill = b.obstacles.find(o => o.kind === 'hill' && o.x === FIELD.W / 2 && o.y === FIELD.H / 2);
       cappedHillR = centreHill ? centreHill.r : null;
       let t = 0;
@@ -157,7 +157,7 @@ test('a blind archer advances on its target instead of holding position', async 
         heroHp: 120, heroMaxHp: 120, field, onEnd: () => {},
       });
       const b = g.scene;
-      b.state = 'fight'; b.deployT = 0;
+      b.state = 'fight';
       const t = b.troops[0], e = b.enemies[0];
       // 180 apart, well inside the archer's 230 range (HOLD's target search is capped at
       // range, unlike CHARGE's unbounded search), with the hill sitting on the segment
@@ -366,7 +366,7 @@ test('units near a river either reach a crossing or steadily close on one over a
     const { ENGAGE_GAP } = await import('/src/battle/constants.js');
     window.game.scenario('battle_river');
     const b = g.scene;
-    b.state = 'fight'; b.deployT = 0;
+    b.state = 'fight';
     if (b.crossings.length === 0) return { skipped: true };
 
     const nearestCrossingDist = (x, y) => Math.min(...b.crossings.map(c => Math.hypot(x - c.x, y - c.y)));
@@ -418,7 +418,7 @@ test('no unit ends up embedded in an obstacle after a stepped fight', async ({ p
     const g = window.__g;
     window.game.scenario('battle_woods');
     const b = g.scene;
-    b.state = 'fight'; b.deployT = 0;
+    b.state = 'fight';
 
     const real = g.update.bind(g);
     g.update = () => {};

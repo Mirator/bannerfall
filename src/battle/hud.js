@@ -1,10 +1,10 @@
-// The in-battle HUD: squad rows with their stance trade-offs, the deploy countdown, the
+// The in-battle HUD: squad rows with their stance trade-offs, the deployment panel, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, BALANCE, enemyStrength, playerStrength, weightText } from '../data.js?v=rf856e1bc4599';
-import { TAU, clamp, rrect } from '../engine.js?v=rf856e1bc4599';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rf856e1bc4599';
-import { stanceIcon } from './render-units.js?v=rf856e1bc4599';
+import { HERO, BALANCE, enemyStrength, playerStrength, weightText } from '../data.js?v=r040c1e5b1560';
+import { TAU, clamp, rrect } from '../engine.js?v=r040c1e5b1560';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=r040c1e5b1560';
+import { stanceIcon } from './render-units.js?v=r040c1e5b1560';
 
 // Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
 // viewport shows about a third of the field, and squad balloons already collapse below
@@ -355,30 +355,26 @@ export function drawHud(battle, ctx) {
     ctx.globalAlpha = 1;
   }
 
-  // deploy countdown: set your line while they form theirs
-  if (battle.state === 'fight' && battle.deployT > 0) {
+  // Plan 033: the deployment phase's instruction panel. The fight is paused — no countdown
+  // and no bar; the phase ends when the player sounds the advance. Same measured-two-line
+  // layout the old countdown used, for the same spill reason its comment recorded.
+  if (battle.state === 'deploy') {
     ctx.globalAlpha = 0.92;
     ctx.fillStyle = P.ink;
-    // Two measured lines. This was one 15px line of ~629px drawn into a hardcoded 460px
-    // panel, so it spilled ~85px off both ends onto the battlefield in every battle.
-    const headline = `They advance in ${Math.ceil(battle.deployT)}`;
-    const detail = 'position your men — 1 follow · 3 hold · 2 or a swing attacks NOW';
+    const headline = 'FORM YOUR LINE';
+    const detail = 'drag a man to place him · 1 follow 2 charge 3 hold · E sounds the advance';
     ctx.font = '800 15px Inter, system-ui, sans-serif';
     const headlineW = ctx.measureText(headline).width;
     ctx.font = '700 13px Inter, system-ui, sans-serif';
     const detailW = ctx.measureText(detail).width;
     const dw = Math.min(W - 40, Math.max(320, Math.max(headlineW, detailW) + 44));
-    rrect(ctx, W / 2 - dw / 2, 64, dw, 62, 10); ctx.fill();
+    rrect(ctx, W / 2 - dw / 2, 64, dw, 52, 10); ctx.fill();
     ctx.fillStyle = P.hero;
     ctx.textAlign = 'center';
     ctx.font = '800 15px Inter, system-ui, sans-serif';
-    ctx.fillText(headline, W / 2, 82);
+    ctx.fillText(headline, W / 2, 84);
     ctx.font = '700 13px Inter, system-ui, sans-serif';
-    ctx.fillText(detail, W / 2, 100);
-    ctx.fillStyle = P.hpBack;
-    rrect(ctx, W / 2 - dw / 2 + 16, 112, dw - 32, 6, 3); ctx.fill();
-    ctx.fillStyle = P.hero;
-    rrect(ctx, W / 2 - dw / 2 + 16, 112, (dw - 32) * (battle.deployT / battle.deployMax), 6, 3); ctx.fill();
+    ctx.fillText(detail, W / 2, 103);
     ctx.globalAlpha = 1;
   }
 

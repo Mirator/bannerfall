@@ -1,6 +1,6 @@
 // Shared engine: math, RNG, input, camera, particles, flat-shaded drawing helpers.
 // Audio lives in src/audio.js and imports from here; never the other way round.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=rf856e1bc4599';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r040c1e5b1560';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -89,7 +89,10 @@ export class Input {
     window.addEventListener('mouseup', e => { if (e.button === 0) this.mouse.down = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
   }
-  clear() { this.keys.clear(); this.pressed.clear(); this.actionKeys.clear(); this.actionPressed.clear(); }
+  // mouse.down is reset here for the same lost-event reason as the keys above: an unfocused
+  // window receives no mouseup, so a button held across alt-tab would otherwise stay "down"
+  // forever — which pinned a Plan 033 deployment drag to the cursor with no button held.
+  clear() { this.keys.clear(); this.pressed.clear(); this.actionKeys.clear(); this.actionPressed.clear(); this.mouse.down = false; }
   endFrame() { this.pressed.clear(); this.actionPressed.clear(); this.mouse.clicked = false; this.mouse.moved = false; }
   // test API injection
   injectKey(code, down) {
