@@ -84,7 +84,7 @@ export const SHADOW = { dx: 0.55, dy: 0.38 }; // hard shadow direction (unit len
 export const UNIT_TYPES = {
   spear: {
     name: 'Spearman', plural: 'spearmen', icon: 'spear',
-    role: 'Holds the line — braced, they gut whatever charges them',
+    role: 'Holds the line — braced, they gut whatever charges into their front',
     hp: 100, dmg: 12, range: 30, speed: 105, radius: 10,
     cooldown: 1.05, cost: 15, slots: 1,
   },

@@ -6,9 +6,9 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r040c1e5b1560';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r040c1e5b1560';
-import { ACTIONS } from '../input-actions.js?v=r040c1e5b1560';
+import { HERO } from '../data.js?v=r866af952ef00';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r866af952ef00';
+import { ACTIONS } from '../input-actions.js?v=r866af952ef00';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
   BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
@@ -16,8 +16,8 @@ import {
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
   FRONT_ARC, FLANK_BONUS,
-} from './constants.js?v=r040c1e5b1560';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r040c1e5b1560';
+} from './constants.js?v=r866af952ef00';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r866af952ef00';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -45,26 +45,41 @@ function decayRush(unit, dt) {
 // dot product against cos(FRONT_ARC) rather than an angle difference: it is the same test
 // without an atan2 or a wrap-around, and it runs on every landed melee blow.
 const FRONT_ARC_COS = Math.cos(FRONT_ARC);
-function inFrontArc(defender, x, y) {
-  const dx = x - defender.x, dy = y - defender.y;
+// Is the point (x, y) inside `body`'s front cone? Callers pass whichever body's LOOK matters
+// to their rule — the defender for the flank multiplier, the bracing striker for the brace
+// gate — so the parameter is named for the geometry, not for a combat role.
+function inFrontArc(body, x, y) {
+  const dx = x - body.x, dy = y - body.y;
   const d = len(dx, dy);
   if (d <= 0) return true; // exactly co-located: there is no direction to be behind
-  return (Math.cos(defender.facing) * dx + Math.sin(defender.facing) * dy) / d >= FRONT_ARC_COS;
+  return (Math.cos(body.facing) * dx + Math.sin(body.facing) * dy) / d >= FRONT_ARC_COS;
 }
-// What a MELEE blow from (x, y) is worth against this body. See the FRONT_ARC block in
+// What a MELEE blow from (x, y) is worth against this defender. See the FRONT_ARC block in
 // constants.js for why arrows, the brute's slam and the hero are all outside the rule, and
 // why both sides read FLANK_BONUS — the constant — rather than anything a perk can move.
-function flankMul(defender, x, y) {
+// The hero exemption lives HERE, not at call sites: his facing comes from the cursor
+// through Camera.toWorld, and a call site that forgot a ternary would put fight outcomes
+// back under the mouse — the defect `battle outcomes are independent of canvas size and
+// cursor position` exists to catch.
+function flankMul(battle, defender, x, y) {
+  if (defender === battle.hero) return 1;
   return inFrontArc(defender, x, y) ? 1 : FLANK_BONUS;
 }
 
-// What a set line is entitled to against this body, right now. Plan 032: only a rush that
-// came in through the bracing body's own front arc counts — a line cannot brace against what
-// reaches it from behind. Same cone as the flank above, because it is the same claim about
-// where a man is looking when the blow arrives.
-function braceMul(battle, unit, target) {
-  if ((target.rushT || 0) <= 0) return 1;
-  return inFrontArc(unit, target.x, target.y) ? battle.braceBonus : 1;
+// What a set line is entitled to against this body, right now — ONE function for both
+// sides (Plan 027's symmetry rule): the two real differences are parameters, not a second
+// implementation. `rushed` defaults to the troop latch; the enemy site passes its own
+// hero-velocity clause. `bonus` defaults to the player's perk-adjusted value; the enemy
+// site passes the CONSTANT, never the player's Set Spears value.
+// Plan 032: only a rush that came in through the bracing body's own front arc counts — a
+// line cannot brace against what reaches it from behind. In practice the striker has
+// usually lerped onto its target well before its cooldown lets the blow land, so this gate
+// prices only the fast target-switch: the blow that lands within a few ticks of a >110°
+// turn. That narrowness is accepted — the gate exists so the claim "braced" is never paid
+// against a body the striker is not actually set toward at the moment of the swing.
+function braceMul(battle, unit, target, rushed = (target.rushT || 0) > 0, bonus = battle.braceBonus) {
+  if (!rushed) return 1;
+  return inFrontArc(unit, target.x, target.y) ? bonus : 1;
 }
 // Plan 029: a declared per-type counter (UNIT_TYPES[x].bonusVs), not a special case on a
 // type name. `battle.bruteBonus` lets the Bodkin Points perk deepen the archer's without
@@ -535,7 +550,7 @@ export function updateTroopPhase(battle, dt, h) {
           // the blow lands rather than when it was decided, because that is when the two
           // facings are real.
           battle.damageEnemy(engage,
-            dmg * bonusVersus(battle, t, engage.type, stance === 'hold') * flankMul(engage, t.x, t.y),
+            dmg * bonusVersus(battle, t, engage.type, stance === 'hold') * flankMul(battle, engage, t.x, t.y),
             Math.cos(t.facing) * 85, Math.sin(t.facing) * 85, 'troop');
         }
       }
@@ -656,15 +671,16 @@ export function updateEnemyPhase(battle, dt, h) {
             // mechanic from bracing against one man, and a 1.8x brute slam is a lethality
             // change, which is exactly what the audit measured and rejected. The enemy
             // uses the CONSTANT bonus, never the player's Set Spears perk value.
-            // Plan 032 adds the front-arc gate here on exactly the same terms as the player's
-            // line: a held enemy that has been reached from behind is not braced against it.
-            const braced = stance === 'hold' && inFrontArc(e, to.x, to.y) &&
-              ((to.rushT || 0) > 0 || (tgt.isHero && len(to.vx, to.vy) > BRACE_SPEED)) ? BRACE_BONUS : 1;
-            // And the flank multiplier, mirroring the troop path. The hero is exempt in both
-            // directions — his facing is the cursor, and fight outcomes must not read it (see
-            // the FRONT_ARC block in constants.js).
-            const flank = tgt.isHero ? 1 : flankMul(to, e.x, e.y);
-            battle.damageFriendly(to, tgt.isHero, e.d.dmg * braced * flank, e);
+            // Plan 032: the same braceMul as the player's line (one function, both sides),
+            // with the enemy's two differences passed as arguments — its own rush read
+            // (latch OR the hero's live velocity) and the CONSTANT bonus.
+            const braced = stance === 'hold'
+              ? braceMul(battle, e, to,
+                  (to.rushT || 0) > 0 || (tgt.isHero && len(to.vx, to.vy) > BRACE_SPEED), BRACE_BONUS)
+              : 1;
+            // And the flank multiplier, mirroring the troop path; flankMul itself exempts
+            // the hero (his facing is the cursor, and fight outcomes must not read it).
+            battle.damageFriendly(to, tgt.isHero, e.d.dmg * braced * flankMul(battle, to, e.x, e.y), e);
             if (!tgt.isHero) { to.vx += Math.cos(e.facing) * 85; to.vy += Math.sin(e.facing) * 85; }
             // Hit and run: a stalking wolf that has bitten breaks off rather than staying
             // in reach of the spear line. Only ever set while its squad is holding, so a

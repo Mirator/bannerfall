@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r040c1e5b1560';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r866af952ef00';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -115,19 +115,25 @@ export const BRACE_BONUS = 1.8;
 // moves either one — deliberately: the flank is geometry, and a perk that made the player's
 // own back safer would be the flat aura Plan 029's perk rule forbids.
 //
-// Measured on the 120-raid camp-raid sweep in stance-balance.spec.js, idle / chargeAll /
-// split win %: 69 / 68 / 45 before, 68 / 68 / 48 after. Idle did NOT rise, which was the
-// failure mode this slice was watching for — both sides surround, and a camp garrison
-// outnumbers the warband, so the extra second-man-on-a-defender blows land on the player at
-// least as often as on the enemy. Split gained three points, chargeAll held, and the best
-// deliberate policy went from one point behind pressing nothing to level with it.
+// Measured on the 120-raid camp-raid sweep in stance-balance.spec.js, against PRE-033 main
+// (the deployment phase landed while this slice was in flight), idle / chargeAll / split
+// win %: 69 / 68 / 45 before, 68 / 68 / 48 after. Idle did NOT rise, which was the failure
+// mode this slice was watching for — both sides surround, and a camp garrison outnumbers
+// the warband, so the extra second-man-on-a-defender blows land on the player at least as
+// often as on the enemy. 1.60 was probed then and REJECTED: it flipped the sweep's (then
+// expected-failure) assertion on one point of idle erosion while commanding was unchanged
+// between the two values — the constant had to earn its value, not the assertion. Combined
+// with Plan 033 (troops deploy formed and hold by default), the sweep reads 51 / 59 / 38,
+// twice, digit for digit: the post-033 guard (best deliberate policy beats idle) holds with
+// the arcs live, and split — the mixed-order policy — is where the flank pays the most.
 //
-// 1.60 was probed and REJECTED, and the reason is why 1.35 stands: at 1.60 the sweep reads
-// 67 / 68 / 43, so `chargeAll` clears `idle` by one point and the @sweep assertion passes.
-// But commanding did not get better — chargeAll is 68 at both values, and split is five
-// points WORSE. The whole crossing is one point of erosion on the idle number, which is
-// inside the noise of 120 raids, and picking the constant that produces it is choosing a
-// value to satisfy an assertion. The annotation stays; see plans/032.
+// Two accepted properties of the shipped rule, priced here so a retune reads them:
+//   * The multipliers STACK: a braced blow on a charging body reached from behind is
+//     bonus x FLANK_BONUS x CHARGE_EXPOSURE = 1.8 x 1.35 x 1.35 ~ 3.28x — the most
+//     punishing single blow in the game. Moving either 1.35 moves that ceiling.
+//   * updateTroopPhase runs before updateEnemyPhase, so a troop's facing is one lerp step
+//     fresher when the enemy tests it than an enemy's is when a troop tests it — a small
+//     fixed asymmetry inside the frame, bounded by one tick's 6-12.5% turn.
 export const FRONT_ARC = 110 * Math.PI / 180;
 export const FLANK_BONUS = 1.35;
 // How far from the hero the Warlord perk's dash rally reaches (plans/029). Wider than the

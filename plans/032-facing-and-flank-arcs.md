@@ -208,3 +208,27 @@ The progression of this finding across the five plans that have attacked it:
   seed-by-seed comparison is what would settle it — but it is a separate change to a scratch
   harness rather than something to fold into a gameplay slice.
 - **No flank affordance in the HUD or the renderer.** See Out of scope.
+
+## Post-merge (Plan 033 underneath, review pass applied)
+
+Plan 033's deployment phase merged under this slice and resolved the
+orders-vs-idle finding on its own (idle 49 / chargeAll 60 without the arcs), so
+the sweep assertion this plan measured against is a hard guard now, not an
+expected failure. With the arcs live on top of the deployment phase the guard
+holds: 51 / 59 / 38 (idle / chargeAll / split), measured twice digit for digit,
+both before and after the review fixes — expected, because the camp-raid sweep
+drives E-approach fights only and the review's facing fixes are identity
+operations on 'E'. Split rose from 34 to 38 with the arcs live: the mixed-order
+policy is where the flank pays most.
+
+A ten-finding review pass (eight angles, per-candidate verification) landed on
+the merged branch: troop and ambush-enemy facing were still hardcoded east/west
+(a deterministic 1.35x opening tax on three of four approaches, and a backwards
+deployment tableau); the hero exemption moved inside flankMul and gained the
+fixture that guards it; the enemy brace routes through the one braceMul; the
+FRONT_ARC width gained a 90-vs-130-degree bracket fixture; the spear role and
+Set Spears strings now name the front-arc condition; and every stale
+"annotation stays" sentence was reworded to the merged reality. One finding was
+accepted rather than changed: the brace's arc gate is nearly unreachable in
+live play (a striker lerps onto its target before its cooldown lands the blow)
+and its comment now says so.

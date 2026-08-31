@@ -933,7 +933,8 @@ Measured on the 120-raid camp-raid sweep, idle / chargeAll / split: 69 / 68 / 45
 failure mode being watched for - both sides encircle, but a camp garrison outnumbers the
 warband, so the extra blows land on the player at least as often as on the enemy, and no
 gating was needed. The best deliberate policy went from one point behind pressing nothing to
-level with it. A tie is not a strict inequality, so the `test.fail` annotation stays; its
+level with it. A tie is not a strict inequality, so the `test.fail` annotation stayed at
+that point (Plan 033, merged underneath this slice, later resolved it and removed it); its
 comment block carries the numbers.
 
 `FLANK_BONUS = 1.60` was probed and rejected. It makes the assertion pass (67 / 68 / 43,
@@ -954,3 +955,19 @@ different checkout already held it, so every spec ran against another tree's fil
 reading this one's assertions. Against a server pinned to this worktree the pre-change gate is
 181/181 and the post-change gate is 185/185. Check what 8474 is actually serving before
 believing a number taken from it.
+
+## Plan 032 merged onto Plan 033, reviewed, and the combined guard holds (2026-08-31)
+
+The facing/flank branch merged main (deployment phase) and took a ten-finding
+review pass: troop facing was hardcoded east (deterministic 1.35x opening flank
+tax on W/N/S approaches, deployment tableau drawn backwards) and ambush-enemy
+facing hardcoded west — both now derive from the approach axis; the hero flank
+exemption moved inside flankMul with a fixture that fails if it is deleted; the
+enemy brace routes through the one braceMul; two new fixtures pin the hero
+exemption and bracket FRONT_ARC between 90 and 130 degrees; the spear role and
+Set Spears texts now name the front-arc condition; four documents' stale
+"annotation stays" prose was reconciled to Plan 033's resolution. Gate 187/188
+(the one failure is battle-break.png, the documented Windows-only drift — the
+CI container passes 24/24). Sweep with arcs live on the deployment phase:
+idle 51 / chargeAll 59 / split 38, twice, digit for digit — the post-033 guard
+holds, and split is where the flank pays most (34 -> 38).

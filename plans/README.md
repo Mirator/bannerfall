@@ -45,7 +45,7 @@ conditions, and update its status row when done.
 | 027 | Give the enemy a commander, so the player's orders have something to answer | P0 | L | 019, 024 | STOPPED on its own condition — shipped as structure, see plan |
 | 028 | Rebase the encounter generator on measured combat power | P0 | L | 020, 021, 027 | DONE — premise corrected by measurement, see plan |
 | 029 | Unit identity, and something to build between fights | P0 | XL | 019, 021, 027, 028 | DONE — one self-inflicted regression measured and closed inside the slice, see plan |
-| 032 | Make where a man is standing worth something | P0 | M | 019, 027, 029 | DONE as a mechanic, not as the fix — margin back to zero, annotation stays, see plan |
+| 032 | Make where a man is standing worth something | P0 | M | 019, 027, 029 | DONE — measured a tie pre-033; combined with Plan 033 the sweep guard holds, see plan |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
@@ -166,7 +166,7 @@ mechanic to command for. A melee blow from outside a body's front arc now pays `
 and a set line cannot brace against what reaches it from behind. Over the same 120 organic
 camp raids the best deliberate policy went from one point behind pressing nothing to level
 with it, and the idle win rate fell rather than rose. A tie is still not a strict inequality,
-so the `@sweep` annotation stays — including against a `FLANK_BONUS` value that does make it
+so the then-standing `@sweep` annotation stayed at that point — including against a `FLANK_BONUS` value that did make it
 pass, which was probed and rejected because commanding is no better at that value.
 
 Plan 022 was executed from the 2026-08-20 codebase audit

@@ -38,7 +38,7 @@ const OPEN = `(g, troops, enemies) => {
     deploy: 0, approach: 'E', heroHp: 120, heroMaxHp: 120, onEnd: () => {},
   });
   const b = g.scene;
-  b.state = 'fight'; b.deployT = 0;
+  b.state = 'fight';
   g.input.injectMouse(g.camera.w / 2, g.camera.h / 2, false);
   g.camera.shakeT = 0; g.camera.shakeAmp = 0; g.camera.sx = 0; g.camera.sy = 0;
   // Out of every reach: he must not swing, be swung at, or pull a troop off its target.
@@ -218,6 +218,80 @@ test('the flank multiplier is melee only: a slam and an arrow are untouched', as
   expect(out.slam, "a brute's slam must not flank the men behind it").toBeCloseTo(out.slamDeclared, 6);
   expect(out.arrow, 'an arrow must have landed for this assertion to mean anything').not.toBeNull();
   expect(out.arrow, 'an arrow must not flank a target with its back turned').toBeCloseTo(out.arrowDeclared, 6);
+
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('the hero cannot be flanked: his facing is the cursor and must not enter a multiplier', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await bootToMenu(page);
+
+  // The third exclusion, and the load-bearing one (see the FRONT_ARC block in constants.js):
+  // deleting the hero guard inside flankMul would make hero damage a function of the mouse.
+  // The bandit stands due WEST of the hero while the hero's facing is pinned EAST — squarely
+  // outside his front arc — and the blow must still be the declared damage exactly.
+  const out = await page.evaluate(async ({ dt, EX, EY, open }) => {
+    const g = window.__g;
+    const { ENEMY_TYPES } = await import('/src/data.js');
+    const openBattle = eval(open);
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const b = openBattle(g, [], [{ type: 'bandit' }]);
+      const h = b.hero, e = b.enemies[0];
+      h.x = EX; h.y = EY; h.vx = 0; h.vy = 0;
+      h.facing = 0; h.travelFacing = 0; h.iframesT = 0;   // looking east
+      e.x = EX - 30; e.y = EY; e.vx = 0; e.vy = 0;        // striking from the west, at his back
+      e.cd = 999; e.windupT = dt / 2;
+      const hp0 = h.hp;
+      real(dt);
+      return { dealt: hp0 - h.hp, declared: ENEMY_TYPES.bandit.dmg };
+    } finally { g.update = real; }
+  }, { dt: DT, EX, EY, open: OPEN });
+
+  expect(out.dealt, 'a blow at the hero\'s back must be the declared damage — never a flank')
+    .toBeCloseTo(out.declared, 6);
+
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('the arc boundary sits between 90 and 130 degrees off the facing', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await bootToMenu(page);
+
+  // The four fixtures above all test 0 versus 180 degrees, which any arc width in (0, 180)
+  // satisfies — so nothing pinned FRONT_ARC itself. Two probes bracket the shipped 110: a
+  // blow arriving 90 degrees off the defender's facing is front (declared damage), one 130
+  // degrees off is a flank. A retune of FRONT_ARC outside (90, 130) — or an inverted
+  // comparison — fails one of the two.
+  const out = await page.evaluate(async ({ dt, EX, EY, open }) => {
+    const g = window.__g;
+    const { UNIT_TYPES } = await import('/src/data.js');
+    const { FLANK_BONUS } = await import('/src/battle/constants.js');
+    const openBattle = eval(open);
+    const real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const run = (offDeg) => {
+        const b = openBattle(g, [{ type: 'spear' }], [{ type: 'bandit' }]);
+        const t = b.troops[0], e = b.enemies[0];
+        e.x = EX; e.y = EY; e.vx = 0; e.vy = 0;
+        e.cd = 999; e.windupT = 0;
+        e.facing = Math.PI; // looking west; the attacker's bearing is measured off this
+        const bearing = Math.PI - offDeg * Math.PI / 180;
+        t.x = EX + Math.cos(bearing) * 30; t.y = EY + Math.sin(bearing) * 30;
+        t.vx = 0; t.vy = 0; t.cd = 0;
+        t.facing = Math.atan2(EY - t.y, EX - t.x);
+        const hp0 = e.hp;
+        real(dt);
+        return hp0 - e.hp;
+      };
+      return { at90: run(90), at130: run(130), declared: UNIT_TYPES.spear.dmg, bonus: FLANK_BONUS };
+    } finally { g.update = real; }
+  }, { dt: DT, EX, EY, open: OPEN });
+
+  expect(out.at90, '90 degrees off the facing is inside the front arc').toBeCloseTo(out.declared, 6);
+  expect(out.at130 / out.at90, '130 degrees off the facing is a flank').toBeCloseTo(out.bonus, 6);
 
   assertNoRuntimeErrors(runtimeErrors);
 });

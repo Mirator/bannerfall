@@ -741,15 +741,17 @@ from the final save (`buildSummaryModel`).
 ## Expected failures and test debt
 
 The campaign spec has AUDIT-02, AUDIT-03 and AUDIT-05 as normal passing
-regressions. The one active `test.fail` annotation in the suite is `deliberate
-orders beat giving no order at all` in `tests/e2e/stance-balance.spec.js`, which
-records the measured finding that Plan 019's premise is not met: over organic camp
-raids, pressing no order wins more often than any deliberate squad order. Remove
-that annotation only when commanding actually beats not commanding, and remove it
-in the same change that makes it true. An unexpected pass is useful drift that
-signals the test debt is ready to retire; never weaken the assertion or add a skip
-to make the gate green. Expected failures are always `test.fail` with a plan or
-finding reference — never `skip` or `fixme`.
+regressions. The suite currently carries NO active `test.fail` annotation.
+`deliberate orders beat giving no order at all` in
+`tests/e2e/stance-balance.spec.js` carried one from Plan 019 to Plan 033,
+recording the measured finding that pressing no order won more often than any
+deliberate squad order; Plan 033's deployment phase resolved it (idle 49% against
+chargeAll 60%, replayed digit for digit across two runs) and the annotation came
+off in the same change, on its own stated terms. The assertion is a hard guard
+now: a change that makes the idle default the best policy again fails the sweep,
+and it must never be weakened or skipped to make that gate green. Expected
+failures are always `test.fail` with a plan or finding reference — never `skip`
+or `fixme`.
 
 Plan 027 attacked that finding from the other side (an enemy commander rather than more
 player affordances) and **did not** overturn it, so the annotation stays. It did close the
@@ -761,16 +763,18 @@ for the full before/after table and plans/027 for why the idle win rate did not 
 Plan 032 (facing and flank arcs) produced the second tie. Over the same 120 organic camp
 raids: idle 69 -> 68, chargeAll 68 -> 68, split 45 -> 48, so the best deliberate policy went
 from one point behind pressing nothing to level with it, and the idle rate FELL rather than
-rose. Both figures replayed digit for digit across two runs. The annotation stays, and it
-stays even though a `FLANK_BONUS` of 1.60 does make the assertion pass — commanding is
-unchanged between the two values and the crossing is one point of erosion on idle, so the
-value that flips the test was rejected rather than shipped. `plans/032-facing-and-flank-arcs.md`
+rose. Both figures replayed digit for digit across two runs. Those numbers predate Plan 033
+(the annotation still stood when they were taken), and the 1.60 probe belongs to that era:
+a `FLANK_BONUS` of 1.60 made the then-expected-failure pass on one point of idle erosion
+while commanding was unchanged between the two values, so the value that flipped the test
+was rejected rather than shipped — the constant had to earn its value, not the assertion.
+`plans/032-facing-and-flank-arcs.md`
 carries the tables and the reasoning.
 
 That sweep is also the most expensive test in the repository, so it is tagged
 `@sweep` and split out of the `chromium` project the PR gate runs. `npm test`
 no longer runs it; `Balance sweep` (`.github/workflows/balance-sweep.yml`) and
-`npm run test:balance` do, and both keep the `test.fail` annotation. Splitting
+`npm run test:balance` do, and both run its assertion as the hard guard it is. Splitting
 it out is not permission to stop reading it: check that run whenever a change
 touches stance behaviour, squad orders or battle balance.
 
