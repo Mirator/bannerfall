@@ -1061,6 +1061,88 @@ ever closes; 3/3 seeds ran the full 95s window with every surviving enemy at ful
 points. `STALL_NO_DEATH` arms `bloodlust` and `bloodlust` orders the enemy in, but
 nothing makes it able to. Same mechanism as the 39% idle stall rate above.
 
+## Plan 036: initiative reads who closed, not just who intended to (2026-09-01)
+
+`World.tryClash()` classified a fight's initiative off `p.mood` alone -
+`ambushed = p.mood === 'chase'` - and `p.mood` only ever records a roaming
+party's INTENT to intercept (set whenever its fighting weight is at least
+0.75x the hero's and it is inside the 430/560px detection radius), never
+whether the hero actually let it close. Every encounter with a party worth
+fighting therefore read AMBUSHED!, including the case the comment above
+`tryClash` names as a third outcome - "a mutual field meeting" - which was
+unreachable for a roaming party. That mislabeling was not cosmetic:
+`Battle` reads `setup.ambush` for both the FLANK_GAP pincer spawn and to
+gate the whole Plan 033 deployment phase off (`deployEnabled = !setup.ambush
+&& ...`), while the same descriptor's `deploy: undefined` already said
+"deployment phase runs." Per Plan 033's own measurement that phase is worth
+roughly 11 points of win rate (idle 49% vs chargeAll 60%), so riding a
+worthwhile party down on purpose was quietly costing the player the
+deployment phase every time.
+
+Fixed by reading whether the hero is closing on the party, not just its
+mood: `heroClosingSpeed` is the hero's velocity resolved onto the unit
+vector from hero to party, and `ambushed = p.mood === 'chase' &&
+heroClosingSpeed <= BALANCE.worldWakeSpeed`. The threshold is the same
+40px/s `timeFlowing()` already uses to mean "meaningfully in motion," reused
+rather than invented: by Cauchy-Schwarz a velocity's component along any
+unit vector can never exceed its own magnitude, so on any tick where raw
+hero speed is below that threshold - which is every frozen tick, since
+`timeFlowing()` gates on exactly that comparison - `heroClosingSpeed` can
+never cross it either. A party that runs a stopped hero down still reads as
+an ambush, by construction, which is what Plan 023's frozen-tick clash seam
+requires and was the one thing worth verifying rather than assuming.
+
+The `world_brief` `'party'` fixture in `main.js` placed the party at the
+hero's own coordinates on a parked hero (`keepAwake`, which fakes
+`heroSpeed` for the freeze gate but never touches `hero.vx/vy`) - under the
+new rule that can no longer produce the mutual case it is documented as.
+Fixed by offsetting the party 20px east (still inside `tryClash`'s 46px
+clash radius) and setting `hero.vx = 220` toward it for that one setup
+tick; `'ambush'` and `'partyFlee'` are untouched; both stay on a stationary
+hero on purpose (an ambush must still resolve at zero velocity, and a
+fleeing party's mood is never `'chase'`).
+
+`caughtThem`/`canWithdraw` (Plan 021 decision 5: a mutual skirmish stays
+committed) were not touched, and the RNG draw order in `battle.js`'s enemy
+scatter loop was left alone.
+
+Coverage: `tests/e2e/world-screens.spec.js`'s withdraw-offer test now also
+asserts `title`/`ambush` (previously only `canWithdraw`, which is `false`
+for both an ambush and a mutual skirmish, so the wrong pairing on `'party'`
+was invisible to it). A new test drives a real `'world'` scenario with a
+REAL held `moveDown` input - not `keepAwake`, not a hand-set position - into
+a 1.0x-weight chasing party 300px south of 1600,900 and asserts `title:
+'BANDIT SKIRMISH'`, `ambush: false`, `canWithdraw: false`; before the fix the
+clash still resolves but reads `AMBUSHED!`/`ambush: true`. The first draft
+rode the hero EAST instead and failed its own `party.mood === 'chase'` sanity
+check, not the assertions it was meant to exercise - a second, distinct
+initiative-classification gap, recorded below rather than folded into this
+fix. `npm run release:cache` / `npm run test:release` and the full `npm test`
+gate: 191 passed, 1 failed - the pre-existing `battle-break.png` Windows-only
+rasterization drift already on record from Plan 035 (reconfirmed here by
+stashing this change and watching the same diff on a clean tree). Full record
+in `plans/036-initiative-reads-who-closed.md`.
+
+Found, not fixed, while chasing the eastward test failure above: `tryClash()`'s
+`canClash` blocks near a settlement with `nearSettlement(130)`, but the party
+AI's `engaged` flag (the thing that gates its whole chase/flee/mood branch)
+checks `inSafeZone`, which uses `BALANCE.settlementSafeR` = 260. In the
+130-260px annulus around any settlement, `heroSafe` is true so `engaged` is
+false, so the mood branch is skipped and `p.mood` is wiped to `null` every
+tick - but `canClash` only checks the tighter 130px radius, so a party
+already within 46px still starts a fight. That fight always resolves as a
+plain `BANDIT SKIRMISH` (both `ambushed` and `caughtThem` false, mood being
+null), regardless of who actually closed the distance. Measured: hero ridden
+east from 1600,900 into a 1.0x party, mood reads `'chase'` ticks 10-100 while
+distance closes 280px to 69px, then flips to `null` at tick ~110 (hero at
+~2014,900, 252.6px from Highmere at 2050,1150 - inside its 260px radius,
+outside the 130px one) and stays `null` through the clash at tick 113. The
+comment at `src/world.js:720` ("sanctuary stops FIGHTING near a settlement")
+is contradicted - fighting still starts there, just always misclassified.
+Same family of defect as this slice, different mechanism (a radius mismatch,
+not a mood/velocity conflation); out of scope here, recorded in
+`plans/036-initiative-reads-who-closed.md`.
+
 ## Plan 037: one sanctuary radius (2026-09-01)
 
 Reported out of Plan 036's "Found, not fixed" section: `World.tryClash()` blocked a clash
@@ -1109,10 +1191,14 @@ brief fails there. The 320px control keeps the test honest: the same fixture mus
 and still read `AMBUSHED!` with `ambush: true`, so a change that stopped every clash
 everywhere would not pass.
 
-Gate 190/191. The one failure is `battle-break.png` at 13876 differing pixels (ratio 0.02),
-the documented Windows-only font drift: re-running that single spec with the `canClash` line
-reverted to the 130px literal fails with the identical pixel count, so it is independent of
-this change. `test:tooling` 15/15, `release:cache`/`test:release` verified at `re622d3d3cf30`.
+Gate 191/192 on the merged tree, 190/191 before the merge. The one failure both times is
+`battle-break.png` at 13876 differing pixels (ratio 0.02), the documented Windows-only font
+drift: re-running that single spec with the `canClash` line reverted to the 130px literal
+fails with the identical pixel count, so it is independent of this change. `test:tooling`
+15/15, `release:cache`/`test:release` verified at `rbf9ac38b53d8`. Plan 036 landed on main
+mid-slice and was merged in before shipping; it conflicted ONLY on the shared release-cache
+token (29 files, one import hunk each), and `world-screens.spec.js` took both slices' new
+tests with no conflict at all.
 The `@sweep` balance check passes and reproduces the recorded baseline to the digit - idle 53 /
 chargeAll 60 / split 37 over 120 raids per policy - which is the expected result rather than a
 missed effect: the sweep drives camp raids, and every camp sits more than 260px from every

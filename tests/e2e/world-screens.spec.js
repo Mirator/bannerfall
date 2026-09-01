@@ -206,14 +206,83 @@ test('withdraw is offered only for camp/stronghold assault and a fleeing party, 
     results[kind] = await page.evaluate((k) => {
       window.game.scenario('world_brief', { kind: k, seed: 424242 });
       const world = window.__g.scene;
-      return { screenKind: world.screen && world.screen.kind, canWithdraw: !!(world.screen && world.screen.canWithdraw) };
+      const d = world.pending && world.pending.descriptor;
+      return {
+        screenKind: world.screen && world.screen.kind,
+        canWithdraw: !!(world.screen && world.screen.canWithdraw),
+        title: d && d.title,
+        ambush: !!(d && d.ambush),
+      };
     }, kind);
   }
-  expect(results.campScouted).toEqual({ screenKind: 'brief', canWithdraw: true });
-  expect(results.stronghold).toEqual({ screenKind: 'brief', canWithdraw: true });
-  expect(results.partyFlee).toEqual({ screenKind: 'brief', canWithdraw: true });
-  expect(results.ambush).toEqual({ screenKind: 'brief', canWithdraw: false });
-  expect(results.party).toEqual({ screenKind: 'brief', canWithdraw: false });
+  expect(results.campScouted).toEqual({ screenKind: 'brief', canWithdraw: true, title: 'RAID THE CAMP', ambush: false });
+  expect(results.stronghold).toEqual({ screenKind: 'brief', canWithdraw: true, title: 'ASSAULT ON WOLFSJAW HOLD', ambush: false });
+  expect(results.partyFlee).toEqual({ screenKind: 'brief', canWithdraw: true, title: 'RUN THEM DOWN!', ambush: false });
+  expect(results.ambush).toEqual({ screenKind: 'brief', canWithdraw: false, title: 'AMBUSHED!', ambush: true });
+  // Plan 036: 'party' rides the hero straight at a chasing party (see the world_brief
+  // fixture in main.js) — mood alone used to read this as an ambush every time a party
+  // worth fighting was worth chasing. Nothing guarded `.title`/`.ambush` before this;
+  // only `canWithdraw` (false either way) was asserted, so the misclassification was
+  // invisible here.
+  expect(results.party).toEqual({ screenKind: 'brief', canWithdraw: false, title: 'BANDIT SKIRMISH', ambush: false });
+  expect(runtimeErrors).toEqual([]);
+});
+
+// Plan 036: `tryClash()` used to classify initiative off `p.mood` alone — 'chase' meant
+// AMBUSHED! even when the player rode the party down deliberately, because mood only
+// ever recorded the party's INTENT to intercept, never who actually closed the distance.
+// This test drives the hero with a REAL held movement input (not keepAwake, not a
+// hand-set position) straight at a party worth chasing, so the fix has to read a genuine
+// approach through production physics, not a fixture shortcut.
+test('riding straight into a chasing party is a mutual skirmish, not an ambush', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const result = await page.evaluate(() => {
+    window.game.scenario('world', { seed: 424242 });
+    const g = window.__g, world = g.scene;
+    // 1600,900 away from every settlement's canClash-blocking safe zone, same spot the
+    // world_brief fixture uses. Approach from due NORTH (not east): Highmere sits at
+    // 2050,1150, only ~250px off an eastward path's endpoint, inside its 260px
+    // BALANCE.settlementSafeR — riding east into that radius flips `engaged` false
+    // mid-approach and the party's mood back to null before the clash resolves, which
+    // would test the wrong thing (a null-mood coincidence, not the closing-velocity
+    // fix). Every settlement sits comfortably clear of a short run south from here.
+    world.hero.x = 1600; world.hero.y = 900;
+    const mine = world.myStrength();
+    world.parties.length = 0;
+    // 300px south, within the 430px detection radius, at 1.0x the hero's fighting
+    // weight — the bug report's own measured band (0.8x-1.6x) all misread as an
+    // ambush under the old rule. moveDown alone closes on it in a straight line, so
+    // the hero's velocity has an unambiguous positive component toward the party.
+    const per = world.strength(['bandit']);
+    const comp = Array.from({ length: Math.max(1, Math.round(mine / per)) }, () => 'bandit');
+    const party = {
+      camp: 'c1', x: world.hero.x, y: world.hero.y + 300, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp, home: { x: world.hero.x, y: world.hero.y + 300 }, wander: null, wanderT: 999,
+      waryT: 0, clashT: 0, occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+      _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+    };
+    world.parties.push(party);
+    world.grace = 0;
+    window.game.action('moveDown', true);
+    let ticks = 0;
+    while (!world.screen && ticks < 300) { g.update(1 / 60); ticks++; }
+    window.game.action('moveDown', false);
+    const d = world.pending && world.pending.descriptor;
+    return {
+      screenKind: world.screen && world.screen.kind,
+      moodWasChase: party.mood === 'chase',
+      title: d && d.title,
+      ambush: !!(d && d.ambush),
+      canWithdraw: !!(d && d.canWithdraw),
+      ticks,
+    };
+  });
+  expect(result.screenKind).toBe('brief'); // sanity: the clash actually resolved
+  expect(result.moodWasChase).toBe(true); // sanity: this really is the case mood alone misreads
+  expect(result.title).toBe('BANDIT SKIRMISH');
+  expect(result.ambush).toBe(false);
+  expect(result.canWithdraw).toBe(false); // mutual is still committed (Plan 021 decision 5)
   expect(runtimeErrors).toEqual([]);
 });
 

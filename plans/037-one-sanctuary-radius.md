@@ -2,11 +2,13 @@
 
 STATUS: SHIPPED (2026-09-01).
 
-Numbered 037 rather than 036 because `plans/036-initiative-reads-who-closed.md`
-is in flight on a parallel branch and is where this defect was reported (its
-"Found, not fixed" section). The two are independent: 036 changes how initiative
-is READ from `p.mood` and the hero's velocity, this one changes WHERE a clash may
-happen at all. Neither needs the other to be correct.
+Numbered 037 because `plans/036-initiative-reads-who-closed.md` was in flight on a
+parallel branch while this was written, and is where this defect was reported (its
+"Found, not fixed" section). 036 landed first (PR #27) and this branch merged it in
+before shipping. The two are independent: 036 changes how initiative is READ from
+`p.mood` and the hero's velocity, this one changes WHERE a clash may happen at all.
+Neither needs the other to be correct, and the merge of the two conflicted only on
+the shared release-cache token.
 
 ## The bug
 
@@ -116,8 +118,12 @@ window) and the safe zone now does so explicitly.
 - `tests/README.md` — the suite description and one coverage-matrix row.
 - `plans/README.md`, `progress.md` — status row and work-log entry.
 - `index.html` and every `src/` module — `npm run release:cache` rewrote the shared
-  cache token to `re622d3d3cf30`, which is why the diff touches 33 files that have no
-  other change in them.
+  cache token to `rbf9ac38b53d8`, which is why the diff touches 33 files that have no
+  other change in them. That token is also the ONLY thing the Plan 036 merge conflicted
+  on: 29 files, one hunk each, every one of them an import query string. The two real
+  code changes met in `tryClash()` without touching each other — 036 rewrote
+  `const ambushed`, this rewrote `canClash` — and `world-screens.spec.js` took both new
+  tests with no conflict at all.
 
 ## Regression coverage
 
@@ -144,17 +150,17 @@ the offset alone decides each case.
 
 ## Gate
 
-`npm test` (chromium project) 190/191. The single failure is `battle-break.png` at 13876
-differing pixels, ratio 0.02 - the documented Windows-only font drift: re-running that
-one spec with the `canClash` line reverted to the 130px literal fails with the identical
-pixel count, so it is independent of this change. `npm run test:balance` passes and
-reproduces the recorded sweep to the digit (idle 53 / chargeAll 60 / split 37 over 120
-raids per policy), which is expected rather than a missed effect - it drives camp raids,
-and the nearest camp to any settlement is 495px away, well outside the radius this slice
-moved. `npm run test:tooling` 15/15. `npm run release:cache` then `npm run test:release`
-verified at `re622d3d3cf30`. `npm run test:visual:linux` was NOT run - the Docker daemon is
-not up on this host - so CI's font container is the only place that one visual failure can
-be re-checked.
+`npm test` (chromium project) 191/192 on the merged tree, and 190/191 before Plan 036 was
+merged in. The single failure both times is `battle-break.png` at 13876 differing pixels,
+ratio 0.02 - the documented Windows-only font drift: re-running that one spec with the
+`canClash` line reverted to the 130px literal fails with the identical pixel count, so it
+is independent of this change. `npm run test:balance` passes and reproduces the recorded
+sweep to the digit (idle 53 / chargeAll 60 / split 37 over 120 raids per policy), which is
+expected rather than a missed effect - it drives camp raids, and the nearest camp to any
+settlement is 495px away, well outside the radius this slice moved. `npm run test:tooling`
+15/15. `npm run release:cache` then `npm run test:release` verified at `rbf9ac38b53d8`.
+`npm run test:visual:linux` was NOT run - the Docker daemon is not up on this host - so
+CI's font container is the only place that one visual failure can be re-checked.
 
 ## Found while working, not fixed
 
