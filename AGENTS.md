@@ -127,6 +127,21 @@ handoff, then party spawning and camera/effects maintenance finish the tick.
 Keep campaign arrays (`parties`, `save.troops`, `save.camps`) and their timers in
 those world phases; do not add a second map snapshot boundary.
 
+Settlement sanctuary: ONE radius, `BALANCE.settlementSafeR`, read through the
+single `World.inSafeZone()` predicate at both ends. Inside it a roaming party
+neither hunts the hero (`engaged` in `updateParties()`, which gates the whole
+chase/flee mood branch) nor gets a fight (`canClash` in `World.tryClash()`). An
+occupier is the only exemption, since it must stay attackable where it sits. The
+two ends used to disagree — `canClash` carried its own 130px literal — and the
+130-260px annulus fought anyway, always through the `ambushed`/`caughtThem`
+both-false fallback, because the mood branch had already stood the party down and
+wiped `p.mood` to `null` there. Do not reintroduce a second radius: a fight that
+starts where the party AI is not allowed to want one cannot report who started it.
+A village-arena battle is still reachable, but only where the settlement itself is
+the objective — a raid defense or an occupier retake — not from a roaming
+collision on the outskirts. See Plan 037 and the `one sanctuary radius` test in
+`world-screens.spec.js`.
+
 A world-scene modal genuinely pauses the campaign, not just visually covers
 it: gating the pipeline on `updateWorldScreens()` freezes `grace` for free
 (it only decays inside `updateParties()`, which never runs while a screen is

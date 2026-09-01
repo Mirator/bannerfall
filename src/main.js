@@ -1,17 +1,17 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=ra314b0d08bae';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=ra314b0d08bae';
-import { Sfx } from './audio.js?v=ra314b0d08bae';
-import { Battle } from './battle.js?v=ra314b0d08bae';
-import { World } from './world.js?v=ra314b0d08bae';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=ra314b0d08bae';
-import { FIELD } from './battle/constants.js?v=ra314b0d08bae';
-import { ACTIONS } from './input-actions.js?v=ra314b0d08bae';
-import { createWebPlatform } from './platform/web-platform.js?v=ra314b0d08bae';
-import { SaveRepository } from './persistence/save-repository.js?v=ra314b0d08bae';
-import { buildSummaryModel } from './world-screens.js?v=ra314b0d08bae';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=ra314b0d08bae';
-import { perkChoiceDue, perkMods } from './progression.js?v=ra314b0d08bae';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=re622d3d3cf30';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=re622d3d3cf30';
+import { Sfx } from './audio.js?v=re622d3d3cf30';
+import { Battle } from './battle.js?v=re622d3d3cf30';
+import { World } from './world.js?v=re622d3d3cf30';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=re622d3d3cf30';
+import { FIELD } from './battle/constants.js?v=re622d3d3cf30';
+import { ACTIONS } from './input-actions.js?v=re622d3d3cf30';
+import { createWebPlatform } from './platform/web-platform.js?v=re622d3d3cf30';
+import { SaveRepository } from './persistence/save-repository.js?v=re622d3d3cf30';
+import { buildSummaryModel } from './world-screens.js?v=re622d3d3cf30';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=re622d3d3cf30';
+import { perkChoiceDue, perkMods } from './progression.js?v=re622d3d3cf30';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -1252,7 +1252,7 @@ window.game = {
         game.input.injectAction(ACTIONS.CONFIRM, false);
       } else {
         // Away from every settlement's canClash-blocking safe zone (WORLD.heroStart
-        // itself sits ~128px from Ashford, just inside the 130px radius).
+        // itself sits ~128px from Ashford, well inside BALANCE.settlementSafeR).
         world.hero.x = 1600; world.hero.y = 900;
         const mine = world.myStrength();
         // Plan 028: these three fixtures always meant "a party at N times my strength",
@@ -1340,7 +1340,7 @@ window.game = {
       game.startWorld(null);
       const world = game.scene;
       // Away from every settlement's canClash-blocking safe zone (WORLD.heroStart
-      // itself sits ~128px from Ashford, just inside the 130px radius).
+      // itself sits ~128px from Ashford, well inside BALANCE.settlementSafeR).
       world.hero.x = 1600; world.hero.y = 900;
       world.parties.length = 0;
       world.parties.push({

@@ -151,6 +151,16 @@ assault it) always shows the real composition; the aftermath blocks every
 world phase and freezes `grace` while open, decays only after dismissal, and
 is suppressed in favor of the victory scene when `save.won`.
 
+One test in that file is about WHERE a clash may happen rather than about the
+screens: `one sanctuary radius` (Plan 037). It places a ~1.0x fighting-weight party
+on a parked hero due south of Ashford at 200px (the old 130-260px annulus, where
+`canClash`’s own 130px literal used to allow a fight the party AI had already stood
+down) and again at 320px, and asserts no screen at all in the first case — with
+`inSafeZone` true, `p.mood` null and `dh` under the 46px clash radius, so the record
+carries the mechanism and not just the symptom — and a correctly classified
+`AMBUSHED!` brief in the second. The 320px half is not optional: without it a change
+that stopped every clash everywhere would pass.
+
 Plan 030 put a third screen on that machinery: the site menu, `world.screen` of
 kind `'site'`, which is what `WORLD_PRIMARY` (E) opens next to any settlement,
 camp or the stronghold. Every settlement and camp service is a row of it, so a
@@ -645,6 +655,7 @@ errors, weaken assertions, or raise performance budgets to make CI green.
 | Veterancy earned in a won battle survives the save write and a reload | browser E2E | pass (`tests/e2e/campaign-persistence.spec.js`) |
 | The banner ceiling stops veterancy accruing, and raising it lets a man resume | browser E2E | pass (`tests/e2e/campaign-persistence.spec.js`) |
 | Perk choice modal, deferral without loss, tier gates, banner gold sink | browser E2E | pass (`tests/e2e/world-screens.spec.js`) |
+| One sanctuary radius: no clash inside `settlementSafeR`, initiative still classified outside it | browser E2E | pass (`tests/e2e/world-screens.spec.js`) |
 | Regional model (power ladder, modifiers, specializations, objective mapping) | Node-level E2E | pass (`tests/e2e/region.spec.js`) |
 | Objective placement and every terminal battle path | browser E2E | pass (`tests/e2e/battle-objectives.spec.js`) |
 | Capture/occupation/reclaim, specialization effects, raids, defenses, power states, summary | browser E2E | pass (`tests/e2e/regional-campaign.spec.js`) |

@@ -11,7 +11,7 @@
 // owns every balance table and imports nothing. This module reads it.
 //
 // Nothing here reads presentation, draws, or touches an RNG.
-import { BALANCE, MAX_RANK, VET_RANKS, rankOf, rankName } from './data.js?v=ra314b0d08bae';
+import { BALANCE, MAX_RANK, VET_RANKS, rankOf, rankName } from './data.js?v=re622d3d3cf30';
 
 // ---------------------------------------------------------------- banner
 // A CEILING rather than a bonus. `vet` stops ACCRUING at the ceiling rather than being

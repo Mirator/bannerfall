@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors, bootToMenu as boot } from './test-helpers.js';
-import { BALANCE } from '../../src/data.js';
+import { BALANCE, WORLD } from '../../src/data.js';
 
 test('requesting a battle opens a brief without committing any map-side mutation', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
@@ -71,7 +71,7 @@ test('withdraw keeps the party on the map, charged, and blocks an instant rematc
     window.game.scenario('world', { seed: 424242 });
     const g = window.__g, world = g.scene;
     // Away from every settlement's canClash-blocking safe zone (WORLD.heroStart itself
-    // sits ~128px from Ashford, just inside the 130px radius).
+    // sits ~128px from Ashford, well inside BALANCE.settlementSafeR).
     world.hero.x = 1600; world.hero.y = 900;
     const mine = world.myStrength();
     world.parties.length = 0;
@@ -109,6 +109,91 @@ test('withdraw keeps the party on the map, charged, and blocks an instant rematc
   expect(result.afterWithdraw.clashT).toBeCloseTo(result.battleGrace, 5);
   expect(result.afterWithdraw.waryT).toBe(25);
   expect(result.screenAfterOneMoreTick).toBeNull();
+  expect(runtimeErrors).toEqual([]);
+});
+
+// The settlement sanctuary is ONE radius, BALANCE.settlementSafeR: inside it the party AI
+// stands its pursuit down (`engaged`) and no fight starts (`canClash`), both reading the same
+// `inSafeZone` predicate. They used to disagree — canClash carried a 130px literal — so in the
+// 130-260px annulus the AI wiped p.mood to null every tick while a clash still fired, and every
+// fight there fell through to the ambushed/caughtThem both-false fallback: a plain BANDIT
+// SKIRMISH whichever side had actually closed the distance. The 200px case is that annulus;
+// before the radii were unified it opened a brief (title 'BANDIT SKIRMISH', ambush false, mood
+// null), and it must now open nothing at all. The 320px case is the control: a fixture that
+// could never clash anywhere would satisfy the first case for the wrong reason.
+test('one sanctuary radius: no clash inside settlementSafeR, initiative still classified outside it', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const ashford = WORLD.settlements.find(s => s.id === 'ashford');
+  const results = {};
+  for (const off of [200, 320]) {
+    // Fixture geometry, asserted rather than assumed: due south of Ashford is `off` from it
+    // and clear of every OTHER settlement's safe radius, so `off` alone decides the case.
+    const others = WORLD.settlements.filter(s => s.id !== 'ashford');
+    const nearestOther = Math.min(...others.map(s => Math.hypot(ashford.x - s.x, ashford.y + off - s.y)));
+    expect(nearestOther).toBeGreaterThan(BALANCE.settlementSafeR);
+    // Read-then-act inside ONE evaluate (Plan 021 note 5): the page's own rAF loop keeps
+    // ticking between calls, so a party placed in one call has already moved by the next.
+    results[off] = await page.evaluate(({ sx, sy, off }) => {
+      window.game.scenario('world', { seed: 424242 });
+      const world = window.__g.scene;
+      world.hero.x = sx; world.hero.y = sy + off;
+      world.hero.vx = 0; world.hero.vy = 0;
+      const mine = world.myStrength();
+      world.parties.length = 0;
+      const party = {
+        camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
+        // ~1.0x fighting weight — the band the bug was measured in, and worth intercepting,
+        // so this party's mood is 'chase' wherever the AI is allowed to have one at all.
+        comp: Array.from({ length: Math.max(1, Math.round(mine)) }, () => 'bandit'),
+        home: { x: world.hero.x, y: world.hero.y }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+        occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+        _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+      };
+      world.parties.push(party);
+      world.grace = 0;
+      // Plan 023: a frozen tick runs the encounter seam ONLY and never classifies initiative.
+      // keepAwake() runs the party AI with the hero parked, so mood resolves exactly as it
+      // does mid-ride — which is when a real clash always happens.
+      window.game.keepAwake(true);
+      let screenKind = null, dh1 = null;
+      // The decisive tick is the first one, while the party is still standing on the hero;
+      // with its mood stood down it then wanders off on its own. The rest of the second is
+      // there to catch a fight that starts late rather than not at all.
+      for (let i = 0; i < 60 && !screenKind; i++) {
+        window.__g.update(1 / 60);
+        screenKind = world.screen ? world.screen.kind : null;
+        if (dh1 === null) dh1 = Math.round(Math.hypot(party.x - world.hero.x, party.y - world.hero.y));
+      }
+      window.game.keepAwake(false);
+      return {
+        heroSafe: world.inSafeZone(world.hero.x, world.hero.y),
+        screenKind,
+        mood: party.mood,
+        dh1,
+        partyPresent: world.parties.includes(party),
+        title: world.pending ? world.pending.descriptor.title : null,
+        ambush: world.pending ? world.pending.descriptor.ambush : null,
+      };
+    }, { sx: ashford.x, sy: ashford.y, off });
+  }
+  // 200px: the old annulus. The hero is in the safe zone, the party stands down, and the
+  // sanctuary now covers the fight too — no brief, and the party is still there to fight
+  // once the hero rides back out.
+  expect(results[200].heroSafe).toBe(true);
+  expect(results[200].mood).toBeNull();
+  expect(results[200].dh1).toBeLessThan(46); // inside the clash shape on the tick it mattered
+  expect(results[200].screenKind).toBeNull();
+  expect(results[200].title).toBeNull();
+  expect(results[200].partyPresent).toBe(true);
+  // 320px: outside the sanctuary the same fixture fights, and initiative reads the chase
+  // that actually happened instead of the both-false fallback.
+  expect(results[320].heroSafe).toBe(false);
+  expect(results[320].dh1).toBeLessThan(46);
+  expect(results[320].mood).toBe('chase');
+  expect(results[320].screenKind).toBe('brief');
+  expect(results[320].title).toBe('AMBUSHED!');
+  expect(results[320].ambush).toBe(true);
   expect(runtimeErrors).toEqual([]);
 });
 

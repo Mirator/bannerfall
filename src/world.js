@@ -1,26 +1,26 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=ra314b0d08bae';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra314b0d08bae';
-import { SAVE_VERSION } from './save.js?v=ra314b0d08bae';
+} from './data.js?v=re622d3d3cf30';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=re622d3d3cf30';
+import { SAVE_VERSION } from './save.js?v=re622d3d3cf30';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=ra314b0d08bae';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=ra314b0d08bae';
+} from './region.js?v=re622d3d3cf30';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=re622d3d3cf30';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=ra314b0d08bae';
-import { drawScene } from './world/render-scene.js?v=ra314b0d08bae';
+} from './progression.js?v=re622d3d3cf30';
+import { drawScene } from './world/render-scene.js?v=re622d3d3cf30';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=ra314b0d08bae';
+} from './world/battle-transition.js?v=re622d3d3cf30';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -30,16 +30,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=ra314b0d08bae';
+} from './world/settlement-interactions.js?v=re622d3d3cf30';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=ra314b0d08bae';
+} from './world/site-menu.js?v=re622d3d3cf30';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=ra314b0d08bae';
-import { WORLD_ART } from './world/visual-style.js?v=ra314b0d08bae';
+} from './world/terrain.js?v=re622d3d3cf30';
+import { WORLD_ART } from './world/visual-style.js?v=re622d3d3cf30';
 
 const P = PAL.world;
 
@@ -717,13 +717,19 @@ export class World {
     const heroSafe = this.inSafeZone(h.x, h.y);
     for (const p of this.parties) {
       const dh = Math.sqrt(dist2(p.x, p.y, h.x, h.y));
-      // sanctuary stops FIGHTING near a settlement, never a party's intent while passing
-      // through — otherwise a pursuit route clipping a safe zone flickers the hunt on/off
-      // `engaged` derives from state (grace, safe zone), never from a timer, so it is sound
-      // to recompute on a frozen tick.
+      // Sanctuary: inside BALANCE.settlementSafeR of a settlement a party neither hunts the
+      // hero (`engaged`, here) nor gets a fight (`canClash`, in tryClash) — ONE radius, read
+      // through the one `inSafeZone` predicate at both ends so the two cannot drift apart.
+      // They did drift: canClash carried its own 130px literal, so in the 130-260px annulus
+      // this branch stood the party down and wiped p.mood to null while a clash still fired.
+      // Standing the mood down is not the same as forgetting: p.chaseT is neither reset nor
+      // refreshed in here, so a pursuit route clipping a safe zone picks the hunt back up on
+      // the far side as long as the detour is shorter than the 16s the chase timer carries.
+      // `engaged` gates INTENT only (it is what the chase/flee branch below reads); the
+      // clash rule lives entirely in tryClash, so a frozen tick needs none of this.
       const engaged = this.grace <= 0 && !heroSafe;
       if (frozen) {
-        if (this.tryClash(p, dh, engaged)) return true;
+        if (this.tryClash(p, dh)) return true;
         continue;
       }
       const pStr = this.strength(p.comp), mine = this.myStrength();
@@ -877,7 +883,7 @@ export class World {
       }
       if (len(p.vx, p.vy) > 20) { p.bob += dt * 9; p.facing = angLerp(p.facing, Math.atan2(p.vy, p.vx), 1 - Math.exp(-6 * dt)); }
 
-      if (this.tryClash(p, dh, engaged)) return true;
+      if (this.tryClash(p, dh)) return true;
     }
     return false;
   }
@@ -886,9 +892,17 @@ export class World {
   // and the frozen path share exactly ONE copy of the rule that starts a fight. A stopped
   // hero freezes the world, but a party already inside clash range must still resolve —
   // letting go of the keys may not shake off a party that already has you.
-  tryClash(p, dh, engaged) {
-    // collision → battle. Bandits dare to strike near village outskirts (110-260 band),
-    // but never in the village itself — so village-arena ambushes genuinely happen.
+  tryClash(p, dh) {
+    // collision → battle. A settlement is a real sanctuary: no fight starts within
+    // BALANCE.settlementSafeR of one, the same radius that stands the party AI's pursuit
+    // down (`engaged` in updateParties). This check used to carry a 130px literal of its
+    // own instead, and the 130-260px annulus fought anyway — always through the
+    // ambushed/caughtThem both-false fallback, because the AI had already wiped p.mood to
+    // null there, so a plain BANDIT SKIRMISH was reported whichever side had closed.
+    // Do not reintroduce a second radius here; read `inSafeZone` like the caller does.
+    // A village-arena battle is still reachable, but only when the settlement IS the
+    // objective: a raid defense (requestDefenseBattle, the raid branch above) or an
+    // occupier retake (the exemption below). Not a roaming collision on the outskirts.
     // Initiative matters: they caught you = ambush; you caught them running = no formup for them;
     // a mutual field meeting = both sides deploy.
     // world.grace (ambush immunity) only gates the caller's `engaged` — it must not block
@@ -898,8 +912,12 @@ export class World {
     // Design decision 5: an occupier is exempt from the settlement-safe-zone block —
     // it must always be attackable where it sits, or the player has no recapture path.
     const isOccupier = !!p.occupying;
-    const canClash = (p.clashT || 0) <= 0 && (isOccupier || !this.nearSettlement(130)) && dh < 46;
-    if ((engaged || (canClash && dh < 46)) && canClash) {
+    const heroSafe = this.inSafeZone(this.hero.x, this.hero.y);
+    const canClash = (p.clashT || 0) <= 0 && (isOccupier || !heroSafe) && dh < 46;
+    // canClash already requires dh < 46, so the guard it replaced,
+    // `(engaged || (canClash && dh < 46)) && canClash`, reduced to exactly this for every
+    // input — `engaged` could never change the outcome, which is why it is no longer passed.
+    if (canClash) {
       // Plan 021 decision 8/step 7: request instead of committing. The party splice,
       // persistParties(), battleCount++ and persistRun() all move to confirmBrief() —
       // this party stays exactly where it is, still fightable, until the player decides.
