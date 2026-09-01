@@ -1,5 +1,5 @@
 // Bannerfall QA regression suite — browser module against window.game / window.__g.
-import { BALANCE, HERO, UNIT_TYPES, WORLD, playerStrength, rankOf } from '../src/data.js';
+import { BALANCE, HERO, ODDS_WORDS, UNIT_TYPES, WORLD, oddsWord, playerStrength, rankOf } from '../src/data.js';
 import { awardVeterancy } from '../src/progression.js';
 //
 // It preserves the historical window.runQaSuite / window.__qaResult browser
@@ -870,6 +870,73 @@ function runQaSuiteImpl() {
       'expected the weak tier to grow less common once every camp is razed: razed=0 weak=' + weakAtZero + ', razed=3 weak=' + weakAtThree);
     return 'over ' + seeds.length + ' seeds x ' + N + ' draws: weak=' + weak + ' even=' + even + ' strong=' + strong +
       '; razed 0->3 shifted weak ' + weakAtZero + '->' + weakAtThree + ', strong ' + strongAtZero + '->' + strongAtThree;
+  });
+
+  // ======================================================================
+  // 11b. The odds vocabulary is ordered, reachable, and brackets the even tier band
+  //
+  // Added by Plan 035, which found that NOTHING in the gate touched `oddsWord` or its two
+  // thresholds: both `oddsStronger` and `oddsFavored` could be moved by any amount, in
+  // either direction, or crossed over each other, and the whole suite stayed green. The
+  // plan's own handoff notes believed world-hover.spec.js asserted odds words; it does not.
+  //
+  // What is asserted here is the vocabulary's CONTRACT, not a tuning value: the three words
+  // are distinct and all three are reachable, the thresholds are ordered, the labels are
+  // monotonic in enemy weight (heavier is never better news), and the word band brackets
+  // the even TIER band — a fight the generator drew as even must never be labelled
+  // "favored" or "outmatched", or the badge the player reads and the fight the generator
+  // rolled are describing different things. Every bound is read from BALANCE, so retuning
+  // the thresholds is allowed and inverting or decoupling them is not.
+  // ======================================================================
+  record('odds_words_are_ordered_and_bracket_the_even_tier_band', () => {
+    const T = BALANCE.partyTiers;
+    const words = Object.values(ODDS_WORDS);
+    assert(new Set(words).size === words.length, 'the odds words are not distinct: ' + words.join(' | '));
+    assert(BALANCE.oddsFavored < BALANCE.oddsStronger,
+      'oddsFavored must sit below oddsStronger, got ' + BALANCE.oddsFavored + ' and ' + BALANCE.oddsStronger);
+
+    // A fixed reference weight: every threshold is a multiple of the player's own, so one
+    // value exercises all of them, and the assertions below read the ratio back out.
+    const mine = 10;
+    const at = ratio => oddsWord(mine * ratio, mine);
+    const eps = 1e-9;
+    assert(at(BALANCE.oddsFavored - eps) === ODDS_WORDS.favored,
+      'just under oddsFavored must read favored, got ' + at(BALANCE.oddsFavored - eps));
+    assert(at(BALANCE.oddsFavored) === ODDS_WORDS.even,
+      'exactly at oddsFavored must read an even fight, got ' + at(BALANCE.oddsFavored));
+    assert(at(BALANCE.oddsStronger) === ODDS_WORDS.even,
+      'exactly at oddsStronger must read an even fight, got ' + at(BALANCE.oddsStronger));
+    assert(at(BALANCE.oddsStronger + eps) === ODDS_WORDS.outmatched,
+      'just over oddsStronger must read outmatched, got ' + at(BALANCE.oddsStronger + eps));
+
+    // Monotonic: sweeping enemy weight upward may only ever move favored -> even ->
+    // outmatched, never back. A crossed pair or a non-monotonic rule fails here.
+    const order = { [ODDS_WORDS.favored]: 0, [ODDS_WORDS.even]: 1, [ODDS_WORDS.outmatched]: 2 };
+    let last = -1;
+    const seen = new Set();
+    for (let ratio = 0.1; ratio <= 3.0001; ratio += 0.01) {
+      const rank = order[at(ratio)];
+      assert(rank !== undefined, 'oddsWord returned a word outside ODDS_WORDS at ratio ' + ratio.toFixed(2));
+      assert(rank >= last, 'the odds label moved backwards at ratio ' + ratio.toFixed(2) +
+        ': ' + at(ratio) + ' after rank ' + last);
+      last = rank;
+      seen.add(rank);
+    }
+    assert(seen.size === 3, 'not all three odds words are reachable over 0.1x-3.0x: got ' + seen.size);
+
+    // The even TIER band must lie inside the even WORD band, at both ends.
+    assert(at(T.even.min) === ODDS_WORDS.even && at(T.even.max) === ODDS_WORDS.even,
+      'the even tier band ' + T.even.min + '-' + T.even.max + ' is not labelled an even fight: ' +
+      'min reads "' + at(T.even.min) + '", max reads "' + at(T.even.max) + '"');
+    // And the tiers either side must not be: a weak-tier fight the player is meant to take
+    // reads favored, a strong-tier one reads outmatched.
+    assert(at(T.weak.max) === ODDS_WORDS.favored,
+      'the top of the weak tier must still read favored, got ' + at(T.weak.max));
+    assert(at(T.strong.min) === ODDS_WORDS.outmatched,
+      'the bottom of the strong tier must read outmatched, got ' + at(T.strong.min));
+    return 'favored < ' + BALANCE.oddsFavored + ' <= even <= ' + BALANCE.oddsStronger +
+      ' < outmatched, bracketing the even tier band ' + T.even.min + '-' + T.even.max +
+      ' (weak.max ' + T.weak.max + ' favored, strong.min ' + T.strong.min + ' outmatched)';
   });
 
   // ======================================================================

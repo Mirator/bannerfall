@@ -1,9 +1,8 @@
 # 035 — Price the fight against a player who plays
 
-STATUS: READY — this is a handoff plan, written before implementation for an
-agent starting fresh in another session. Everything needed to execute it is in
-this file, the files it names, and the repository contracts (`CLAUDE.md`,
-`AGENTS.md`, `tests/README.md` — read those first, as always).
+STATUS: SHIPPED (2026-08-31). Written as a handoff plan before implementation;
+the "What was measured and what shipped" section at the end records the result,
+including the two places where measurement contradicted the plan's premises.
 
 ## The complaint this resolves
 
@@ -124,3 +123,151 @@ wait for both CI checks (`qa`, `sweep`), and merge.
   new bands, updated where the bands moved them.
 - The sweep guard holds, twice, with the numbers recorded in this plan file.
 - Everything merged to main through a green PR.
+
+---
+
+## What was measured and what shipped (2026-08-31)
+
+Full record in `critiques/reprice-active-player-comparison.md`; raw rows in
+`scripts/zz-party035a.json`, `zz-party035b.json`, `zz-party035c.json`,
+`zz-scout2.json`, `zz-camp035-after.json`. Instruments:
+`scripts/zz-tier035-probe.mjs` (ratio ladder, both encounter paths, four policy
+columns) and `scripts/zz-camp035-curve.mjs` (the camp tier ladder on its own
+`tier` values). Both drive the PRODUCTION battle entry with every confirm edge
+asserted, and the ratio probe replays digit for digit (660/660 rows identical
+across two consecutive runs), so its numbers are measurements rather than draws.
+
+### The change
+
+| knob | before | after |
+|---|---|---|
+| `partyTiers.weak` | 0.55-0.80 | 0.65-0.90 |
+| `partyTiers.even` | 0.95-1.20 | 1.05-1.30 |
+| `partyTiers.strong` | 1.40-1.85 | 1.50-1.95 |
+| `beatablePartyRatio` | 1.20 | 1.30 |
+| `oddsFavored` | 0.85 | 1.05 |
+| `oddsStronger` | 1.15 | 1.30 |
+
+The whole ladder moved up by 0.10. Every band width and every gap between bands
+is unchanged, and no unit stat, efficiency multiplier or formula was touched, so
+`POWER_EFFICIENCY` and the square law are exactly as Plan 029 left them.
+
+### The curve (roaming-party path, 330 battles per cell, three rosters, six sampled battlefields)
+
+Scoring an unresolved 95s window as a loss, which is what the shipped sweep's
+`winPct` does:
+
+| ratio | 0.775 | 1.00 | 1.05 | 1.15 | 1.175 | 1.25 | 1.30 | 1.725 |
+|---|---|---|---|---|---|---|---|---|
+| chargeAll | 93.6 | **77.3** | 67.9 | 52.7 | **52.1** | 38.8 | 27.9 | 3.9 |
+| idle | 57.9 | 54.5 | 53.6 | 43.6 | 46.7 | 32.1 | 27.3 | 3.0 |
+| holdLine | — | 46.1 | 45.2 | 39.1 | — | 30.6 | 29.4 | — |
+
+The 50% crossing for a commanding player is at ratio **1.18**, not at 1.00 as
+Plan 028's comment claimed. The old `even` band therefore ran from a 77% fight to
+about a 46% one — the walkover the complaint named.
+
+### Definition of done, item by item
+
+* **chargeAll at the centre of the new even band (1.175) is 50 +/- 5 over at
+  least 300 raids.** Measured twice at n=330: **52.1% +/- 2.7** before the band
+  change and **48.8% +/- 2.8** after it (55.7% and 52.3% counting only fights
+  that closed). Inside the tolerance on all four figures. The two runs are not
+  digit-identical and should not be: the band change perturbs the campaign's own
+  `simRng` stream through `rollPartyBand`, so the second run is an independent
+  draw at the same ratio, not a replay. The probe itself is deterministic
+  (verified: 0/660 rows differed on a same-code repeat).
+* **The idle rate recorded beside it.** 46.7% before / 42.4% after — below 50, as
+  the plan expected. But see contradiction 2 below: on the honest "who beat whom"
+  metric idle reads 77%, and the difference is a 39% stall rate.
+* **The beatable floor** moved with the even band's top, as mandated. Flagged for
+  whoever picks this up next: a fight at the floor now measures **27.9%** for a
+  charging player, where the old 1.20 floor was about 46%. The pin to
+  `even.max` is followed here because the plan mandates it and the invariant it
+  protects is real ("beatable" and "a fair fight" must be one number), but the
+  invariant is now doing something it did not do before — the band is wide enough
+  that its top is a 28% fight. Pinning to the even band's CENTRE (1.175, a
+  measured coin flip) would express "beatable" better and is the obvious next
+  question; it was not taken here because it would silently redefine a documented
+  invariant rather than move a calibrated number.
+* **The camp curve** was measured on its own tiers rather than assumed, 60 seeds
+  per cell, `chargeAll`: c1 (0.7) 100% at every roster, c2 (0.9) 38/60/60 for
+  fresh/mid/late, c3 (1.1) 50/25/22, Wolfsjaw Hold (1.5) 0% at all three. It
+  spans winnable to punishing and needed no change.
+* **Both qa records held** without editing an assertion — they derive their
+  bounds from `BALANCE.partyTiers`, and the gaps between bands were preserved
+  precisely so the tier record's gap-midpoint classification still works.
+* **The sweep guard holds, twice, digit for digit:** idle 53 / chargeAll 60 /
+  split 37 on both runs — identical to the pre-change baseline measured on this
+  machine before any `src/` edit, and reproduced a fourth time by the PR's own
+  `sweep` check on CI — Linux runner, Windows host, all twelve reported figures
+  identical (53 / 4.8 / 62, 60 / 5.1 / 73, 37 / 5.7 / 45). The sweep is
+  environment-independent, not merely locally repeatable.
+  One loose end left honestly loose: `progress.md`'s Plan 034 entry records
+  52 / 58 / 38 as shipped, and this commit's tree measures 53 / 60 / 37 four
+  times over. Those numbers cannot both describe this code. The likely
+  explanation is that 52 / 58 / 38 was written down before that slice's own
+  review pass rather than after it, but this was not chased down, and the
+  baseline used here is the one measured on this tree rather than any quoted
+  figure. That is the correct result, not a missed effect: the sweep measures
+  CAMP raids, whose garrisons are sized by `camp.tier`, and this slice changed
+  only the roaming-party generator. The plan predicted the numbers would move;
+  they did not, and that is the evidence the change is confined to the path it
+  was meant to touch.
+* **Gate:** 189/190 (`npm test`). The one failure is `battle-break.png`, the
+  documented Windows-only rasterization drift — confirmed twice over: by stashing
+  every `src/` change and watching it fail identically on unmodified code, and by
+  `npm run test:visual:linux`, which passes 24/24 in the CI-equivalent container
+  including that PNG. No visual baseline was updated by this slice.
+* **Hero trim (step 3): NOT taken.** The re-pricing absorbed the surplus it was
+  meant to: at the new even centre a commanding player with an idle sword is at
+  50%, so `swingMaxTargets` and the dash i-frames are untouched and no
+  before/after sweep was spent on them. Step 3's precondition ("if a post-change
+  playtest still trivializes even fights") is not met.
+
+### Where measurement contradicted the plan
+
+1. **"chargeAll, the strongest simple input" — true, but not for the reason the
+   plan's numbers implied.** It leads idle by 23 points at ratio 1.00 and 9 at
+   1.15, so the premise holds. What does not hold is the sweep's 53-vs-60 as
+   evidence for it. Replicating the sweep's own fixture exactly reproduces both
+   figures to the digit (64 idle wins and 72 chargeAll wins out of 120) and shows
+   the margin is almost entirely the difference in how often each policy runs the
+   clock out: 12 idle stalls against 2. Over fights that CLOSED the two policies
+   are 59.3% and 61.0% — within noise. The guard is measuring stall avoidance
+   more than won fights. It was not weakened, and this is recorded rather than
+   acted on.
+2. **The plan expected the idle rate at the even centre to "sit clearly below
+   50 — that gap IS the incentive to command". It does under the sweep's
+   convention (46.7%) and it does not under the honest one (77.0%).** The
+   reconciliation is a 39% stall rate: an idle line fails to close 39% of roaming
+   fights, against 6% for a charging one. It is not winning those fights; nobody
+   is. The gap is real, but it is bought as much by an idle line failing to reach
+   the enemy as by a charging line beating him. Both columns are reported in the
+   critique for that reason.
+
+### Out of scope, found while measuring
+
+World position **(1600, 900)** — the coordinate the `world_aftermath` test
+scenario uses — samples a battlefield whose obstacle field contains six r=60
+trees at x 1090-1170, y 730-940: a solid wall directly across the engagement
+axis. Both lines freeze about 80px apart and neither side ever closes; 3/3 seeds
+ran the full 95s window with every surviving enemy at full hit points,
+`bloodlust` armed at 14s and nothing behind it. `STALL_NO_DEATH` arms
+`bloodlust`, and `bloodlust` orders the enemy to close in, but nothing makes it
+ABLE to. This is a terrain/steering defect, not a pricing one; the probe excludes
+that coordinate and names it rather than working around it silently. The same
+mechanism produces the 39% idle stall rate above, so it is not one unlucky spot.
+
+### Coverage added
+
+`odds_words_are_ordered_and_bracket_the_even_tier_band` (`tests/qa_suite.js`).
+The plan's handoff notes said `tests/e2e/world-hover.spec.js` asserts odds words;
+it does not, and nothing else in the gate touched `oddsWord` either — both
+thresholds could be moved by any amount, in either direction, or crossed over
+each other, with the suite still green. The record asserts the vocabulary's
+contract rather than a tuning value: three distinct and reachable words,
+`oddsFavored` below `oddsStronger`, a label monotonic in enemy weight, and the
+even WORD band bracketing the even TIER band with the weak and strong tiers
+outside it. Mutation-checked: it fails on the pre-change pair (1.15/0.85), on a
+narrowed pair (1.30/1.10) and on a crossed pair (1.05/1.30).

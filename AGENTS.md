@@ -615,12 +615,26 @@ fighting weight = sqrt( total damage per second  x  total hit points ) / one spe
 
 That product is the Lanchester square law. The square root makes it scale
 linearly with force size, so one spearman is 1.0 and the tier bands, the odds
-thresholds and the badges all keep the scale players already read. **A ratio of
-1.00 between two forces is a measured coin flip**, not an assertion: the
-per-type multipliers in `POWER_EFFICIENCY` were fitted by maximum likelihood
-against 2544 seeded headless battles with the logistic intercept pinned at zero
+thresholds and the badges all keep the scale players already read. The per-type
+multipliers in `POWER_EFFICIENCY` were fitted by maximum likelihood against 2544
+seeded headless battles with the logistic intercept pinned at zero
 (`scripts/zz-power-probe.mjs`, `zz-power-probe2.mjs`, `zz-power-fit3.mjs`;
 results in `critiques/encounter-power-comparison.md`).
+
+**A ratio of 1.00 is a coin flip FOR THE PLAYER THE FIT WAS MEASURED ON, and
+that player no longer exists.** Plan 028 pinned the intercept against an idle
+hero on a pre-deployment-phase build, so 1.00 was a coin flip for a commander who
+pressed nothing. Plan 035 re-measured it on the shipped game through the
+production battle entry: on the roaming-party path, a player who charges all
+three squads wins **77.3%** at a ratio of 1.00 and crosses 50% at **1.18** (330
+battles per ratio, `scripts/zz-tier035-probe.mjs`,
+`critiques/reprice-active-player-comparison.md`). Nothing is wrong with the
+metric — the multipliers still price bodies against each other, which is all a
+relative scale can do — but the ABSOLUTE point where the win rate crosses 50% is
+a property of the player, not of the metric, and it moves whenever the player's
+affordances do. Never restate "1.00 is a coin flip" as a fact about the current
+build without re-measuring it; that stale sentence is exactly what made the
+`even` band a walkover for two plans.
 
 Five things about it are load-bearing and each cost a measurement:
 
@@ -647,7 +661,18 @@ Five things about it are load-bearing and each cost a measurement:
 - **The tier bands and camp tiers are ratios of this number now.**
   `WORLD.camps[].tier` (0.7 / 0.9 / 1.1 / 1.5) finally means what it reads as.
   `BALANCE.encounterWeightClamp` replaces the old `[2, 24]` strength clamp and
-  is a body-count safety bound as much as a balance one.
+  is a body-count safety bound as much as a balance one. **The bands are where an
+  ACTIVE player is priced (Plan 035)**, because the harness cannot script hero
+  input and a fitted hero damage figure would therefore be invented: the metric
+  stays honest about the warband, and `BALANCE.partyTiers` carries the correction
+  for the sword and the orders. `partyTiers.even` (1.05-1.30) straddles the
+  measured 50% crossing for a commanding player; re-derive it by measurement, not
+  by reasoning, if the player gains or loses an affordance. Two separate ladders
+  exist and they are NOT interchangeable: `partyTiers` sizes roaming parties,
+  `WORLD.camps[].tier` sizes garrisons, and a camp raid is measurably harder than
+  a roaming fight at the same ratio (the camp 50% crossing sits near 0.93 against
+  the roaming path's 1.18), so a curve measured on one must not be used to tune
+  the other.
 - **`rollComposition` fills to a WEIGHT target, one `R()` draw per body.** The
   brute gate is unchanged in intent: a brute is only ever placed when the force
   can still absorb it without overshooting, which is what the old

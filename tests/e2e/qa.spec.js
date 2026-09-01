@@ -20,6 +20,7 @@ const EXPECTED_QA_NAMES = [
   'world_grace_timer_active_after_battle_then_decays',
   'world_party_weight_stays_in_the_encounter_clamp',
   'world_party_spawn_tiers_weighted_toward_strong',
+  'odds_words_are_ordered_and_bracket_the_even_tier_band',
   'world_party_spawn_timer_fills_the_map_to_its_cap',
   'world_party_break_off_occupies_settlement_and_recapture_restores_service',
   'world_floor_guarantee_prevents_unwinnable_deadlock',
