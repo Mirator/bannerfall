@@ -49,6 +49,7 @@ conditions, and update its status row when done.
 | 033 | The deployment phase | P0 | L | 019, 027 | DONE - resolved the orders-vs-idle finding; the sweep assertion is a hard guard now, see plan |
 | 034 | Terrain legibility, and crossings crossable only where drawn | P0 | M | 024, 033 | DONE - five geometry attempts, each measured, see plan |
 | 035 | Price the fight against a player who plays | P0 | M | 028, 032, 033 | DONE - the tier ladder moved up 0.10; two of the plan's own premises corrected by measurement, see plan |
+| 036 | Initiative reads who closed the distance, not just who intended to | P1 | S | 023, 033 | DONE - a chased party the hero rides down now reads as a mutual skirmish instead of AMBUSHED!, see plan |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).

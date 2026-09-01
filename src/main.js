@@ -1,17 +1,17 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=ra314b0d08bae';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=ra314b0d08bae';
-import { Sfx } from './audio.js?v=ra314b0d08bae';
-import { Battle } from './battle.js?v=ra314b0d08bae';
-import { World } from './world.js?v=ra314b0d08bae';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=ra314b0d08bae';
-import { FIELD } from './battle/constants.js?v=ra314b0d08bae';
-import { ACTIONS } from './input-actions.js?v=ra314b0d08bae';
-import { createWebPlatform } from './platform/web-platform.js?v=ra314b0d08bae';
-import { SaveRepository } from './persistence/save-repository.js?v=ra314b0d08bae';
-import { buildSummaryModel } from './world-screens.js?v=ra314b0d08bae';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=ra314b0d08bae';
-import { perkChoiceDue, perkMods } from './progression.js?v=ra314b0d08bae';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r1c72333e9790';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r1c72333e9790';
+import { Sfx } from './audio.js?v=r1c72333e9790';
+import { Battle } from './battle.js?v=r1c72333e9790';
+import { World } from './world.js?v=r1c72333e9790';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r1c72333e9790';
+import { FIELD } from './battle/constants.js?v=r1c72333e9790';
+import { ACTIONS } from './input-actions.js?v=r1c72333e9790';
+import { createWebPlatform } from './platform/web-platform.js?v=r1c72333e9790';
+import { SaveRepository } from './persistence/save-repository.js?v=r1c72333e9790';
+import { buildSummaryModel } from './world-screens.js?v=r1c72333e9790';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r1c72333e9790';
+import { perkChoiceDue, perkMods } from './progression.js?v=r1c72333e9790';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -1264,20 +1264,34 @@ window.game = {
         const per = enemyStrength([heavy ? 'brute' : 'bandit']);
         const n = Math.max(heavy ? 3 : 1, Math.round(mine * band / per));
         const comp = Array.from({ length: n }, () => (heavy ? 'brute' : 'bandit'));
+        // Plan 036: initiative now reads whether the hero is closing on the party, not
+        // just the party's intent, so a party sitting exactly on top of a stationary
+        // hero can no longer produce the mutual case 'party' is documented as. Offset
+        // it a few px east — still well inside tryClash's 46px clash radius, so the
+        // single setup tick below still clashes — and give the hero a real velocity
+        // aimed at it, so the closing check reads a genuine approach exactly like a
+        // player riding a chasing party down. 'ambush' and 'partyFlee' stay on a
+        // stationary hero on purpose: an ambush must still resolve with zero hero
+        // velocity, and a fleeing party's mood is never 'chase', so the closing check
+        // never applies to it.
+        const riding = kind === 'party';
         world.parties.length = 0;
         world.parties.push({
-          camp: 'c1', x: world.hero.x, y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
+          camp: 'c1', x: world.hero.x + (riding ? 20 : 0), y: world.hero.y, vx: 0, vy: 0, facing: 0, bob: 0,
           comp, home: { x: WORLD.camps[0].x, y: WORLD.camps[0].y }, wander: null, wanderT: 999,
           waryT: 0, clashT: 0, occupying: null, raid: null,
           navT: 0, navGoal: null, navFor: null,
           _navGoalVisibility: new Float64Array(world.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
         });
         world.grace = 0;
+        if (riding) { world.hero.vx = 220; world.hero.vy = 0; }
         // Plan 023: the party-clash kinds place a party on a deliberately STATIONARY hero,
         // and a frozen tick runs the encounter seam only — it does not classify initiative.
         // Keep the world awake for this one setup tick (without moving the hero) so `mood`
         // resolves to ambush / run-them-down / mutual exactly as it does mid-ride, which is
-        // when a real clash always happens.
+        // when a real clash always happens. keepAwake only fakes `heroSpeed` (the
+        // timeFlowing() gate) — it never touches hero.vx/vy, so the 'party' kind's
+        // closing velocity set above survives it untouched.
         keepAwake(world, true);
         game.update(DT);
         keepAwake(world, false);

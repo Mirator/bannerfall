@@ -1,26 +1,26 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=ra314b0d08bae';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra314b0d08bae';
-import { SAVE_VERSION } from './save.js?v=ra314b0d08bae';
+} from './data.js?v=r1c72333e9790';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r1c72333e9790';
+import { SAVE_VERSION } from './save.js?v=r1c72333e9790';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=ra314b0d08bae';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=ra314b0d08bae';
+} from './region.js?v=r1c72333e9790';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r1c72333e9790';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=ra314b0d08bae';
-import { drawScene } from './world/render-scene.js?v=ra314b0d08bae';
+} from './progression.js?v=r1c72333e9790';
+import { drawScene } from './world/render-scene.js?v=r1c72333e9790';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=ra314b0d08bae';
+} from './world/battle-transition.js?v=r1c72333e9790';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -30,16 +30,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=ra314b0d08bae';
+} from './world/settlement-interactions.js?v=r1c72333e9790';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=ra314b0d08bae';
+} from './world/site-menu.js?v=r1c72333e9790';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=ra314b0d08bae';
-import { WORLD_ART } from './world/visual-style.js?v=ra314b0d08bae';
+} from './world/terrain.js?v=r1c72333e9790';
+import { WORLD_ART } from './world/visual-style.js?v=r1c72333e9790';
 
 const P = PAL.world;
 
@@ -903,7 +903,24 @@ export class World {
       // Plan 021 decision 8/step 7: request instead of committing. The party splice,
       // persistParties(), battleCount++ and persistRun() all move to confirmBrief() —
       // this party stays exactly where it is, still fightable, until the player decides.
-      const ambushed = p.mood === 'chase';
+      // Plan 036: `p.mood === 'chase'` only records the party's INTENT to intercept —
+      // it says nothing about who actually closed the distance, so a party worth
+      // fighting always read as an ambush, even when the player rode it down deliberately.
+      // Initiative instead reads whether the hero is closing on the party: a chaser the
+      // hero is NOT closing on is a real ambush; a chaser the hero IS riding at is a
+      // mutual field meeting. `heroClosingSpeed` is the hero's velocity resolved onto the
+      // unit vector from hero to party — positive means the hero is headed at the party,
+      // not merely towards it in some incidental sense. The threshold is
+      // BALANCE.worldWakeSpeed (40px/s), the same constant `timeFlowing()` already uses to
+      // mean "meaningfully in motion": since the world only ticks while raw hero speed is
+      // at or above it, the Cauchy-Schwarz bound |component| <= |velocity| guarantees a
+      // frozen tick (raw hero speed below worldWakeSpeed) can NEVER read as closing, so a
+      // party that runs a stopped hero down still correctly resolves as an ambush.
+      const toPartyX = dh > 0 ? (p.x - this.hero.x) / dh : 0;
+      const toPartyY = dh > 0 ? (p.y - this.hero.y) / dh : 0;
+      const heroClosingSpeed = this.hero.vx * toPartyX + this.hero.vy * toPartyY;
+      const heroClosing = heroClosingSpeed > BALANCE.worldWakeSpeed;
+      const ambushed = p.mood === 'chase' && !heroClosing;
       const caughtThem = p.mood === 'flee';
       const occupiedSettlement = isOccupier ? WORLD.settlements.find(s => s.id === p.occupying) : null;
       // Milestone 025 Slice C: driving an occupier out is a Hold-the-ground capture —
