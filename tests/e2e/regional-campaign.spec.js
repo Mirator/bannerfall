@@ -81,7 +81,7 @@ async function commitChoice(page, note = '') {
   return note;
 }
 
-// Plan 037: a claim is a purchase (BALANCE.claimCost, 60 for a village and 100 for the
+// Plan 038: a claim is a purchase (BALANCE.claimCost, 60 for a village and 100 for the
 // town) and `startGold` is 80, so a fixture that claims more than one settlement has to
 // be funded. The fixtures below say so explicitly rather than quietly depending on the
 // starting purse, which is exactly the coupling that let a free claim go unnoticed.
@@ -148,12 +148,12 @@ test('claiming neutral ground is a PURCHASE that checkpoints ownership and opens
   expect(claimed.captures).toBe(1);
   expect(claimed.screenKind).toBe('spec');
   expect(claimed.optionIds).toEqual(['barracks', 'archery', 'market', 'watchtower']);
-  // Plan 037: the claim is bought. The purse is debited and the campaign summary's
+  // Plan 038: the claim is bought. The purse is debited and the campaign summary's
   // spend counter sees it, exactly as a recruit or an army-cap expansion does.
   expect(claimed.gold).toBe(beforeClaim.gold - CLAIM_COST('ashford'));
   expect(claimed.goldSpent).toBe(beforeClaim.goldSpent + CLAIM_COST('ashford'));
   expect(claimed.persistedGold).toBe(claimed.gold);
-  // Plan 037 INVERTS what this used to assert. Grace is earned by winning a fight, not by
+  // Plan 038 INVERTS what this used to assert. Grace is earned by winning a fight, not by
   // riding past: a peaceful claim leaves the raid clock exactly where it found it. Four
   // free claims used to push it out by 60 s each on top of RAID.firstDelayT's 110, and
   // the campaign harness measured zero landed raids across 48 runs as a result. The
@@ -194,7 +194,7 @@ test('claiming neutral ground is a PURCHASE that checkpoints ownership and opens
 });
 
 test('a claim the purse cannot cover is refused at the row, and the panel says so', async ({ page }) => {
-  // Plan 037 acceptance criterion 2, at the level the player meets it. `startGold` is 80
+  // Plan 038 acceptance criterion 2, at the level the player meets it. `startGold` is 80
   // and the town costs 100, so a fresh campaign literally cannot buy Highmere — and the
   // refusal has to READ as a price, on the row, before the press.
   const runtimeErrors = collectRuntimeErrors(page);
@@ -246,7 +246,7 @@ test('a claim the purse cannot cover is refused at the row, and the panel says s
 });
 
 test('a settlement taken by BATTLE is free and still buys capture grace', async ({ page }) => {
-  // The other half of Plan 037's grace rule. Riding past neutral ground and paying for it
+  // The other half of Plan 038's grace rule. Riding past neutral ground and paying for it
   // buys no grace; driving an occupier off it is a fight, so it does — and it costs no
   // gold, because it was won rather than bought. This is the capture-by-battle path
   // through the SAME winSettlement branch the peaceful claim skips.
@@ -314,7 +314,7 @@ test('dismissing the spec choice does not lose it — the site menu at the gates
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
-  await fund(page, 500); // Plan 037: a claim is a purchase; this fixture is about the modal
+  await fund(page, 500); // Plan 038: a claim is a purchase; this fixture is about the modal
   await tickSiteRow(page, 'claim'); // capture ashford — its spec modal opens
   await tickAction(page, 'withdraw'); // "decide later"
   const dismissed = await page.evaluate(() => {
@@ -357,7 +357,7 @@ test('capturing a second settlement while a first choice is still outstanding do
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
-  await fund(page, 500); // Plan 037: two claims cost 120 gold, more than startGold's 80
+  await fund(page, 500); // Plan 038: two claims cost 120 gold, more than startGold's 80
   await tickSiteRow(page, 'claim'); // capture ashford
   await tickAction(page, 'withdraw'); // decide later — leaves ashford queued, unspecialized
 
@@ -715,7 +715,7 @@ test('a raid landing on held ground beside the hero is a Hold-the-ground defense
 });
 
 test('razing the last camp reinforces Wolfsjaw within its stage-priced ceiling, and the bands it cannot take stay on the March', async ({ page }) => {
-  // Plan 037 follow-up. Bands with nowhere left to muster fall back on the hold, which is
+  // Plan 038 follow-up. Bands with nowhere left to muster fall back on the hold, which is
   // a real cost for leaving them alive — but this was the ONE force in the game that
   // bypassed `encounterBase()`, and it was unbounded: every surviving party was pushed
   // onto the garrison and then deleted from the map. Measured, that was worth more than
@@ -921,7 +921,7 @@ test('the final stronghold victory ends the campaign with the regional summary c
   expect(m.soldiersLost).toBe(11);
   // The pre-scouted 6-bandit hold thins to 3 under EXPOSED; the win pays the
   // stronghold's 200g razed bonus plus loot for the three bandits that deployed, and both
-  // land in goldEarned as well as the purse. Plan 037: loot is per body TYPE, so the
+  // land in goldEarned as well as the purse. Plan 038: loot is per body TYPE, so the
   // figure comes from lootFor() rather than from a restated headcount formula.
   const winnings = 200 + lootFor(['bandit', 'bandit', 'bandit']);
   expect(m.goldEarned).toBe(700 + winnings);

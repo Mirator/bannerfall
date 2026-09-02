@@ -1,4 +1,11 @@
-# 037 — Measure the campaign arc, then make gold buy something
+# 038 — Measure the campaign arc, then make gold buy something
+
+RENUMBERED FROM 037. This was written and executed as Plan 037 against `5bcd88c`; while
+it was in flight, `plans/037-one-sanctuary-radius.md` merged first (PR #28) and took that
+number. The two are independent — that one decides WHERE a clash may start, this one
+decides how big the fight is and what gold buys — and merging it in conflicted only on the
+shared release-cache token plus the two log entries. Every "Plan 038" reference in the
+tree, and the forward references to a "Plan 039", were renumbered with it.
 
 STATUS: DONE (2026-09-02). All four slices shipped, plus one fix this plan did not
 anticipate and deliberately scoped in only after measuring that nothing else could deliver
@@ -17,7 +24,7 @@ the assertion stays open with a `test.fail` annotation in
 lists as out of scope (finding 5): a warband that loses a fight costing it ten men lands
 on the 25-gold floor and never rebuilds. That, re-basing the shipped `@sweep` fixture
 (whose stage-0 roster now makes it a walkover), and the raid cadence that still never
-lands are the head of Plan 038.
+lands are the head of Plan 039.
 
 Written 2026-09-02 as a handoff plan from the gameplay audit in
 `critiques/gameplay-audit-2026-09-02.md` (findings 7, 1, 2, 5, in that order).
@@ -366,7 +373,7 @@ touched), `npm run release:cache` then `npm run test:release`.
   (Plan 035); a scripted swing would be an invented player.
 - Do not fold finding 4's fix (keep parties spawning after all camps fall)
   into this plan. Measure it first with the harness this plan builds; it is
-  the natural Plan 038.
+  the natural Plan 039.
 - Do not `skip` or `fixme`. An expected failure carries `test.fail` and a
   reference to this plan.
 

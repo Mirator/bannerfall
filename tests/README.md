@@ -87,7 +87,7 @@ again fails the sweep.
 
 ## The campaign arc
 
-`tests/e2e/campaign-harness.js` and `tests/e2e/campaign-arc.spec.js` are Plan 037's
+`tests/e2e/campaign-harness.js` and `tests/e2e/campaign-arc.spec.js` are Plan 038's
 harness, and they are the first thing in this repository that measures a whole RUN rather
 than a battle. Four scripted policies (`claimRush`, `campRaider`, `captureThenRaze`,
 `farmer`) — each a route of objectives plus a spend rule — are driven end to end through
@@ -109,7 +109,7 @@ contract underneath everything is determinism — the same seed and policy must 
 byte-identical record — and it is asserted first, because averaging over a
 non-deterministic run would make every other number meaningless.
 
-One assertion in that file carries `test.fail()`: Plan 037's acceptance criterion 3, that
+One assertion in that file carries `test.fail()`: Plan 038's acceptance criterion 3, that
 a warband which fought and spent storms Wolfsjaw at better odds than one that rode past.
 It holds on 9 of 12 seeds. The three that fail are the wipe death spiral (audit finding 5,
 out of scope for that plan): a warband that loses a fight costing it ten men lands on the
@@ -187,6 +187,16 @@ while an ordinary camp (auto-scouted the instant you are close enough to
 assault it) always shows the real composition; the aftermath blocks every
 world phase and freezes `grace` while open, decays only after dismissal, and
 is suppressed in favor of the victory scene when `save.won`.
+
+One test in that file is about WHERE a clash may happen rather than about the
+screens: `one sanctuary radius` (Plan 037). It places a ~1.0x fighting-weight party
+on a parked hero due south of Ashford at 200px (the old 130-260px annulus, where
+`canClash`’s own 130px literal used to allow a fight the party AI had already stood
+down) and again at 320px, and asserts no screen at all in the first case — with
+`inSafeZone` true, `p.mood` null and `dh` under the 46px clash radius, so the record
+carries the mechanism and not just the symptom — and a correctly classified
+`AMBUSHED!` brief in the second. The 320px half is not optional: without it a change
+that stopped every clash everywhere would pass.
 
 Plan 030 put a third screen on that machinery: the site menu, `world.screen` of
 kind `'site'`, which is what `WORLD_PRIMARY` (E) opens next to any settlement,
@@ -682,6 +692,7 @@ errors, weaken assertions, or raise performance budgets to make CI green.
 | Veterancy earned in a won battle survives the save write and a reload | browser E2E | pass (`tests/e2e/campaign-persistence.spec.js`) |
 | The banner ceiling stops veterancy accruing, and raising it lets a man resume | browser E2E | pass (`tests/e2e/campaign-persistence.spec.js`) |
 | Perk choice modal, deferral without loss, tier gates, banner gold sink | browser E2E | pass (`tests/e2e/world-screens.spec.js`) |
+| One sanctuary radius: no clash inside `settlementSafeR`, initiative still classified outside it | browser E2E | pass (`tests/e2e/world-screens.spec.js`) |
 | Regional model (power ladder, modifiers, specializations, objective mapping) | Node-level E2E | pass (`tests/e2e/region.spec.js`) |
 | Objective placement and every terminal battle path | browser E2E | pass (`tests/e2e/battle-objectives.spec.js`) |
 | Capture/occupation/reclaim, specialization effects, raids, defenses, power states, summary | browser E2E | pass (`tests/e2e/regional-campaign.spec.js`) |

@@ -113,7 +113,7 @@ export function armySlots(troops) {
   return n;
 }
 
-// `gold` is what one body of this type is worth as loot, and since Plan 037 it is READ:
+// `gold` is what one body of this type is worth as loot, and since Plan 038 it is READ:
 // `lootFor(comp)` below is the only loot formula, and endBattle calls it. Until then the
 // field was dead data - the shipped rule was `lootBase + totalEnemies * lootPerEnemy`,
 // which pays by headcount and cannot see what the bodies are, so a wolf paid 10.8 gold
@@ -405,7 +405,7 @@ export function weightText(w) {
 }
 
 // ---------------------------------------------------------------------------
-// The campaign STAGE curve (Plan 037). Until this plan every generated encounter was
+// The campaign STAGE curve (Plan 038). Until this plan every generated encounter was
 // priced off `myStrength()`: spawnParty targeted `mine * band`, rollGarrison targeted
 // `mine * tier`, the regional raid `mine * 1.1` and the stronghold's reserve wave
 // `mine * 0.8`. Recruits, the army-cap ladder and the banner therefore raised BOTH
@@ -446,7 +446,7 @@ export const BALANCE = {
   startTroops: FRESH_TROOPS,
   armyCapBase: 12,
   // What every victory pays before the bodies are counted, and it is the ONE part of a
-  // purse that is blind to what was fought. `lootPerEnemy` sat beside it until Plan 037
+  // purse that is blind to what was fought. `lootPerEnemy` sat beside it until Plan 038
   // and is gone: loot is per body TYPE now, through lootFor() below.
   //
   // Halved from 10 by that slice, for two reasons that agree. Paying per body type raised
@@ -467,7 +467,7 @@ export const BALANCE = {
   // World.spawnParty() shifts these weights toward `strong` as camps fall, so the curve
   // rises across a run instead of tracking the player forever (see rollComp()).
   //
-  // PLAN 037 REDEFINED WHAT THESE RATIOS ARE RATIOS OF, FOR THE SECOND TIME. They multiply
+  // PLAN 038 REDEFINED WHAT THESE RATIOS ARE RATIOS OF, FOR THE SECOND TIME. They multiply
   // `World.encounterBase()` — the campaign STAGE curve — not the warband. A band is still a
   // band of measured fighting weight; what moved is whose. Everything the two paragraphs
   // below say about where the ladder sits was measured against the warband and still
@@ -536,7 +536,7 @@ export const BALANCE = {
   // Heavy-body ceilings for a garrison roll, by the player's own fighting weight. The old
   // thresholds were 12 and 8 strength points, which are 8.2 and 5.2 on this scale.
   //
-  // Plan 037 deliberately left these reading `myStrength()` while every generator TARGET
+  // Plan 038 deliberately left these reading `myStrength()` while every generator TARGET
   // moved to the stage curve. They are a mercy rule about what a given warband should be
   // asked to grind through, not a size — a ground-down warband at a late stage meets a
   // heavier force made of lighter bodies, which is the fight it can actually fight.
@@ -561,7 +561,7 @@ export const BALANCE = {
     corrMin: 0.6,
     corrMax: 1.6,
   },
-  // HARD's difficulty multiplier. Until Plan 037 this was a literal inside rollGarrison,
+  // HARD's difficulty multiplier. Until Plan 038 this was a literal inside rollGarrison,
   // so HARD touched camp garrisons and NOTHING ELSE — not roaming parties, not regional
   // raids, not the stronghold's reserve wave (audit finding 15). It now applies once,
   // inside encounterBase(), which is the single place a generator target is computed.
@@ -581,7 +581,7 @@ export const BALANCE = {
   // the town prompt — one formula (armyCapCost) so the price tag can never lie.
   armyCapCostBase: 40,
   armyCapCostStep: 20,
-  // Plan 037: a claim is a PURCHASE. It used to be free and unconditional - four rides
+  // Plan 038: a claim is a PURCHASE. It used to be free and unconditional - four rides
   // past four settlements reached strongholdPoints 4 (EXPOSED), removed the reserve wave
   // at two, paid four perk points and extended raid grace each time, and the measured
   // credible fastest win never fought until the storm (54 flowing seconds and one battle,

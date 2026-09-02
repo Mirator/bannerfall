@@ -1,27 +1,27 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=ra324aad8885b';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra324aad8885b';
-import { SAVE_VERSION } from './save.js?v=ra324aad8885b';
+} from './data.js?v=rf03ab8f72f41';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rf03ab8f72f41';
+import { SAVE_VERSION } from './save.js?v=rf03ab8f72f41';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
   strongholdPoints,
-} from './region.js?v=ra324aad8885b';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=ra324aad8885b';
+} from './region.js?v=rf03ab8f72f41';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=rf03ab8f72f41';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=ra324aad8885b';
-import { drawScene } from './world/render-scene.js?v=ra324aad8885b';
+} from './progression.js?v=rf03ab8f72f41';
+import { drawScene } from './world/render-scene.js?v=rf03ab8f72f41';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=ra324aad8885b';
+} from './world/battle-transition.js?v=rf03ab8f72f41';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -31,16 +31,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=ra324aad8885b';
+} from './world/settlement-interactions.js?v=rf03ab8f72f41';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=ra324aad8885b';
+} from './world/site-menu.js?v=rf03ab8f72f41';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=ra324aad8885b';
-import { WORLD_ART } from './world/visual-style.js?v=ra324aad8885b';
+} from './world/terrain.js?v=rf03ab8f72f41';
+import { WORLD_ART } from './world/visual-style.js?v=rf03ab8f72f41';
 
 const P = PAL.world;
 
@@ -429,7 +429,7 @@ export class World {
     return rollComposition(target, this.simRng, BALANCE.compRolls.party);
   }
 
-  // Spawn a party aimed at a POWER band around the CAMPAIGN'S STAGE (Plan 037: the band
+  // Spawn a party aimed at a POWER band around the CAMPAIGN'S STAGE (Plan 038: the band
   // multiplies encounterBase(), not myStrength() — recruiting no longer raises both sides
   // of every fight at once). Plan 028 is what made the band a band of measured fighting
   // weight rather than of body counts; that part is unchanged. `band`, when given
@@ -440,7 +440,7 @@ export class World {
     const razed = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     const effectiveBand = band ?? this.rollPartyBand(razed);
     const cl = BALANCE.encounterWeightClamp;
-    // Plan 037: the band multiplies the STAGE curve, not the warband. See encounterBase().
+    // Plan 038: the band multiplies the STAGE curve, not the warband. See encounterBase().
     const target = clamp(this.encounterBase() * effectiveBand, cl.min, cl.max);
     const comp = this.rollComp(target);
     // never spawn a party inside a river or mountain — retry a few scatter offsets
@@ -549,7 +549,7 @@ export class World {
   rollGarrison(camp) {
     const mine = this.myStrength();
     const base = this.encounterBase();
-    // Plan 037: the frozen roll is quantised on the STAGE base rather than on `mine`, so
+    // Plan 038: the frozen roll is quantised on the STAGE base rather than on `mine`, so
     // what a camp holds is a function of how far the campaign has come. That also closes
     // the audit's finding 12 as a side effect - scouting every camp on the opening ride
     // used to freeze all three at starter weight for the rest of the run.
@@ -568,7 +568,7 @@ export class World {
     const st = this.save.camps.find(c => c.id === camp.id);
     return st && st.garrison ? this.strength(st.garrison) : null;
   }
-  // TWO QUESTIONS, TWO NUMBERS (Plan 037). "What can this player beat" reads
+  // TWO QUESTIONS, TWO NUMBERS (Plan 038). "What can this player beat" reads
   // myStrength(); "how big is the next fight" reads encounterBase(). Keeping them apart
   // is the whole point of that slice - do not make myStrength() read stage.
   myStrength() {
@@ -577,7 +577,7 @@ export class World {
     return playerStrength(this.save.troops, perkMods(this.save.perks).rankEarlier);
   }
 
-  // The single place a generator TARGET is computed (Plan 037). Every roaming party, camp
+  // The single place a generator TARGET is computed (Plan 038). Every roaming party, camp
   // garrison, regional raid and stronghold reserve wave is sized off this; the floor
   // guarantee, the odds words, the party chase/flee thresholds and every number a screen
   // shows the player still read myStrength(). The formula and the reasoning behind the
@@ -740,13 +740,19 @@ export class World {
     const heroSafe = this.inSafeZone(h.x, h.y);
     for (const p of this.parties) {
       const dh = Math.sqrt(dist2(p.x, p.y, h.x, h.y));
-      // sanctuary stops FIGHTING near a settlement, never a party's intent while passing
-      // through — otherwise a pursuit route clipping a safe zone flickers the hunt on/off
-      // `engaged` derives from state (grace, safe zone), never from a timer, so it is sound
-      // to recompute on a frozen tick.
+      // Sanctuary: inside BALANCE.settlementSafeR of a settlement a party neither hunts the
+      // hero (`engaged`, here) nor gets a fight (`canClash`, in tryClash) — ONE radius, read
+      // through the one `inSafeZone` predicate at both ends so the two cannot drift apart.
+      // They did drift: canClash carried its own 130px literal, so in the 130-260px annulus
+      // this branch stood the party down and wiped p.mood to null while a clash still fired.
+      // Standing the mood down is not the same as forgetting: p.chaseT is neither reset nor
+      // refreshed in here, so a pursuit route clipping a safe zone picks the hunt back up on
+      // the far side as long as the detour is shorter than the 16s the chase timer carries.
+      // `engaged` gates INTENT only (it is what the chase/flee branch below reads); the
+      // clash rule lives entirely in tryClash, so a frozen tick needs none of this.
       const engaged = this.grace <= 0 && !heroSafe;
       if (frozen) {
-        if (this.tryClash(p, dh, engaged)) return true;
+        if (this.tryClash(p, dh)) return true;
         continue;
       }
       const pStr = this.strength(p.comp), mine = this.myStrength();
@@ -900,7 +906,7 @@ export class World {
       }
       if (len(p.vx, p.vy) > 20) { p.bob += dt * 9; p.facing = angLerp(p.facing, Math.atan2(p.vy, p.vx), 1 - Math.exp(-6 * dt)); }
 
-      if (this.tryClash(p, dh, engaged)) return true;
+      if (this.tryClash(p, dh)) return true;
     }
     return false;
   }
@@ -909,9 +915,17 @@ export class World {
   // and the frozen path share exactly ONE copy of the rule that starts a fight. A stopped
   // hero freezes the world, but a party already inside clash range must still resolve —
   // letting go of the keys may not shake off a party that already has you.
-  tryClash(p, dh, engaged) {
-    // collision → battle. Bandits dare to strike near village outskirts (110-260 band),
-    // but never in the village itself — so village-arena ambushes genuinely happen.
+  tryClash(p, dh) {
+    // collision → battle. A settlement is a real sanctuary: no fight starts within
+    // BALANCE.settlementSafeR of one, the same radius that stands the party AI's pursuit
+    // down (`engaged` in updateParties). This check used to carry a 130px literal of its
+    // own instead, and the 130-260px annulus fought anyway — always through the
+    // ambushed/caughtThem both-false fallback, because the AI had already wiped p.mood to
+    // null there, so a plain BANDIT SKIRMISH was reported whichever side had closed.
+    // Do not reintroduce a second radius here; read `inSafeZone` like the caller does.
+    // A village-arena battle is still reachable, but only when the settlement IS the
+    // objective: a raid defense (requestDefenseBattle, the raid branch above) or an
+    // occupier retake (the exemption below). Not a roaming collision on the outskirts.
     // Initiative matters: they caught you = ambush; you caught them running = no formup for them;
     // a mutual field meeting = both sides deploy.
     // world.grace (ambush immunity) only gates the caller's `engaged` — it must not block
@@ -921,8 +935,12 @@ export class World {
     // Design decision 5: an occupier is exempt from the settlement-safe-zone block —
     // it must always be attackable where it sits, or the player has no recapture path.
     const isOccupier = !!p.occupying;
-    const canClash = (p.clashT || 0) <= 0 && (isOccupier || !this.nearSettlement(130)) && dh < 46;
-    if ((engaged || (canClash && dh < 46)) && canClash) {
+    const heroSafe = this.inSafeZone(this.hero.x, this.hero.y);
+    const canClash = (p.clashT || 0) <= 0 && (isOccupier || !heroSafe) && dh < 46;
+    // canClash already requires dh < 46, so the guard it replaced,
+    // `(engaged || (canClash && dh < 46)) && canClash`, reduced to exactly this for every
+    // input — `engaged` could never change the outcome, which is why it is no longer passed.
+    if (canClash) {
       // Plan 021 decision 8/step 7: request instead of committing. The party splice,
       // persistParties(), battleCount++ and persistRun() all move to confirmBrief() —
       // this party stays exactly where it is, still fightable, until the player decides.
@@ -1000,7 +1018,7 @@ export class World {
       // Cadence grace after a capture: the stronghold does not instantly punish
       // expansion (milestone requirement — a grace period after capture).
       //
-      // Plan 037: GRACE IS EARNED BY WINNING A FIGHT, NOT BY RIDING PAST. A peaceful
+      // Plan 038: GRACE IS EARNED BY WINNING A FIGHT, NOT BY RIDING PAST. A peaceful
       // claim skips it. Four claims used to push the raid clock out by 60 s each on top
       // of RAID.firstDelayT's 110, which is most of why the harness measured zero landed
       // raids across 48 campaigns. Driving an occupier off neutral ground still reaches
@@ -1022,7 +1040,7 @@ export class World {
 
   // Peaceful claim of a neutral settlement (a row of the site menu at its gates). No
   // battle — nobody hostile holds it — but the same checkpoint + spec-choice flow as a
-  // won fight, and since Plan 037 the same kind of cost: it is bought, not taken.
+  // won fight, and since Plan 038 the same kind of cost: it is bought, not taken.
   claimSettlement(settlement) {
     const st = this.save.settlements.find(s => s.id === settlement.id);
     if (!st || st.occupied || st.owner === OWNERSHIP.PLAYER) return false;
@@ -1211,7 +1229,7 @@ export class World {
     const target = targets[(this.simRng() * targets.length) | 0];
     const hold = WORLD.camps.find(c => c.id === REGION.strongholdId);
     // Plan 028 made this 1.1x of measured fighting weight rather than of a body count;
-    // Plan 037 made the thing it is 1.1x OF the campaign's stage instead of the warband,
+    // Plan 038 made the thing it is 1.1x OF the campaign's stage instead of the warband,
     // so riding out to punish expansion is not something recruiting makes harder.
     const cl = BALANCE.encounterWeightClamp;
     const comp = rollComposition(clamp(this.encounterBase() * 1.1, cl.min, cl.max),

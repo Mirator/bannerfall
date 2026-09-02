@@ -73,7 +73,7 @@ test('stronghold power climbs the documented ladder from deterministic inputs on
   expect(strongholdStateId(saveWith({ owned: ['ashford'], razedCamps: ['c1'] }))).toBe('weakened');
   expect(strongholdPoints(saveWith({ owned: ['ashford'], razedCamps: ['c1'] }))).toBe(2);
 
-  // PLAN 037: EXPOSED NEEDS A BROKEN SUPPLY LINE, not merely the points. Holding every
+  // PLAN 038: EXPOSED NEEDS A BROKEN SUPPLY LINE, not merely the points. Holding every
   // settlement and razing nothing clears the point threshold and still leaves the hold
   // WEAKENED, because `states[exposed].minRazedCamps` is 1. Measured over 48 scripted
   // campaigns, four free claims reaching EXPOSED made never fighting the only winning
@@ -133,7 +133,7 @@ test('stronghold modifiers implement the milestone mapping exactly', () => {
   expect(strongholdModifiers(saveWith({ owned: ['ashford'], specs: { ashford: 'barracks' } })).revealDeployment).toBe(false);
   expect(ownsWatchtower(saveWith({ owned: ['ashford'], specs: { ashford: 'watchtower' } }))).toBe(true);
 
-  // EXPOSED thins the starting garrison; the other states do not. Plan 037: four
+  // EXPOSED thins the starting garrison; the other states do not. Plan 038: four
   // captures without a razed camp is WEAKENED, so it does NOT thin — the difference
   // between these first two lines is one broken supply line and nothing else.
   expect(strongholdModifiers(saveWith({ owned: WORLD.settlements.map(s => s.id) })).garrisonMul).toBe(1);
@@ -239,7 +239,7 @@ test('a beatable route to an Exposed stronghold exists for every supported seed'
   // constants, so a route that reaches the Exposed threshold must always exist no matter
   // how the seeded terrain rolled.
   //
-  // Plan 037 changed WHICH route that is, and this test is the guard on the change. It
+  // Plan 038 changed WHICH route that is, and this test is the guard on the change. It
   // used to be "capture every settlement, raze nothing"; EXPOSED now also needs one razed
   // linked camp, so the shortest route is the settlements plus the weakest camp. Both
   // halves are asserted: the points are always reachable, and the camp requirement is

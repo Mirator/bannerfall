@@ -1,4 +1,4 @@
-// Plan 037 Slice A — the campaign harness.
+// Plan 038 Slice A — the campaign harness.
 //
 // The battle layer has been measured to three digits since Plan 028. The campaign layer
 // never had a harness at all: no plan records time-to-victory, the gold curve, fights per
@@ -628,7 +628,7 @@ async function campaignBody(opts) {
 // Node side.
 // ---------------------------------------------------------------------------
 
-// One scripted campaign. Returns the per-run record described in plans/037.
+// One scripted campaign. Returns the per-run record described in plans/038.
 export async function runCampaign(page, options) {
   const opts = { ...CAMPAIGN_DEFAULTS, ...options };
   if (!POLICIES.includes(opts.policy)) throw new Error('unknown policy: ' + opts.policy);

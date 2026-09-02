@@ -383,7 +383,7 @@ function runQaSuiteImpl() {
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world after forced victory, scene=' + g.scene());
     const save2 = G.scene.save;
-    // Plan 037: loot is paid per body TYPE through the one exported formula, and this
+    // Plan 038: loot is paid per body TYPE through the one exported formula, and this
     // record reads that formula rather than restating the arithmetic - restating it is
     // exactly how ENEMY_TYPES[type].gold came to sit unread for four plans. The comp is
     // deliberately mixed (bandit, raider and wolf are three different rates), and the
@@ -696,7 +696,7 @@ function runQaSuiteImpl() {
     const save2 = G.scene.save;
     const c1After = save2.camps.find(c => c.id === 'c1');
     assert(c1After.razed === true, 'camp c1 razed flag not set true after victorious raid');
-    // battle loot (per body type since Plan 037) + the non-stronghold camp bonus
+    // battle loot (per body type since Plan 038) + the non-stronghold camp bonus
     const expectedLoot = lootFor(enemyTypes) + 60;
     assert(enemyTypes.length === nEnemies,
       'the rolled garrison and the force that deployed disagree: ' + enemyTypes.length + ' vs ' + nEnemies);
@@ -823,7 +823,7 @@ function runQaSuiteImpl() {
   record('world_party_spawn_tiers_weighted_toward_strong', () => {
     const seeds = [1, 42, 999, 20260817, 555];
     const N = 200;
-    // Plan 037 semantic update: the bands are ratios of `World.encounterBase()` - the
+    // Plan 038 semantic update: the bands are ratios of `World.encounterBase()` - the
     // campaign STAGE curve - rather than of `myStrength()`. That is the whole point of
     // the slice: recruiting must not raise both sides of every fight at once. The
     // classification below is otherwise untouched, and it is the reason this record has

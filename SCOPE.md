@@ -30,7 +30,7 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
   refused while a settlement is occupied by an enemy party.
 - Regional conquest (Milestone 025): one region with four settlements and the
   Wolfsjaw stronghold. Neutral ground is claimed peacefully — a paid row of the
-  site menu, not a free ride-past (Plan 037: `BALANCE.claimCost`, more in total
+  site menu, not a free ride-past (Plan 038: `BALANCE.claimCost`, more in total
   than the starting purse); captured ground gets a one-time, permanent specialization
   (Barracks, Archery, Market, Watchtower) whose benefit suspends while the
   settlement is occupied and resumes when it is won back.
@@ -39,7 +39,7 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
   assault: fewer defensive guards per razed camp, the reserve wave removed at
   two captures, and an Exposed hold that starts thinned and deploys visibly
   when a Watchtower is held. Exposed also requires at least one razed linked
-  camp (Plan 037): supply lines are what leave a hold exposed. Razing the last
+  camp (Plan 038): supply lines are what leave a hold exposed. Razing the last
   linked camp makes the surviving bands fall back on the hold and man its walls,
   bounded by the same stage-priced target its garrison is rolled against; the
   bands it has no room for stay out on the March.
@@ -49,7 +49,7 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
   settlement until driven out.
 - Economy: gold from loot paid per enemy body TYPE, army cap expansion, the
   banner, and paid claims. Encounters are sized off how far the campaign has
-  come rather than off the warband (Plan 037: `World.encounterBase()`), so
+  come rather than off the warband (Plan 038: `World.encounterBase()`), so
   spending gold buys a real advantage instead of raising both sides of the next
   fight; weighted spawn tiers still shift toward stronger parties as camps are
   razed, and an emergency beatable-floor correction guarantees a winnable fight

@@ -1,4 +1,4 @@
-# Campaign arc — before and after (Plan 037)
+# Campaign arc — before and after (Plan 038)
 
 Companion to `critiques/campaign-arc-baseline.md`, which records the untouched tree at
 `5bcd88c` and the three headline numbers the audit could only estimate. This file records
@@ -160,7 +160,7 @@ floor, and never rebuilt — all three end the run at exactly 25 gold, at fighti
 fight and razed nothing at all. A warband that fought and LOST does not arrive at Wolfsjaw
 stronger, and no encounter pricing can make it so; what is missing is a recovery path. The
 assertion stays open with `test.fail()` per the repository's rule that an expected failure
-is annotated and never skipped, and it is the head of Plan 038.
+is annotated and never skipped, and it is the head of Plan 039.
 
 ## Slice B in isolation, and one side effect worth recording
 
@@ -187,7 +187,7 @@ nothing held, nothing razed — which under the stage curve is by construction t
 fight the game can produce. `encounterBase()` returns 6.85 there where `myStrength()` is
 12.6, so the garrison target is nearly halved. The fixture now has very little headroom
 left in which to detect a regression. Re-basing it on a stage that matches its roster is
-a Plan 038 item; changing it here would have changed what the guard measures in the same
+a Plan 039 item; changing it here would have changed what the guard measures in the same
 commit that changed the thing it guards.
 
 ## HARD, which now touches more than camps
@@ -216,7 +216,7 @@ difficulty.
   effectively dead for every route this harness measures, and the harness's own blind spot
   (travel is teleport-plus-clock, so nothing intercepts a ride) is not the cause — the
   raid timer runs on the same flowing clock the legs pay.
-* No policy reaches the wall or the battle cap on any seed, so Plan 037's slice-C STOP
+* No policy reaches the wall or the battle cap on any seed, so Plan 038's slice-C STOP
   condition (fewer than 10 of 12 seeds reaching Wolfsjaw) is not triggered: every run
   reaches the hold.
 * `unresolved` 95 s windows are resolved as a disengage and counted separately rather than

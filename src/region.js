@@ -16,7 +16,7 @@
 // presentation state, touches RNG, or mutates its inputs, so the whole regional
 // model is test-addressable in plain Node (tests/e2e/region.spec.js imports this
 // file directly).
-import { WORLD, UNIT_TYPES, BALANCE } from './data.js?v=ra324aad8885b';
+import { WORLD, UNIT_TYPES, BALANCE } from './data.js?v=rf03ab8f72f41';
 
 // ---------------------------------------------------------------------------
 // Regional configuration — one named region (Milestone 025 scope: exactly one).
@@ -138,7 +138,7 @@ export function findSpecSettlements(save, spec) {
 // requirements as fields, and strongholdStateId() applies them uniformly - there is no
 // per-state conditional anywhere.
 //
-// PLAN 037 ADDED `minRazedCamps` AND IT INVERTS WHAT THIS COMMENT USED TO PROMISE. It
+// PLAN 038 ADDED `minRazedCamps` AND IT INVERTS WHAT THIS COMMENT USED TO PROMISE. It
 // read: "every supported seed reaches Exposed by capturing all four settlements even if
 // no camp ever falls, so a beatable route always exists". Measured, that was not a safety
 // net but the dominant strategy: four free claims reached EXPOSED on 12 of 12 seeds, and
@@ -148,7 +148,7 @@ export function findSpecSettlements(save, spec) {
 //
 // The beatable route that the old comment was protecting still exists and is now the one
 // the game's own toasts point at: camp c1 at tier 0.7, priced off the campaign stage
-// rather than off the warband (Plan 037 Slice B), which the harness measures at a 92%
+// rather than off the warband (Plan 038 Slice B), which the harness measures at a 92%
 // win rate for a fresh warband that gives orders. The `campRaider` and `captureThenRaze`
 // rows of `critiques/campaign-arc-comparison.md` are the evidence, not this sentence.
 export const STRONGHOLD_POWER = Object.freeze({

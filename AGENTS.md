@@ -127,6 +127,21 @@ handoff, then party spawning and camera/effects maintenance finish the tick.
 Keep campaign arrays (`parties`, `save.troops`, `save.camps`) and their timers in
 those world phases; do not add a second map snapshot boundary.
 
+Settlement sanctuary: ONE radius, `BALANCE.settlementSafeR`, read through the
+single `World.inSafeZone()` predicate at both ends. Inside it a roaming party
+neither hunts the hero (`engaged` in `updateParties()`, which gates the whole
+chase/flee mood branch) nor gets a fight (`canClash` in `World.tryClash()`). An
+occupier is the only exemption, since it must stay attackable where it sits. The
+two ends used to disagree — `canClash` carried its own 130px literal — and the
+130-260px annulus fought anyway, always through the `ambushed`/`caughtThem`
+both-false fallback, because the mood branch had already stood the party down and
+wiped `p.mood` to `null` there. Do not reintroduce a second radius: a fight that
+starts where the party AI is not allowed to want one cannot report who started it.
+A village-arena battle is still reachable, but only where the settlement itself is
+the objective — a raid defense or an occupier retake — not from a roaming
+collision on the outskirts. See Plan 037 and the `one sanctuary radius` test in
+`world-screens.spec.js`.
+
 A world-scene modal genuinely pauses the campaign, not just visually covers
 it: gating the pipeline on `updateWorldScreens()` freezes `grace` for free
 (it only decays inside `updateParties()`, which never runs while a screen is
@@ -603,7 +618,7 @@ tracking the player forever. An explicit `band` argument still overrides the
 draw (used by QA to probe `BALANCE.encounterWeightClamp` directly); never assert
 a tier-distribution property from a single seed — sweep several.
 
-**What those bands MULTIPLY changed in Plan 037, and this is the rule to know
+**What those bands MULTIPLY changed in Plan 038, and this is the rule to know
 before touching any generator: two questions, two numbers.**
 
 - *"What can this player beat?"* reads `World.myStrength()` — the warband's
@@ -618,7 +633,7 @@ before touching any generator: two questions, two numbers.**
   computed. `spawnParty`, `rollGarrison` (target and frozen seed), the regional
   raid dispatch and the stronghold's reserve wave all read it and nothing else.
 
-Until Plan 037 both questions read `myStrength()`, so recruiting, the army-cap
+Until Plan 038 both questions read `myStrength()`, so recruiting, the army-cap
 ladder and the banner raised both sides of every fight equally and camp c1 sat at
 a ratio of 0.71 whether the warband weighed 4.6 or 12.6. Measured end to end over
 48 scripted campaigns, the only policy that ever won a run was the one that never
@@ -639,7 +654,7 @@ March. Two rules there are load-bearing: the ceiling bounds what may be ADDED an
 never trims a garrison the player already scouted, and the walk over the bands
 consumes no RNG. See `critiques/campaign-arc-comparison.md`.
 
-Claiming neutral ground (Plan 037): a claim is a PURCHASE, priced by settlement
+Claiming neutral ground (Plan 038): a claim is a PURCHASE, priced by settlement
 kind in `BALANCE.claimCost` and charged in `World.claimSettlement`, which refuses
 when the purse is short. It buys no raid grace — `winSettlement` extends
 `raidCdT` only when the capture came through a battle, which the peaceful claim
@@ -647,7 +662,7 @@ signals by passing `{ claimed: true }`. EXPOSED additionally requires at least o
 razed linked camp (`STRONGHOLD_POWER.states[].minRazedCamps`), so riding past four
 settlements no longer thins the hold's garrison.
 
-Loot (Plan 037): `lootFor(comp)` in `src/data.js` is the ONE loot formula and
+Loot (Plan 038): `lootFor(comp)` in `src/data.js` is the ONE loot formula and
 `endBattle` is its only caller in `src/`. It pays `BALANCE.lootBase` plus each
 body's `ENEMY_TYPES[type].gold`, tuned so gold per unit of fighting weight is flat
 across the light bodies and about 1.33x for the brute. Retuning `UNIT_TYPES` or

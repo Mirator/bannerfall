@@ -1143,7 +1143,77 @@ Same family of defect as this slice, different mechanism (a radius mismatch,
 not a mood/velocity conflation); out of scope here, recorded in
 `plans/036-initiative-reads-who-closed.md`.
 
-## Plan 037 — measure the campaign arc, then make gold buy something (2026-09-02)
+## Plan 037: one sanctuary radius (2026-09-01)
+
+Reported out of Plan 036's "Found, not fixed" section: `World.tryClash()` blocked a clash
+near a settlement with `nearSettlement(130)` while the roaming-party AI's `engaged` flag
+read `inSafeZone` (`BALANCE.settlementSafeR`, 260px). In the 130-260px annulus the party AI
+stood the party down and wiped `p.mood` to `null` every tick, and a party already inside the
+46px clash shape still started a fight, so the descriptor always fell through
+`ambushed`/`caughtThem` both-false. Measured on this tree before the change - Ashford at
+700,1150, hero parked 200px due south under `keepAwake(true)`, a ~1.0x fighting-weight party
+placed on the hero: `inSafeZone(hero)` true, `p.mood` null, and a brief opens on tick 1
+reading `BANDIT SKIRMISH`, `ambush: false`. After it: no brief for 60 ticks of contact, and
+the party wanders off 63px in that second.
+
+Unified upward, on `settlementSafeR`, read through the one `inSafeZone` predicate at both
+ends. The repository's own documents disagreed, so the tiebreak was AGENTS.md, which
+describes the occupier exemption as an exemption from "the `BALANCE.settlementSafeR`
+sanctuary block in the party-clash check" - naming 260px as the clash block the code did not
+implement - backed by `settlementSafeR`'s own comment ("parties will not chase/engage inside
+this radius") and Plan 020 decision 5. Against them stood the comment above `canClash` and
+Plan 021 note 4, which called the 130px literal "`BALANCE.settlementSafeR`'s 130px
+party-clash radius"; that conflation is why the drift reads as an accident rather than a
+decision.
+
+Unifying upward is also the smaller behavioural change. The party AI already refused to hunt
+anywhere inside 260px - 12.1% of the 3200x2200 map by area against 3.0% for 130px - so pursuit is
+untouched and the only thing that stops happening in that band is a collision that was always
+misclassified. Unifying downward would have let parties hunt across that whole band, which
+changes encounter frequency near every settlement.
+
+One consequence accepted rather than worked around: a roaming clash can no longer select the
+`village` arena (`nearSettlement(200)` in `battle-transition.js`), which is now reachable
+only where the settlement itself is the objective - a raid defense or an occupier retake.
+`regional-campaign.spec.js` asserts `arena === 'village'` through the defense path and is
+unaffected; nothing in the gate reached a village arena through a roaming collision.
+
+Also removed: `tryClash()`'s trigger `(engaged || (canClash && dh < 46)) && canClash` reduces
+to `canClash` for every input, since `canClash` already requires `dh < 46`. It is now
+`if (canClash)` and `engaged` is no longer passed in. No behaviour changes; the misleading
+part was the implication that grace or the safe zone gate the clash from inside that method.
+
+Coverage: `one sanctuary radius: no clash inside settlementSafeR, initiative still classified
+outside it` in `world-screens.spec.js`. The 200px case asserts the mechanism as well as the
+symptom - `inSafeZone` true, `mood` null, `dh` under 46 on the tick that mattered, then no
+screen at all - and its three leading assertions pass on the old code, so only the missing
+brief fails there. The 320px control keeps the test honest: the same fixture must still fight
+and still read `AMBUSHED!` with `ambush: true`, so a change that stopped every clash
+everywhere would not pass.
+
+Gate 191/192 on the merged tree, 190/191 before the merge. The one failure both times is
+`battle-break.png` at 13876 differing pixels (ratio 0.02), the documented Windows-only font
+drift: re-running that single spec with the `canClash` line reverted to the 130px literal
+fails with the identical pixel count, so it is independent of this change. `test:tooling`
+15/15, `release:cache`/`test:release` verified at `rbf9ac38b53d8`. Plan 036 landed on main
+mid-slice and was merged in before shipping; it conflicted ONLY on the shared release-cache
+token (29 files, one import hunk each), and `world-screens.spec.js` took both slices' new
+tests with no conflict at all.
+The `@sweep` balance check passes and reproduces the recorded baseline to the digit - idle 53 /
+chargeAll 60 / split 37 over 120 raids per policy - which is the expected result rather than a
+missed effect: the sweep drives camp raids, and every camp sits more than 260px from every
+settlement, so no fixture in it is near the radius this slice moved. `test:visual:linux` was
+not run: the Docker daemon is not up on this host, so CI's font container is the only place
+the one visual failure above can be re-checked.
+
+Found while working, not fixed: a Playwright server already listening on 127.0.0.1:8474
+belonged to a DIFFERENT worktree, and `reuseExistingServer` reused it - so the first run of
+the new test measured another tree's `src/` and failed with exactly the pre-fix symptom.
+Caught by fetching `/src/world.js` from the server and reading the served `canClash` line,
+which still had the 130px literal. Every figure above was measured on a private port (8475)
+through a local config override. A `PORT`-aware default in `playwright.config.js` would
+remove the trap; out of scope here.
+## Plan 038 — measure the campaign arc, then make gold buy something (2026-09-02)
 
 Built the first harness in this repository that measures a whole RUN rather than a
 battle (`tests/e2e/campaign-harness.js`, `tests/e2e/campaign-arc.spec.js`,
@@ -1218,7 +1288,7 @@ finding, and one this plan lists as out of scope: the wipe death spiral (finding
 seeds 1, 2 and 12 the warband lost a fight costing it ten to twelve men, landed on the
 25-gold defeat floor and never rebuilt - all three end at exactly 25 gold, at weight 4.6,
 6.6 and 2.5. A warband that fought and LOST does not arrive at Wolfsjaw stronger and no
-encounter pricing can make it so; what is missing is a recovery path. Head of Plan 038.
+encounter pricing can make it so; what is missing is a recovery path. Head of Plan 039.
 
 Also found, not fixed: the shipped `@sweep` guard still passes (chargeAll 100% against
 idle 94%, direction and margin intact) but its fixture installs a near-capped roster

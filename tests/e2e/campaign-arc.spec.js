@@ -3,7 +3,7 @@ import { BALANCE, WORLD } from '../../src/data.js';
 import { runCampaign, summarize, goldByComposition, POLICIES } from './campaign-harness.js';
 import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 
-// Plan 037 — the campaign arc, measured.
+// Plan 038 — the campaign arc, measured.
 //
 // Everything Plans 028-035 measured was ONE BATTLE. This file measures the run those
 // battles sit in: how long a scripted player takes to reach Wolfsjaw, what the gold curve
@@ -71,7 +71,7 @@ test('the campaign harness drives a real campaign through the production entries
 
 test.describe('campaign arc', () => {
   test('the same seed and policy replay identically', { tag: '@sweep' }, async ({ page }) => {
-    // Determinism is the hard contract every other number here rests on. Plan 037's first
+    // Determinism is the hard contract every other number here rests on. Plan 038's first
     // STOP condition is this one: if two runs of one seed disagree, fix determinism before
     // measuring anything — do not average over a non-deterministic run.
     test.setTimeout(300_000);
@@ -83,7 +83,7 @@ test.describe('campaign arc', () => {
   });
 
   test('a claim is bought, and riding past four settlements does not expose the hold', { tag: '@sweep' }, async ({ page }) => {
-    // Plan 037 acceptance criteria 2 and 4, plus the console table that
+    // Plan 038 acceptance criteria 2 and 4, plus the console table that
     // `critiques/campaign-arc-comparison.md` quotes.
     test.setTimeout(1_800_000);
     const byPolicy = await sweep(page);
@@ -132,7 +132,7 @@ test.describe('campaign arc', () => {
   });
 
   test('a warband that fought and spent storms Wolfsjaw at better odds than one that did not', { tag: '@sweep' }, async ({ page }) => {
-    // EXPECTED FAILURE on 3 of 12 seeds — Plan 037 acceptance criterion 3. Do not delete
+    // EXPECTED FAILURE on 3 of 12 seeds — Plan 038 acceptance criterion 3. Do not delete
     // this annotation to tidy the suite and do not weaken the assertion; remove it when a
     // warband that loses its early fights can still rebuild.
     //

@@ -1,4 +1,4 @@
-// Scratch measurement harness for plans/037. NOT a test, NOT part of a gate.
+// Scratch measurement harness for plans/038. NOT a test, NOT part of a gate.
 //
 // What it measures: a whole CAMPAIGN, end to end, for each of the four scripted policies
 // in tests/e2e/campaign-harness.js — time-to-victory, the gold curve, fights per run, the
@@ -24,7 +24,7 @@ const SEEDS = Number(argOf('--seeds', 12));
 const POLICY_NAMES = String(argOf('--policies', POLICIES.join(','))).split(',');
 const WORKERS = Number(argOf('--workers', 4));
 const RESOLVE = argOf('--resolve', 'real');
-const LABEL = argOf('--label', 'campaign037');
+const LABEL = argOf('--label', 'campaign038');
 const WALL = Number(argOf('--wall', 3600));
 const MAX_BATTLES = Number(argOf('--battles', 60));
 const BASE = 'http://127.0.0.1:8474';

@@ -1,4 +1,4 @@
-# Campaign arc — baseline (Plan 037 Slice A)
+# Campaign arc — baseline (Plan 038 Slice A)
 
 Measured 2026-09-02 on the tree at `5bcd88c` with no `src/` change of any kind: this
 slice adds a harness and nothing else, so every number below is the shipped game.
