@@ -1277,10 +1277,17 @@ four and reaches the hold ENTRENCHED on 12 of 12 at weight 6.6 instead of EXPOSE
 `campRaider` goes from 0 wins to 4, its battle win rate 33% -> 73%, its campaign
 246 s -> 155 s, its storm ratio 2.29 -> 1.27, and the fighting weight it reaches Wolfsjaw
 with 4.3 -> 12.9. `captureThenRaze` goes from 1 win to 4. Gold per unit of fighting weight
-across roaming fights went from spanning 2.53x (a wolf paid 12.36, a brute 4.89) to 1.23x,
+across roaming fights went from spanning 2.38x (a wolf paid 11.62, a brute 4.89) to 1.25x,
 with the three light bodies inside 3% of each other. `farmer` is the policy that did NOT
 improve - hunting weak parties still leaves it at weight 4.3 - which is the right outcome
 rather than a miss: farming was never a route, it was just overpaid.
+
+Both columns were measured on a tree that includes Plan 037 (one sanctuary radius), which
+landed on main while this was in flight; the before column is `origin/main` exactly, so
+the difference between them is this plan and nothing else. One number carries the whole
+change: on the before tree `campRaider` razes one camp on nine of its twelve seeds and
+across all 48 campaigns exactly ONE run ever razed all three. On the after tree 13 of 48
+do.
 
 **Acceptance criterion 3 holds on 9 of 12 seeds (up from 2 of 12 before the remnant fix)
 and the assertion stays open with `test.fail()`.** The three failures are a different

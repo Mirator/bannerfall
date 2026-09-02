@@ -15,29 +15,39 @@ Command, reproducible verbatim, run once per column:
 
 ```bash
 python scripts/serve.py &
-node scripts/zz-campaign-probe.mjs --seeds 12 --workers 3 --label baseline2   # src/ stashed
+git checkout origin/main -- src index.html                                    # the BEFORE tree
+node scripts/zz-campaign-probe.mjs --seeds 12 --workers 3 --label baseline3
+git checkout HEAD -- src index.html                                           # the AFTER tree
 node scripts/zz-campaign-probe.mjs --seeds 12 --workers 3 --label final
 ```
 
 12 seeds (`1..12`) x four scripted policies = 48 campaigns per column. Raw records in
-`scripts/zz-campaign-baseline2.json` and `scripts/zz-campaign-final.json`.
+`scripts/zz-campaign-baseline3.json` and `scripts/zz-campaign-final.json`.
 
-**Both columns were measured with the SAME policy definitions.** The heal rule was
-changed during the work — a policy that healed only the hero rode half-dead columns into
-fights, and `playerStrength` prices bodies at full health, so the recorded ratio was
-flattering a warband that was not there. The baseline was therefore re-run with `src/`
-stashed rather than compared against the first draft's numbers; the original
-policy-v1 baseline is kept in `scripts/zz-campaign-baseline.json` and quoted in
-`campaign-arc-baseline.md`, and the two are not interchangeable.
+Two things about the columns, because both were got wrong once and re-run:
+
+* **Both were measured with the SAME policy definitions.** The heal rule changed during
+  the work — a policy that healed only the hero rode half-dead columns into fights, and
+  `playerStrength` prices bodies at full health, so the recorded ratio was flattering a
+  warband that was not there. The baseline was re-run rather than compared against the
+  first draft's numbers.
+* **Both were measured on a tree that includes Plan 037** (one sanctuary radius), which
+  landed on main while this was in flight and changes WHERE a clash may start. The before
+  column is `origin/main` exactly, so the difference between the columns is this plan and
+  nothing else.
+
+The original policy-v1 baseline taken on `5bcd88c` is kept in
+`scripts/zz-campaign-baseline.json` and quoted in `campaign-arc-baseline.md`; it is not
+interchangeable with the column below.
 
 ## Per policy, before -> after
 
 | policy | won the run | campaign s | battles | battle win % | gold / battle | weight at the hold | storm ratio | stronghold state at the storm |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `claimRush` | **2 -> 0** | 54 -> 52 | 1.0 -> 1.0 | 17 -> 0 | 45 -> 0 | 12.6 -> **6.6** | 1.04 -> **1.36** | 12 EXPOSED -> **12 ENTRENCHED** |
-| `campRaider` | **0 -> 4** | 246 -> **155** | 6.1 -> 4.7 | 33 -> **73** | 25 -> 87 | 4.3 -> **12.9** | 2.29 -> **1.27** | 11 WEAKENED, 1 ENTRENCHED |
-| `captureThenRaze` | **1 -> 4** | 252 -> 213 | 5.0 -> 5.0 | 34 -> **60** | 38 -> 78 | 6.6 -> **8.7** | 1.99 -> **1.67** | 8 EXPOSED, 2 WEAKENED, 2 ENTRENCHED |
-| `farmer` | 0 -> 1 | 364 -> 368 | 10.7 -> 10.3 | 38 -> 39 | 17 -> 18 | 4.1 -> 4.3 | 2.20 -> 2.28 | 8 ENTRENCHED, 4 WEAKENED |
+| `campRaider` | **0 -> 4** | 246 -> **155** | 6.1 -> 4.7 | 33 -> **73** | 25 -> 87 | 4.3 -> **12.9** | 2.29 -> **1.27** | 10 ENTRENCHED / 2 WEAKENED -> 11 WEAKENED, 1 ENTRENCHED |
+| `captureThenRaze` | **1 -> 4** | 252 -> 213 | 5.0 -> 5.0 | 34 -> **60** | 38 -> 78 | 6.6 -> **8.7** | 1.99 -> **1.67** | 12 EXPOSED -> 8 EXPOSED, 2 WEAKENED, 2 ENTRENCHED |
+| `farmer` | 0 -> 1 | 339 -> 372 | 9.8 -> 10.1 | 39 -> 37 | 19 -> 18 | 4.1 -> 4.3 | 2.40 -> 2.28 | 8 ENTRENCHED, 4 WEAKENED (unchanged) |
 
 `gold / battle` is `goldEarned / battles` and it moved for a reason that is not the loot
 rule: `campRaider` now reaches and wins the stronghold, which pays a 200 g razing bonus.
@@ -52,9 +62,9 @@ The two things the plan set out to change both moved, and both moved a long way:
   arrives at roughly the late-game roster and wins a third of them.
 * `farmer` is the policy that did NOT improve, and it is worth saying so: hunting
   favourable roaming parties before every objective still leaves it at weight 4.3 and a
-  39% battle win rate, against 38% before. Farming weak parties was never the problem the plan set out to fix,
-  and pricing encounters off stage does not make it a route — it just stops paying
-  disproportionately well per unit of fighting weight (see criterion 4).
+  37% battle win rate, against 39% before. Farming weak parties was never the problem the
+  plan set out to fix, and pricing encounters off stage does not make it a route — it just
+  stops paying disproportionately well per unit of fighting weight (see criterion 4).
 * **Riding past is no longer free.** `claimRush` can afford exactly one claim out of
   `startGold` (60 of 80, `claimsRefused` 3.0 per run), so it reaches the hold ENTRENCHED
   on 12 of 12 seeds instead of EXPOSED on 12 of 12, at fighting weight 6.6 instead of
@@ -77,18 +87,19 @@ majority of the bodies are that type:
 
 | majority body | gold per fight (before -> after) | gold per unit of fighting weight (before -> after) |
 | --- | --- | --- |
-| wolf | 27.9 -> 26.2 | **12.36 -> 8.21** |
-| bandit | 27.1 -> 22.9 | 9.71 -> 8.41 |
-| raider | 28.6 -> 18.7 | 8.87 -> 8.45 |
+| wolf | 31.3 -> 27.9 | **11.62 -> 8.11** |
+| bandit | 29.2 -> 24.1 | 9.55 -> 8.31 |
+| raider | 31.8 -> 19.4 | 8.46 -> 8.32 |
 | brute | 15.0 -> 31.0 | **4.89 -> 10.11** |
 
-Gold per FIGHT was already flat before the change (27.9 against 27.1), because parties are
-generated to a weight target — a wolf-heavy party simply has more bodies, and a per-body
-rule pays the same total. The criterion as written would have passed on the untouched
-tree. The real defect was gold per unit of fighting weight, which spanned **2.53x** and
-paid most for the cheapest thing on the map; it now spans **1.23x**, and the three light
-bodies land within 3% of each other (8.21 / 8.41 / 8.45). `campaign-arc.spec.js` asserts
-both, and says in the test why the plan's own version is the weaker one.
+Gold per FIGHT was already nearly flat across the light bodies before the change (31.3,
+29.2, 31.8 — within 8%), because parties are generated to a weight target: a wolf-heavy
+party simply has more bodies, and a per-body rule pays the same total. The criterion as
+the plan wrote it would have passed on the untouched tree. The real defect was gold per
+unit of fighting weight, which spanned **2.38x** and paid most for the cheapest thing on
+the map; it now spans **1.25x**, and the three light bodies land within 3% of each other
+(8.11 / 8.31 / 8.32). `campaign-arc.spec.js` asserts both, and says in the test why the
+plan's own version is the weaker one.
 
 `BALANCE.lootBase` was halved from 10 to 5 as part of this. Paying per body type on its
 own raised campaign income 25% over the flat rule — past the +/-15% the plan allowed a
@@ -105,7 +116,7 @@ both formulas (so the comparison is the same fights, not the same aggregate):
 | --- | --- | --- | --- | --- |
 | `campRaider` | **+13.2%** | +18.2% | -11.2% | +17.9% |
 | `captureThenRaze` | **+12.3%** | +16.1% | -8.9% | +21.7% |
-| `farmer` | -5.5% | -5.5% | -5.6% | -4.0% |
+| `farmer` | -3.8% | -4.9% | -3.2% | -2.1% |
 
 The plan's +/-15% is met on every fight that exists in both columns. The excess in the last
 column is entirely the stronghold assaults `campRaider` now WINS — four of them, against a
@@ -148,9 +159,11 @@ Criterion 3 goes from 2/12 to **9/12**, and `campRaider` goes from winning 0 cam
 4. The game's own toast ("Raid the camps to stop the raids") finally points at the route
 that ends in the *easiest* final fight rather than the hardest.
 
-One number puts the whole slice in perspective: on the untouched tree, across all 48
-campaigns, **no run ever razed all three linked camps**. Fighting cost more than it paid,
-so no policy got that far. On the final tree 13 of 48 do.
+One number puts the whole plan in perspective. On the before tree `campRaider` razes
+**one** camp on nine of its twelve seeds and never more than two; across all 48 campaigns
+exactly **one run** ever razed all three. Fighting cost more than it paid, so no policy
+got that far. On the after tree `campRaider` razes all three on seven seeds and two on
+four more, and 13 of 48 runs finish the job.
 
 **The three remaining failures are a different finding, and it is one this plan lists as
 out of scope: the wipe death spiral (audit finding 5).** Seeds 1, 2 and 12 are runs where
@@ -201,9 +214,9 @@ difficulty.
 ## Recorded, not asserted
 
 * `floorFires` (times `enforceBeatableFloor` actually rewrote the map): 0.0 -> 0.0
-  `claimRush`, 0.7 -> 0.2 `campRaider`, 1.1 -> 0.5 `captureThenRaze`, 1.6 -> 1.4 `farmer`.
-  The emergency correction fires roughly half as often, which is what a generator that
-  stops chasing the warband should do.
+  `claimRush`, 0.7 -> 0.2 `campRaider`, 1.1 -> 0.5 `captureThenRaze`, 1.1 -> 1.3 `farmer`.
+  The emergency correction fires roughly half as often for the policies that fight their
+  way forward, which is what a generator that stops chasing the warband should do.
 * The remnant ceiling is covered by its own regression test in
   `tests/e2e/regional-campaign.spec.js` ("razing the last camp reinforces Wolfsjaw within
   its stage-priced ceiling"), driven through the production raid path against a
