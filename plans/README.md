@@ -51,6 +51,7 @@ conditions, and update its status row when done.
 | 035 | Price the fight against a player who plays | P0 | M | 028, 032, 033 | DONE - the tier ladder moved up 0.10; two of the plan's own premises corrected by measurement, see plan |
 | 036 | Initiative reads who closed the distance, not just who intended to | P1 | S | 023, 033 | DONE - a chased party the hero rides down now reads as a mutual skirmish instead of AMBUSHED!, see plan |
 | 037 | One sanctuary radius, so a fight cannot start where nobody is allowed to want one | P1 | S | 020, 021, 023 | DONE - unified on settlementSafeR; two repository documents disagreed, see plan |
+| 038 | Measure the campaign arc, then make gold buy something | P0 | L | 020, 025, 028, 029, 035 | DONE - four slices plus one out-of-scope fix; the dominant strategy inverted; criterion 3 at 9/12 and held open with `test.fail`, see plan |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).

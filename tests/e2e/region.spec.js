@@ -73,12 +73,28 @@ test('stronghold power climbs the documented ladder from deterministic inputs on
   expect(strongholdStateId(saveWith({ owned: ['ashford'], razedCamps: ['c1'] }))).toBe('weakened');
   expect(strongholdPoints(saveWith({ owned: ['ashford'], razedCamps: ['c1'] }))).toBe(2);
 
-  // Full conquest: EXPOSED with or without any camp falling.
+  // PLAN 038: EXPOSED NEEDS A BROKEN SUPPLY LINE, not merely the points. Holding every
+  // settlement and razing nothing clears the point threshold and still leaves the hold
+  // WEAKENED, because `states[exposed].minRazedCamps` is 1. Measured over 48 scripted
+  // campaigns, four free claims reaching EXPOSED made never fighting the only winning
+  // policy (`critiques/campaign-arc-baseline.md`); the gate is what closes that route.
   const allOwned = saveWith({ owned: WORLD.settlements.map(s => s.id) });
-  expect(strongholdStateId(allOwned)).toBe('exposed');
+  expect(strongholdPoints(allOwned)).toBeGreaterThanOrEqual(
+    STRONGHOLD_POWER.states.find(x => x.id === 'exposed').minPoints);
+  expect(strongholdStateId(allOwned)).toBe('weakened');
+
+  // One razed linked camp is the whole difference — same points, EXPOSED.
+  expect(strongholdStateId(saveWith({
+    owned: WORLD.settlements.map(s => s.id).slice(0, 3), razedCamps: ['c1'],
+  }))).toBe('exposed');
+  expect(strongholdStateId(saveWith({
+    owned: WORLD.settlements.map(s => s.id), razedCamps: ['c1'],
+  }))).toBe('exposed');
   expect(strongholdStateId(saveWith({
     owned: WORLD.settlements.map(s => s.id), razedCamps: REGION.linkedCamps,
   }))).toBe('exposed');
+  // Razed camps alone cannot reach it either: three of them is only three points.
+  expect(strongholdStateId(saveWith({ razedCamps: REGION.linkedCamps }))).toBe('weakened');
   expect(strongholdPoints(saveWith({
     owned: WORLD.settlements.map(s => s.id), razedCamps: REGION.linkedCamps,
   }))).toBe(WORLD.settlements.length + REGION.linkedCamps.length);
@@ -117,9 +133,13 @@ test('stronghold modifiers implement the milestone mapping exactly', () => {
   expect(strongholdModifiers(saveWith({ owned: ['ashford'], specs: { ashford: 'barracks' } })).revealDeployment).toBe(false);
   expect(ownsWatchtower(saveWith({ owned: ['ashford'], specs: { ashford: 'watchtower' } }))).toBe(true);
 
-  // EXPOSED thins the starting garrison; the other states do not.
-  expect(strongholdModifiers(saveWith({ owned: WORLD.settlements.map(s => s.id) })).garrisonMul)
-    .toBe(STRONGHOLD_POWER.exposedGarrisonFrac);
+  // EXPOSED thins the starting garrison; the other states do not. Plan 038: four
+  // captures without a razed camp is WEAKENED, so it does NOT thin — the difference
+  // between these first two lines is one broken supply line and nothing else.
+  expect(strongholdModifiers(saveWith({ owned: WORLD.settlements.map(s => s.id) })).garrisonMul).toBe(1);
+  expect(strongholdModifiers(saveWith({
+    owned: WORLD.settlements.map(s => s.id), razedCamps: ['c1'],
+  })).garrisonMul).toBe(STRONGHOLD_POWER.exposedGarrisonFrac);
   expect(strongholdModifiers(saveWith({ owned: ['ashford', 'brindle'] })).garrisonMul).toBe(1);
 
   // The same save always produces the identical bundle (pure derivation, no RNG).
@@ -138,7 +158,9 @@ test('the brief advantage lines are derived from the modifier bundle, never hand
   expect(weakened.some(l => l.startsWith('2 defensive guards'))).toBe(true);
   expect(weakened.some(l => l.includes('EXPOSED'))).toBe(false);
 
-  const exposed = strongholdAdvantageLines(strongholdModifiers(saveWith({ owned: WORLD.settlements.map(s => s.id) })));
+  const exposed = strongholdAdvantageLines(strongholdModifiers(saveWith({
+    owned: WORLD.settlements.map(s => s.id), razedCamps: ['c1'],
+  })));
   expect(exposed.some(l => l.includes('EXPOSED'))).toBe(true);
 
   const scouted = strongholdAdvantageLines(strongholdModifiers(saveWith({ owned: ['ashford'], specs: { ashford: 'watchtower' } })));
@@ -214,11 +236,25 @@ test('objective mapping is decided in one place', () => {
 
 test('a beatable route to an Exposed stronghold exists for every supported seed', () => {
   // The route is STRUCTURAL, not seed-dependent: settlements and camps are authored
-  // constants, so capturing every settlement alone must always cross the Exposed
-  // threshold no matter how the seeded terrain rolled.
-  const exposedAt = STRONGHOLD_POWER.states.find(s => s.id === 'exposed').minPoints;
-  expect(WORLD.settlements.length).toBeGreaterThanOrEqual(exposedAt);
-  expect(strongholdStateId(saveWith({ owned: WORLD.settlements.map(s => s.id) }))).toBe('exposed');
+  // constants, so a route that reaches the Exposed threshold must always exist no matter
+  // how the seeded terrain rolled.
+  //
+  // Plan 038 changed WHICH route that is, and this test is the guard on the change. It
+  // used to be "capture every settlement, raze nothing"; EXPOSED now also needs one razed
+  // linked camp, so the shortest route is the settlements plus the weakest camp. Both
+  // halves are asserted: the points are always reachable, and the camp requirement is
+  // always satisfiable because the map authors three linked camps.
+  const exposed = STRONGHOLD_POWER.states.find(s => s.id === 'exposed');
+  expect(WORLD.settlements.length + 1).toBeGreaterThanOrEqual(exposed.minPoints);
+  expect(REGION.linkedCamps.length).toBeGreaterThanOrEqual(exposed.minRazedCamps);
+  expect(strongholdStateId(saveWith({
+    owned: WORLD.settlements.map(s => s.id), razedCamps: [REGION.linkedCamps[0]],
+  }))).toBe('exposed');
+  // ...and the cheapest one: the weakest camp plus enough settlements to reach the points.
+  expect(strongholdStateId(saveWith({
+    owned: WORLD.settlements.map(s => s.id).slice(0, exposed.minPoints - 1),
+    razedCamps: [REGION.linkedCamps[0]],
+  }))).toBe('exposed');
   // The HUD labels derive from the same ladder, so they cannot drift from it.
   expect(STRONGHOLD_POWER_LABELS.entrenched).toBe('ENTRENCHED');
   expect(STRONGHOLD_POWER_LABELS.weakened).toBe('WEAKENED');

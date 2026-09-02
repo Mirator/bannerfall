@@ -29,22 +29,31 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
 - Settlement interactions at towns: recruit, heal, expand army cap — all
   refused while a settlement is occupied by an enemy party.
 - Regional conquest (Milestone 025): one region with four settlements and the
-  Wolfsjaw stronghold. Neutral ground is claimed peacefully (`G` at its
-  gates); captured ground gets a one-time, permanent specialization
+  Wolfsjaw stronghold. Neutral ground is claimed peacefully — a paid row of the
+  site menu, not a free ride-past (Plan 038: `BALANCE.claimCost`, more in total
+  than the starting purse); captured ground gets a one-time, permanent specialization
   (Barracks, Archery, Market, Watchtower) whose benefit suspends while the
   settlement is occupied and resumes when it is won back.
 - The stronghold's power ladder (ENTRENCHED/WEAKENED/EXPOSED) is derived from
   held settlements and razed linked camps and materially changes the final
   assault: fewer defensive guards per razed camp, the reserve wave removed at
   two captures, and an Exposed hold that starts thinned and deploys visibly
-  when a Watchtower is held.
+  when a Watchtower is held. Exposed also requires at least one razed linked
+  camp (Plan 038): supply lines are what leave a hold exposed. Razing the last
+  linked camp makes the surviving bands fall back on the hold and man its walls,
+  bounded by the same stage-priced target its garrison is rolled against; the
+  bands it has no room for stay out on the March.
 - Regional pressure: Wolfsjaw dispatches one raid at a time at held ground
   (grace after captures and after successful defenses); a raid landing near
   the hero opens a Hold-the-ground defense battle, otherwise it occupies the
   settlement until driven out.
-- Economy: gold from loot, army cap expansion, weighted spawn tiers that
-  shift toward stronger parties as camps are razed, plus an emergency
-  beatable-floor correction so a winnable fight always exists.
+- Economy: gold from loot paid per enemy body TYPE, army cap expansion, the
+  banner, and paid claims. Encounters are sized off how far the campaign has
+  come rather than off the warband (Plan 038: `World.encounterBase()`), so
+  spending gold buys a real advantage instead of raising both sides of the next
+  fight; weighted spawn tiers still shift toward stronger parties as camps are
+  razed, and an emergency beatable-floor correction guarantees a winnable fight
+  always exists.
 - Win condition: weaken and storm Wolfsjaw. The victory screen summarizes the
   whole campaign from the final save (time, battles, captures, razing,
   treasury, specializations). Losing fights restores surviving enemies;

@@ -113,22 +113,37 @@ export function armySlots(troops) {
   return n;
 }
 
+// `gold` is what one body of this type is worth as loot, and since Plan 038 it is READ:
+// `lootFor(comp)` below is the only loot formula, and endBattle calls it. Until then the
+// field was dead data - the shipped rule was `lootBase + totalEnemies * lootPerEnemy`,
+// which pays by headcount and cannot see what the bodies are, so a wolf paid 10.8 gold
+// per unit of fighting weight and a brute 1.6 and the dominant income in the whole
+// campaign was running down fleeing wolf-heavy parties (audit finding 4, measured in
+// `critiques/campaign-arc-baseline.md`).
+//
+// The four values are TUNED, not authored: gold per unit of fighting weight is flat
+// across the three light bodies to within 9% (bandit 6.58, raider 6.08, wolf 6.48) and
+// the brute pays 8.48, about 1.33x that rate - it is the one body that has to be ground
+// all the way down, and paying for it at the light rate is what made ignoring it correct.
+// Integers are what a purse holds, so the residual spread is rounding rather than
+// intent. Retuning UNIT_TYPES/POWER_EFFICIENCY moves the weights and therefore this
+// table: recompute with `enemyStrength([type])`, never by hand.
 export const ENEMY_TYPES = {
   bandit: {
     name: 'Bandit', plural: 'bandits', icon: 'axe', hp: 110, dmg: 10, range: 28, speed: 92, radius: 10,
-    cooldown: 1.3, windup: 0.5, gold: 6,
+    cooldown: 1.3, windup: 0.5, gold: 5,
   },
   raider: {
     name: 'Raider', plural: 'raiders', icon: 'bow', hp: 85, dmg: 9, range: 210, speed: 82, radius: 10,
-    cooldown: 2.2, windup: 0.55, gold: 7, ranged: true, projSpeed: 300, keepAway: 150,
+    cooldown: 2.2, windup: 0.55, gold: 6, ranged: true, projSpeed: 300, keepAway: 150,
   },
   brute: {
     name: 'Brute', plural: 'brutes', icon: 'club', hp: 420, dmg: 24, range: 52, speed: 55, radius: 18,
-    cooldown: 2.8, windup: 0.95, gold: 25, slamR: 100,
+    cooldown: 2.8, windup: 0.95, gold: 26, slamR: 100,
   },
   wolf: {
     name: 'Wolf', plural: 'wolves', icon: 'fang', hp: 55, dmg: 8, range: 24, speed: 158, radius: 8,
-    cooldown: 1.1, windup: 0.42, gold: 4,
+    cooldown: 1.1, windup: 0.42, gold: 3,
   },
 };
 
@@ -348,6 +363,18 @@ export function enemyStrength(comp) {
   }
   return forceWeight(dps, hp);
 }
+// What a victory over `comp` pays. ONE formula, exported, so the game and every test read
+// the same number instead of restating the arithmetic - which is exactly how
+// `ENEMY_TYPES[type].gold` came to have no reader at all for four plans. `comp` accepts
+// both shapes `enemyStrength` does: plain type strings (world comps) and `{type}` objects
+// (battle setup.enemies). Unknown types pay nothing rather than throwing, because a save
+// from a future roster must not be able to crash the aftermath.
+export function lootFor(comp) {
+  let gold = BALANCE.lootBase;
+  for (const t of comp || []) gold += ENEMY_TYPES[typeof t === 'string' ? t : t.type]?.gold || 0;
+  return gold;
+}
+
 // Plan 029: a troop record may carry `vet`, and a ranked body really is stronger, so the
 // generator has to price it. Without this the map would keep sizing fights against a
 // warband's BASE types while the player's actual warband outgrew them — tier honesty,
@@ -377,12 +404,61 @@ export function weightText(w) {
   return (Math.round(w * 10) / 10).toFixed(1);
 }
 
+// ---------------------------------------------------------------------------
+// The campaign STAGE curve (Plan 038). Until this plan every generated encounter was
+// priced off `myStrength()`: spawnParty targeted `mine * band`, rollGarrison targeted
+// `mine * tier`, the regional raid `mine * 1.1` and the stronghold's reserve wave
+// `mine * 0.8`. Recruits, the army-cap ladder and the banner therefore raised BOTH
+// sides equally, and camp c1 sat at a ratio of 0.71 whether the warband weighed 4.6 or
+// 12.6. Gold bought a bigger number on a badge and nothing else — measured end to end
+// over 48 scripted campaigns in `critiques/campaign-arc-baseline.md`.
+//
+// The replacement prices the next fight off HOW FAR THE CAMPAIGN HAS COME, with a
+// partial correction for the warband:
+//
+//     stage = base + perPoint * strongholdPoints(save)          (0..7 points)
+//     corr  = clamp( (myStrength() / stage) ^ alpha, corrMin, corrMax )
+//     encounterBase() = stage * corr * (hard ? hardEncounterMul : 1)
+//
+// The correction is a FRACTIONAL EXPONENT rather than a clamp on purpose: a clamp keeps
+// the realised ratio constant inside its window, which is the exact defect being
+// removed. With `alpha` in (0, 1) the realised ratio falls as the warband outgrows the
+// stage curve — `ratio = band * (mine/stage)^(alpha-1)` — so at alpha 0.4 a warband at
+// twice the stage weight fights at 0.66 of the band and one at half the stage weight
+// fights at 1.5 of it. The floor guarantee still promises something beatable, because
+// it and every odds word keep reading `myStrength()` (see World.myStrength).
+//
+// `base` and `perPoint` are COMPUTED, never typed: base is the fresh warband's own
+// fighting weight, and perPoint is set so the top of the ladder equals the near-capped
+// roster Plan 035 measured against ("late" in scripts/zz-tier035-probe.mjs). Retuning
+// the unit tables therefore moves the stage curve with them instead of stranding two
+// literals. `maxPoints` is derived from the shipped map — every settlement held plus
+// every ordinary camp razed — so it cannot drift from region.js's ladder.
+const FRESH_TROOPS = 4;                       // BALANCE.startTroops, below
+const STAGE_LATE_ROSTER = ['spear', 'spear', 'spear', 'spear', 'archer', 'archer', 'archer', 'knight', 'knight'];
+const STAGE_BASE = playerStrength(Array.from({ length: FRESH_TROOPS }, () => ({ type: 'spear' })));
+const STAGE_MAX_POINTS = WORLD.settlements.length + WORLD.camps.filter(c => !c.stronghold).length;
+const STAGE_PER_POINT =
+  (playerStrength(STAGE_LATE_ROSTER.map(type => ({ type }))) - STAGE_BASE) / STAGE_MAX_POINTS;
+
 export const BALANCE = {
   startGold: 80,
-  startTroops: 4,
+  startTroops: FRESH_TROOPS,
   armyCapBase: 12,
-  lootPerEnemy: 5,
-  lootBase: 10,
+  // What every victory pays before the bodies are counted, and it is the ONE part of a
+  // purse that is blind to what was fought. `lootPerEnemy` sat beside it until Plan 038
+  // and is gone: loot is per body TYPE now, through lootFor() below.
+  //
+  // Halved from 10 by that slice, for two reasons that agree. Paying per body type raised
+  // campaign income 25% over the flat rule (measured, 48 campaigns) because the brute went
+  // from 5 gold to 26 and camp garrisons are where the brutes are - past the +/-15% the
+  // plan allowed a loot change to move the economy by. And scaling the four per-type values
+  // down instead, as the plan first suggested, cannot be done at integer granularity
+  // without wrecking the flat rate they exist to hold (4/4/2 spans 30%, against 9% now).
+  // Cutting the body-BLIND term is the correction that strengthens the slice rather than
+  // diluting it: it leaves every per-type rate exactly where it was tuned, and brings
+  // campRaider to +13% of the pre-slice figure.
+  lootBase: 5,
   defeatGoldLoss: 0.3,   // fraction lost when hero falls
   healCost: 10,
   battleGrace: 6,        // seconds of ambush immunity after returning to the map
@@ -391,8 +467,17 @@ export const BALANCE = {
   // World.spawnParty() shifts these weights toward `strong` as camps fall, so the curve
   // rises across a run instead of tracking the player forever (see rollComp()).
   //
-  // Plan 028 REDEFINED WHAT THESE RATIOS ARE RATIOS OF. They used to multiply a headcount
-  // of strength points; they now multiply the player's FIGHTING WEIGHT, so 1.0 is a
+  // PLAN 038 REDEFINED WHAT THESE RATIOS ARE RATIOS OF, FOR THE SECOND TIME. They multiply
+  // `World.encounterBase()` — the campaign STAGE curve — not the warband. A band is still a
+  // band of measured fighting weight; what moved is whose. Everything the two paragraphs
+  // below say about where the ladder sits was measured against the warband and still
+  // describes the band's SHAPE, but a realised ratio now FALLS as the warband outgrows the
+  // stage curve (`ratio = band * (mine/stage)^(alpha-1)`), which is the whole point:
+  // recruiting must not raise both sides of every fight at once. See the
+  // BALANCE.encounterStage block above.
+  //
+  // Plan 028 redefined them the first time. They used to multiply a headcount
+  // of strength points; they became ratios of measured FIGHTING WEIGHT, so 1.0 is a
   // measured coin flip rather than an equal body count. The old `even` band read 0.8-1.2
   // on the headcount scale and delivered roughly 0.72-0.90 of real power — a band the
   // player could not lose, which is why nothing downstream of the generator could make an
@@ -450,7 +535,37 @@ export const BALANCE = {
   campWeightPerSize: 0.9,
   // Heavy-body ceilings for a garrison roll, by the player's own fighting weight. The old
   // thresholds were 12 and 8 strength points, which are 8.2 and 5.2 on this scale.
+  //
+  // Plan 038 deliberately left these reading `myStrength()` while every generator TARGET
+  // moved to the stage curve. They are a mercy rule about what a given warband should be
+  // asked to grind through, not a size — a ground-down warband at a late stage meets a
+  // heavier force made of lighter bodies, which is the fight it can actually fight.
   garrisonBruteCaps: { strongholdCap: 3, twoAt: 8, oneAt: 5 },
+  // How far above its own stage-priced target Wolfsjaw's garrison may be pushed by
+  // bandits who withdrew into it when the last linked camp fell (campVictoryExtra in
+  // world/settlement-interactions.js). Leaving bands alive on the March has to COST
+  // something at the finale or the mechanic is decoration — but until this ceiling
+  // existed the absorption was unbounded, and it was the one force in the game that
+  // bypassed encounterBase() entirely. Measured, it was worth more than everything a
+  // warband gained by fighting: a `campRaider` that reached the hold at fighting weight
+  // 17.4 against a `claimRush` at 6.6 still faced WORSE odds, because its 15.5 garrison
+  // had been topped up to 24.8. See critiques/campaign-arc-comparison.md.
+  strongholdRemnantCeiling: 1.25,
+  // The campaign stage curve (see the block above). Only `alpha` and the correction
+  // bounds are tuning values; `base`, `perPoint` and `maxPoints` are derived.
+  encounterStage: {
+    base: STAGE_BASE,
+    perPoint: STAGE_PER_POINT,
+    maxPoints: STAGE_MAX_POINTS,
+    alpha: 0.4,
+    corrMin: 0.6,
+    corrMax: 1.6,
+  },
+  // HARD's difficulty multiplier. Until Plan 038 this was a literal inside rollGarrison,
+  // so HARD touched camp garrisons and NOTHING ELSE — not roaming parties, not regional
+  // raids, not the stronghold's reserve wave (audit finding 15). It now applies once,
+  // inside encounterBase(), which is the single place a generator target is computed.
+  hardEncounterMul: 1.25,
   // Plan 023: the world lives only while the hero rides. `worldWakeSpeed` is the same
   // 40 px/s that already gates hero bob, dust and the gallop SFX, so ONE number decides
   // "is the horse moving" for both presentation and the campaign clock and they can
@@ -466,6 +581,14 @@ export const BALANCE = {
   // the town prompt — one formula (armyCapCost) so the price tag can never lie.
   armyCapCostBase: 40,
   armyCapCostStep: 20,
+  // Plan 038: a claim is a PURCHASE. It used to be free and unconditional - four rides
+  // past four settlements reached strongholdPoints 4 (EXPOSED), removed the reserve wave
+  // at two, paid four perk points and extended raid grace each time, and the measured
+  // credible fastest win never fought until the storm (54 flowing seconds and one battle,
+  // `critiques/campaign-arc-baseline.md`). Priced by settlement kind, read off `s.kind`,
+  // so the town costs what a town is worth. Deliberately more than `startGold` in total:
+  // taking the whole march peacefully is not something the opening purse can buy.
+  claimCost: { village: 60, town: 100 },
   // Plan 029: the banner is the gold sink, and it buys a CEILING rather than a bonus —
   // each stage raises the highest veteran rank a troop may reach (see progression.js).
   // Gold buys the room; keeping men alive across fights is what fills it, which is what

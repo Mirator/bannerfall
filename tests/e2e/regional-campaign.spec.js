@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { WORLD } from '../../src/data.js';
+import { WORLD, BALANCE, lootFor, enemyStrength } from '../../src/data.js';
 import { RAID, REGION, SPECIALIZATIONS } from '../../src/region.js';
 import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 
@@ -81,6 +81,16 @@ async function commitChoice(page, note = '') {
   return note;
 }
 
+// Plan 038: a claim is a purchase (BALANCE.claimCost, 60 for a village and 100 for the
+// town) and `startGold` is 80, so a fixture that claims more than one settlement has to
+// be funded. The fixtures below say so explicitly rather than quietly depending on the
+// starting purse, which is exactly the coupling that let a free claim go unnoticed.
+async function fund(page, gold) {
+  await page.evaluate(g => { window.__g.scene.save.gold = g; }, gold);
+}
+
+const CLAIM_COST = id => BALANCE.claimCost[S(id).kind];
+
 test('a fresh campaign opens with the documented regional shape', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openWorld(page);
@@ -104,13 +114,18 @@ test('a fresh campaign opens with the documented regional shape', async ({ page 
   assertNoRuntimeErrors(runtimeErrors);
 });
 
-test('claiming neutral ground checkpoints ownership, opens the permanent spec choice, and buys capture grace', async ({ page }) => {
+test('claiming neutral ground is a PURCHASE that checkpoints ownership and opens the permanent spec choice — and buys no grace', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openWorld(page);
   await page.evaluate(({ x, y }) => {
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
+  const beforeClaim = await page.evaluate(() => ({
+    gold: window.__g.scene.save.gold,
+    goldSpent: window.__g.scene.save.stats.goldSpent,
+    raidCdT: window.__g.scene.raidCdT,
+  }));
   await tickSiteRow(page, 'claim');
   const claimed = await page.evaluate(async () => {
     const w = window.__g.scene;
@@ -122,7 +137,10 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
       screenKind: w.screen && w.screen.kind,
       optionIds: w.screen && w.screen.options.map(o => o.id),
       raidCdT: w.raidCdT,
+      gold: w.save.gold,
+      goldSpent: w.save.stats.goldSpent,
       persistedOwner: stored.settlements.find(s => s.id === 'ashford').owner,
+      persistedGold: stored.gold,
     };
   });
   expect(claimed.rec.owner).toBe('player');
@@ -130,8 +148,17 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
   expect(claimed.captures).toBe(1);
   expect(claimed.screenKind).toBe('spec');
   expect(claimed.optionIds).toEqual(['barracks', 'archery', 'market', 'watchtower']);
-  // The stronghold does not instantly punish expansion: capture grace on the clock.
-  expect(claimed.raidCdT).toBeGreaterThanOrEqual(RAID.graceAfterCaptureT);
+  // Plan 038: the claim is bought. The purse is debited and the campaign summary's
+  // spend counter sees it, exactly as a recruit or an army-cap expansion does.
+  expect(claimed.gold).toBe(beforeClaim.gold - CLAIM_COST('ashford'));
+  expect(claimed.goldSpent).toBe(beforeClaim.goldSpent + CLAIM_COST('ashford'));
+  expect(claimed.persistedGold).toBe(claimed.gold);
+  // Plan 038 INVERTS what this used to assert. Grace is earned by winning a fight, not by
+  // riding past: a peaceful claim leaves the raid clock exactly where it found it. Four
+  // free claims used to push it out by 60 s each on top of RAID.firstDelayT's 110, and
+  // the campaign harness measured zero landed raids across 48 runs as a result. The
+  // capture-by-battle case below is the half that still buys grace.
+  expect(claimed.raidCdT).toBe(beforeClaim.raidCdT);
   // The claim was a persistence checkpoint written while still in `world`.
   expect(claimed.persistedOwner).toBe('player');
 
@@ -166,6 +193,120 @@ test('claiming neutral ground checkpoints ownership, opens the permanent spec ch
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('a claim the purse cannot cover is refused at the row, and the panel says so', async ({ page }) => {
+  // Plan 038 acceptance criterion 2, at the level the player meets it. `startGold` is 80
+  // and the town costs 100, so a fresh campaign literally cannot buy Highmere — and the
+  // refusal has to READ as a price, on the row, before the press.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  await page.evaluate(({ x, y }) => {
+    window.__g.scene.hero.x = x;
+    window.__g.scene.hero.y = y;
+  }, { x: S('keep').x, y: S('keep').y });
+  await tickAction(page, 'worldPrimary');
+  const row = await page.evaluate(() => {
+    const screen = window.__g.scene.screen;
+    return screen.rows.find(r => r.id === 'claim');
+  });
+  expect(row.label).toContain(String(CLAIM_COST('keep')));
+  expect(row.enabled).toBe(false);
+  expect(row.disabledReason).toBe(`Need ${CLAIM_COST('keep')} gold`);
+  await tickAction(page, 'withdraw'); // close the panel, then commit the row anyway
+
+  // Committing a disabled row must refuse in claimSettlement's own words and leave the
+  // menu up carrying the notice — the same shape a refused recruit or expansion has.
+  await tickSiteRow(page, 'claim');
+  const refused = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return {
+      owner: w.save.settlements.find(s => s.id === 'keep').owner,
+      gold: w.save.gold,
+      captures: w.save.stats.captures,
+      screenKind: w.screen && w.screen.kind,
+      notice: w.screen && w.screen.notice,
+    };
+  });
+  expect(refused.owner).toBe('neutral');
+  expect(refused.gold).toBe(BALANCE.startGold);
+  expect(refused.captures).toBe(0);
+  expect(refused.screenKind).toBe('site');
+  expect(refused.notice).toContain(String(CLAIM_COST('keep')));
+
+  // Fund it and the same row lands.
+  await tickAction(page, 'withdraw');
+  await fund(page, CLAIM_COST('keep'));
+  await tickSiteRow(page, 'claim');
+  const bought = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return { owner: w.save.settlements.find(s => s.id === 'keep').owner, gold: w.save.gold };
+  });
+  expect(bought.owner).toBe('player');
+  expect(bought.gold).toBe(0);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('a settlement taken by BATTLE is free and still buys capture grace', async ({ page }) => {
+  // The other half of Plan 038's grace rule. Riding past neutral ground and paying for it
+  // buys no grace; driving an occupier off it is a fight, so it does — and it costs no
+  // gold, because it was won rather than bought. This is the capture-by-battle path
+  // through the SAME winSettlement branch the peaceful claim skips.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  await page.evaluate(({ x, y, hx, hy }) => {
+    const w = window.__g.scene;
+    // brindle is NEUTRAL and a break-off party has seized it: nothing here is owned.
+    w.save.settlements.find(s => s.id === 'brindle').occupied = true;
+    w.parties.length = 0;
+    w.parties.push({
+      camp: 'c1', x, y, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: ['bandit', 'bandit', 'raider'],
+      home: { x: hx, y: hy },
+      wander: null, wanderT: 0, waryT: 0, clashT: 0,
+      occupying: 'brindle', raid: null,
+      navT: 0, navGoal: null, navFor: null,
+      _navGoalVisibility: new Float64Array(w.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+    });
+    w.persistParties();
+    w.raidCdT = 1; // the clock is nearly up, so grace is measurable rather than assumed
+    w.hero.x = x; w.hero.y = y;
+    window.game.keepAwake(true);
+  }, { x: S('brindle').x + 20, y: S('brindle').y, hx: C('c1').x, hy: C('c1').y });
+  const before = await page.evaluate(() => ({
+    gold: window.__g.scene.save.gold,
+    goldSpent: window.__g.scene.save.stats.goldSpent,
+  }));
+
+  await page.evaluate(() => { window.__tick(1 / 60); });
+  expect(await page.evaluate(() => window.__g.scene.screen && window.__g.scene.screen.kind)).toBe('brief');
+  await tickAction(page, 'confirm');
+  await page.evaluate(() => {
+    if (window.__g.sceneName !== 'battle') throw new Error('confirming the brief did not start a battle');
+    window.__g.scene.endBattle(true);
+  });
+  await page.evaluate(() => { window.__tick(3); });
+  await tickAction(page, 'confirm'); // dismiss the aftermath
+
+  const won = await page.evaluate(() => {
+    const w = window.__g.scene;
+    const rec = w.save.settlements.find(s => s.id === 'brindle');
+    return {
+      owner: rec.owner, occupied: rec.occupied,
+      captures: w.save.stats.captures,
+      raidCdT: w.raidCdT,
+      gold: w.save.gold, goldSpent: w.save.stats.goldSpent,
+    };
+  });
+  expect(won.owner).toBe('player');
+  expect(won.occupied).toBe(false);
+  expect(won.captures).toBe(1);
+  // Won, not bought: nothing was charged for it.
+  expect(won.goldSpent).toBe(before.goldSpent);
+  expect(won.gold).toBeGreaterThanOrEqual(before.gold); // loot only ever adds
+  // And a fight DOES buy the cadence grace a ride past does not.
+  expect(won.raidCdT).toBeGreaterThanOrEqual(RAID.graceAfterCaptureT);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('dismissing the spec choice does not lose it — the site menu at the gates reopens it', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openWorld(page);
@@ -173,6 +314,7 @@ test('dismissing the spec choice does not lose it — the site menu at the gates
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
+  await fund(page, 500); // Plan 038: a claim is a purchase; this fixture is about the modal
   await tickSiteRow(page, 'claim'); // capture ashford — its spec modal opens
   await tickAction(page, 'withdraw'); // "decide later"
   const dismissed = await page.evaluate(() => {
@@ -215,6 +357,7 @@ test('capturing a second settlement while a first choice is still outstanding do
     window.__g.scene.hero.x = x;
     window.__g.scene.hero.y = y;
   }, { x: S('ashford').x, y: S('ashford').y });
+  await fund(page, 500); // Plan 038: two claims cost 120 gold, more than startGold's 80
   await tickSiteRow(page, 'claim'); // capture ashford
   await tickAction(page, 'withdraw'); // decide later — leaves ashford queued, unspecialized
 
@@ -571,6 +714,89 @@ test('a raid landing on held ground beside the hero is a Hold-the-ground defense
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('razing the last camp reinforces Wolfsjaw within its stage-priced ceiling, and the bands it cannot take stay on the March', async ({ page }) => {
+  // Plan 038 follow-up. Bands with nowhere left to muster fall back on the hold, which is
+  // a real cost for leaving them alive — but this was the ONE force in the game that
+  // bypassed `encounterBase()`, and it was unbounded: every surviving party was pushed
+  // onto the garrison and then deleted from the map. Measured, that was worth more than
+  // everything a warband gained by fighting, and it emptied the March at the moment the
+  // campaign asked the player to go and win it.
+  //
+  // The fixture stacks the deck on purpose — six full bands against a two-camp-razed
+  // save — because the defect only shows when there is more to absorb than the hold has
+  // room for. Both halves are asserted: the ceiling holds, and the overflow survives.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const before = await page.evaluate(({ x, y, cw, ceilMul, size, tier }) => {
+    const w = window.__g.scene;
+    // Two camps already down; c3 is the one this raid will raze.
+    for (const id of ['c1', 'c2']) w.save.camps.find(c => c.id === id).razed = true;
+    // A pre-scouted hold of a KNOWN weight, so what the ceiling leaves room for is
+    // arithmetic rather than a roll. All one body type on both sides, because fighting
+    // weight is exactly linear in body count within a type and the reader can then check
+    // the absorption by counting.
+    w.save.camps.find(c => c.id === 'strong').garrison = Array.from({ length: 6 }, () => 'bandit');
+    // Six bands already homed on the hold, as razing their own camps would have left them.
+    w.parties.length = 0;
+    for (let i = 0; i < 6; i++) {
+      w.parties.push({
+        camp: 'strong', x: 900 + i * 40, y: 900, vx: 0, vy: 0, facing: 0, bob: 0,
+        comp: ['bandit', 'bandit'],
+        home: { x, y }, wander: null, wanderT: 0, waryT: 0, clashT: 0,
+        occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+        _navGoalVisibility: new Float64Array(w.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+      });
+    }
+    w.persistParties();
+    return {
+      parties: w.save.parties.length,
+      // The ceiling the absorption must respect, read off the production seams rather
+      // than restated: the same expression rollGarrison targets, times the constant.
+      ceiling: Math.max(size * cw, w.encounterBase() * tier) * ceilMul,
+    };
+  }, {
+    x: STRONGHOLD.x, y: STRONGHOLD.y,
+    cw: BALANCE.campWeightPerSize, ceilMul: BALANCE.strongholdRemnantCeiling,
+    size: STRONGHOLD.size, tier: STRONGHOLD.tier,
+  });
+  expect(before.parties).toBe(6);
+
+  // Raze c3 through the production path: site menu row -> brief -> forced victory.
+  await page.evaluate(({ x, y }) => {
+    const w = window.__g.scene;
+    w.hero.x = x; w.hero.y = y; w.grace = 0;
+  }, { x: C('c3').x, y: C('c3').y });
+  await tickSiteRow(page, 'raid');
+  await tickAction(page, 'confirm');
+  await page.evaluate(() => {
+    if (window.__g.sceneName !== 'battle') throw new Error('the raid brief did not start a battle');
+    window.__g.scene.endBattle(true);
+  });
+  await page.evaluate(() => { window.__tick(3); });
+  await tickAction(page, 'confirm'); // dismiss the aftermath
+
+  const after = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return {
+      razed: w.save.camps.filter(c => c.razed && c.id !== 'strong').length,
+      garrison: (w.save.camps.find(c => c.id === 'strong').garrison || []).slice(),
+      partiesLeft: (w.save.parties || []).filter(p => p.camp === 'strong').length,
+      toast: w.msg,
+    };
+  });
+  expect(after.razed).toBe(3);
+  // The hold IS reinforced — the mechanic still has teeth...
+  expect(after.garrison.length).toBeGreaterThan(6);
+  expect(after.partiesLeft).toBeLessThan(6);
+  // ...but never past its own stage-priced ceiling.
+  expect(enemyStrength(after.garrison),
+    `the hold absorbed past its ceiling: ${enemyStrength(after.garrison).toFixed(2)} > ${before.ceiling.toFixed(2)}`)
+    .toBeLessThanOrEqual(before.ceiling);
+  // ...and the bands it had no room for are still out there, not deleted with the camp.
+  expect(after.partiesLeft).toBeGreaterThan(0);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('stronghold power states materially change the final battle', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
 
@@ -694,9 +920,10 @@ test('the final stronghold victory ends the campaign with the regional summary c
   expect(m.foesSlain).toBe(64);
   expect(m.soldiersLost).toBe(11);
   // The pre-scouted 6-bandit hold thins to 3 under EXPOSED; the win pays the
-  // stronghold's 200g razed bonus plus loot (lootBase + 3*lootPerEnemy = 25),
-  // and both land in goldEarned as well as the purse.
-  const winnings = 200 + 10 + 3 * 5;
+  // stronghold's 200g razed bonus plus loot for the three bandits that deployed, and both
+  // land in goldEarned as well as the purse. Plan 038: loot is per body TYPE, so the
+  // figure comes from lootFor() rather than from a restated headcount formula.
+  const winnings = 200 + lootFor(['bandit', 'bandit', 'bandit']);
   expect(m.goldEarned).toBe(700 + winnings);
   expect(m.finalGold).toBe(180 + winnings);
   expect(m.specs).toEqual(['Ashford: Barracks', 'Coldwell: Watchtower']);

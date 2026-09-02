@@ -1,0 +1,6279 @@
+{
+  "label": "final",
+  "resolve": "real",
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "policies": [
+    "claimRush",
+    "campRaider",
+    "captureThenRaze",
+    "farmer"
+  ],
+  "wall": 3600,
+  "maxBattles": 60,
+  "byPolicy": {
+    "claimRush": {
+      "runs": 12,
+      "won": 0,
+      "wall": 0,
+      "cap": 0,
+      "playT": 52,
+      "battles": 1,
+      "winPct": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.6,
+      "stormRatio": 1.362,
+      "stormWinPct": 0,
+      "strongholdStates": {
+        "entrenched": 12
+      },
+      "floorFires": 0,
+      "raidsLanded": 0,
+      "claimsRefused": 3,
+      "goldPerBattle": 0
+    },
+    "campRaider": {
+      "runs": 12,
+      "won": 4,
+      "wall": 0,
+      "cap": 0,
+      "playT": 155,
+      "battles": 4.7,
+      "winPct": 73,
+      "goldEarned": 382,
+      "goldSpent": 311,
+      "finalGold": 139,
+      "finalWeight": 12.9,
+      "stormRatio": 1.267,
+      "stormWinPct": 33,
+      "strongholdStates": {
+        "weakened": 11,
+        "entrenched": 1
+      },
+      "floorFires": 0.2,
+      "raidsLanded": 0,
+      "claimsRefused": 0,
+      "goldPerBattle": 86.6
+    },
+    "captureThenRaze": {
+      "runs": 12,
+      "won": 4,
+      "wall": 0,
+      "cap": 0,
+      "playT": 213,
+      "battles": 5,
+      "winPct": 60,
+      "goldEarned": 321,
+      "goldSpent": 296,
+      "finalGold": 119,
+      "finalWeight": 8.7,
+      "stormRatio": 1.674,
+      "stormWinPct": 33,
+      "strongholdStates": {
+        "exposed": 8,
+        "weakened": 2,
+        "entrenched": 2
+      },
+      "floorFires": 0.5,
+      "raidsLanded": 0,
+      "claimsRefused": 2.2,
+      "goldPerBattle": 77.5
+    },
+    "farmer": {
+      "runs": 12,
+      "won": 1,
+      "wall": 0,
+      "cap": 0,
+      "playT": 372,
+      "battles": 10.1,
+      "winPct": 37,
+      "goldEarned": 174,
+      "goldSpent": 215,
+      "finalGold": 46,
+      "finalWeight": 4.3,
+      "stormRatio": 2.28,
+      "stormWinPct": 8,
+      "strongholdStates": {
+        "entrenched": 8,
+        "weakened": 4
+      },
+      "floorFires": 1.3,
+      "raidsLanded": 0,
+      "claimsRefused": 0,
+      "goldPerBattle": 17.7
+    }
+  },
+  "composition": {
+    "brute": {
+      "fights": 8,
+      "loot": 299,
+      "weight": 32.139,
+      "goldPerFight": 37.4,
+      "goldPerWeight": 9.3
+    },
+    "raider": {
+      "fights": 18,
+      "loot": 650,
+      "weight": 83.184,
+      "goldPerFight": 36.1,
+      "goldPerWeight": 7.81
+    },
+    "wolf": {
+      "fights": 10,
+      "loot": 289,
+      "weight": 36.379000000000005,
+      "goldPerFight": 28.9,
+      "goldPerWeight": 7.94
+    },
+    "bandit": {
+      "fights": 58,
+      "loot": 2462,
+      "weight": 320.2540000000001,
+      "goldPerFight": 42.4,
+      "goldPerWeight": 7.69
+    }
+  },
+  "huntComposition": {
+    "wolf": {
+      "fights": 8,
+      "loot": 223,
+      "weight": 27.499000000000002,
+      "goldPerFight": 27.9,
+      "goldPerWeight": 8.11
+    },
+    "bandit": {
+      "fights": 19,
+      "loot": 458,
+      "weight": 55.088999999999984,
+      "goldPerFight": 24.1,
+      "goldPerWeight": 8.31
+    },
+    "raider": {
+      "fights": 8,
+      "loot": 155,
+      "weight": 18.633999999999997,
+      "goldPerFight": 19.4,
+      "goldPerWeight": 8.32
+    },
+    "brute": {
+      "fights": 3,
+      "loot": 93,
+      "weight": 9.201,
+      "goldPerFight": 31,
+      "goldPerWeight": 10.11
+    }
+  },
+  "records": [
+    {
+      "seed": 1,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 208,
+      "flowT": 17,
+      "battles": 6,
+      "wins": 4,
+      "losses": 2,
+      "retreats": 0,
+      "goldEarned": 273,
+      "goldSpent": 317,
+      "finalGold": 25,
+      "finalWeight": 4.561,
+      "razed": 2,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 2,
+      "storm": {
+        "ratio": 2.002,
+        "won": false,
+        "durationT": 36.9,
+        "lost": 4
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.391,
+          "weight": 4.135,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.8,
+          "lost": 1,
+          "loot": 37,
+          "goldDelta": 97,
+          "earnedDelta": 97,
+          "enemies": {
+            "brute": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.295,
+          "weight": 3.715,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.3,
+          "lost": 0,
+          "loot": 29,
+          "goldDelta": 29,
+          "earnedDelta": 29,
+          "enemies": {
+            "wolf": 3,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.277,
+          "weight": 3.487,
+          "won": true,
+          "retreated": false,
+          "durationT": 13.6,
+          "lost": 0,
+          "loot": 27,
+          "goldDelta": 27,
+          "earnedDelta": 27,
+          "enemies": {
+            "bandit": 2,
+            "wolf": 2,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.497,
+          "weight": 6.79,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.2,
+          "lost": 10,
+          "loot": 60,
+          "goldDelta": 120,
+          "earnedDelta": 120,
+          "enemies": {
+            "brute": 2,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.695,
+          "weight": 8.916,
+          "won": false,
+          "retreated": false,
+          "durationT": 72.8,
+          "lost": 12,
+          "loot": 0,
+          "goldDelta": -23,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "bandit": 2,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.002,
+          "weight": 9.128,
+          "won": false,
+          "retreated": false,
+          "durationT": 36.9,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 12,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "raider": 3,
+            "bandit": 3,
+            "brute": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2970
+    },
+    {
+      "seed": 2,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 181,
+      "flowT": 17,
+      "battles": 4,
+      "wins": 2,
+      "losses": 2,
+      "retreats": 0,
+      "goldEarned": 211,
+      "goldSpent": 242,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 2,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 2,
+      "storm": {
+        "ratio": 1.458,
+        "won": false,
+        "durationT": 49.6,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.453,
+          "weight": 4.796,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.3,
+          "lost": 0,
+          "loot": 36,
+          "goldDelta": 96,
+          "earnedDelta": 96,
+          "enemies": {
+            "bandit": 5,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.567,
+          "weight": 7.142,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.4,
+          "lost": 4,
+          "loot": 55,
+          "goldDelta": 115,
+          "earnedDelta": 115,
+          "enemies": {
+            "bandit": 3,
+            "brute": 1,
+            "wolf": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.718,
+          "weight": 9.042,
+          "won": false,
+          "retreated": false,
+          "durationT": 68.2,
+          "lost": 12,
+          "loot": 0,
+          "goldDelta": -36,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 3,
+            "brute": 2,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.458,
+          "weight": 9.582,
+          "won": false,
+          "retreated": false,
+          "durationT": 49.6,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 12,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 4,
+            "brute": 1,
+            "bandit": 3
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2301
+    },
+    {
+      "seed": 3,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 126,
+      "flowT": 20,
+      "battles": 5,
+      "wins": 5,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 648,
+      "goldSpent": 362,
+      "finalGold": 366,
+      "finalWeight": 17.43,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 0.685,
+        "won": true,
+        "durationT": 19.8,
+        "lost": 10
+      },
+      "fights": [
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.331,
+          "weight": 3.502,
+          "won": true,
+          "retreated": false,
+          "durationT": 13.2,
+          "lost": 0,
+          "loot": 27,
+          "goldDelta": 27,
+          "earnedDelta": 27,
+          "enemies": {
+            "raider": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.428,
+          "weight": 4.525,
+          "won": true,
+          "retreated": false,
+          "durationT": 13.8,
+          "lost": 0,
+          "loot": 34,
+          "goldDelta": 94,
+          "earnedDelta": 94,
+          "enemies": {
+            "raider": 1,
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.575,
+          "weight": 7.235,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.9,
+          "lost": 0,
+          "loot": 50,
+          "goldDelta": 110,
+          "earnedDelta": 110,
+          "enemies": {
+            "wolf": 2,
+            "raider": 4,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.692,
+          "weight": 9.534,
+          "won": true,
+          "retreated": false,
+          "durationT": 26.5,
+          "lost": 4,
+          "loot": 66,
+          "goldDelta": 126,
+          "earnedDelta": 126,
+          "enemies": {
+            "bandit": 8,
+            "wolf": 3,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.685,
+          "weight": 11.938,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.8,
+          "lost": 10,
+          "loot": 91,
+          "goldDelta": 291,
+          "earnedDelta": 291,
+          "enemies": {
+            "raider": 1,
+            "bandit": 5,
+            "brute": 2,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 2279
+    },
+    {
+      "seed": 4,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 104,
+      "flowT": 20,
+      "battles": 4,
+      "wins": 4,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 621,
+      "goldSpent": 382,
+      "finalGold": 319,
+      "finalWeight": 17.19,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 0.683,
+        "won": true,
+        "durationT": 22.8,
+        "lost": 13
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.428,
+          "weight": 4.525,
+          "won": true,
+          "retreated": false,
+          "durationT": 15,
+          "lost": 1,
+          "loot": 34,
+          "goldDelta": 94,
+          "earnedDelta": 94,
+          "enemies": {
+            "bandit": 4,
+            "raider": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.556,
+          "weight": 7.002,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.9,
+          "lost": 0,
+          "loot": 49,
+          "goldDelta": 109,
+          "earnedDelta": 109,
+          "enemies": {
+            "raider": 3,
+            "bandit": 4,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.728,
+          "weight": 9.164,
+          "won": true,
+          "retreated": false,
+          "durationT": 20.6,
+          "lost": 5,
+          "loot": 68,
+          "goldDelta": 128,
+          "earnedDelta": 128,
+          "enemies": {
+            "bandit": 5,
+            "brute": 1,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.683,
+          "weight": 11.734,
+          "won": true,
+          "retreated": false,
+          "durationT": 22.8,
+          "lost": 13,
+          "loot": 90,
+          "goldDelta": 290,
+          "earnedDelta": 290,
+          "enemies": {
+            "bandit": 6,
+            "wolf": 1,
+            "brute": 2
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 2072
+    },
+    {
+      "seed": 5,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 114,
+      "flowT": 20,
+      "battles": 4,
+      "wins": 3,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 331,
+      "goldSpent": 322,
+      "finalGold": 62,
+      "finalWeight": 17.55,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 0.983,
+        "won": false,
+        "durationT": 37.4,
+        "lost": 16
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.378,
+          "weight": 3.998,
+          "won": true,
+          "retreated": false,
+          "durationT": 12.3,
+          "lost": 0,
+          "loot": 30,
+          "goldDelta": 90,
+          "earnedDelta": 90,
+          "enemies": {
+            "raider": 2,
+            "bandit": 2,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.567,
+          "weight": 7.142,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.8,
+          "lost": 2,
+          "loot": 55,
+          "goldDelta": 115,
+          "earnedDelta": 115,
+          "enemies": {
+            "raider": 1,
+            "bandit": 3,
+            "brute": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.715,
+          "weight": 9,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.4,
+          "lost": 0,
+          "loot": 66,
+          "goldDelta": 126,
+          "earnedDelta": 126,
+          "enemies": {
+            "raider": 5,
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.983,
+          "weight": 17.251,
+          "won": false,
+          "retreated": false,
+          "durationT": 37.4,
+          "lost": 16,
+          "loot": 0,
+          "goldDelta": -27,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 2,
+            "wolf": 3,
+            "brute": 3,
+            "bandit": 5
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2015
+    },
+    {
+      "seed": 6,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 165,
+      "flowT": 17,
+      "battles": 5,
+      "wins": 3,
+      "losses": 2,
+      "retreats": 0,
+      "goldEarned": 273,
+      "goldSpent": 287,
+      "finalGold": 25,
+      "finalWeight": 10.583,
+      "razed": 2,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 2,
+      "storm": {
+        "ratio": 1.112,
+        "won": false,
+        "durationT": 42.8,
+        "lost": 10
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.451,
+          "weight": 4.773,
+          "won": true,
+          "retreated": false,
+          "durationT": 15,
+          "lost": 1,
+          "loot": 41,
+          "goldDelta": 101,
+          "earnedDelta": 101,
+          "enemies": {
+            "brute": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.524,
+          "weight": 6.59,
+          "won": true,
+          "retreated": false,
+          "durationT": 20,
+          "lost": 2,
+          "loot": 52,
+          "goldDelta": 112,
+          "earnedDelta": 112,
+          "enemies": {
+            "bandit": 3,
+            "brute": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.63,
+          "weight": 7.927,
+          "won": true,
+          "retreated": false,
+          "durationT": 27.3,
+          "lost": 8,
+          "loot": 60,
+          "goldDelta": 60,
+          "earnedDelta": 60,
+          "enemies": {
+            "brute": 1,
+            "raider": 1,
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.928,
+          "weight": 9.025,
+          "won": false,
+          "retreated": false,
+          "durationT": 31.8,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": -59,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 6,
+            "raider": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.112,
+          "weight": 11.768,
+          "won": false,
+          "retreated": false,
+          "durationT": 42.8,
+          "lost": 10,
+          "loot": 0,
+          "goldDelta": 18,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 2,
+            "brute": 1,
+            "raider": 2,
+            "bandit": 7
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2551
+    },
+    {
+      "seed": 7,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 145,
+      "flowT": 17,
+      "battles": 4,
+      "wins": 2,
+      "losses": 2,
+      "retreats": 0,
+      "goldEarned": 206,
+      "goldSpent": 227,
+      "finalGold": 25,
+      "finalWeight": 8.579,
+      "razed": 2,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 1,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 2,
+      "storm": {
+        "ratio": 1.307,
+        "won": false,
+        "durationT": 42,
+        "lost": 8
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.431,
+          "weight": 4.563,
+          "won": true,
+          "retreated": false,
+          "durationT": 14.1,
+          "lost": 1,
+          "loot": 35,
+          "goldDelta": 95,
+          "earnedDelta": 95,
+          "enemies": {
+            "bandit": 6
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.56,
+          "weight": 7.051,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.5,
+          "lost": 0,
+          "loot": 51,
+          "goldDelta": 111,
+          "earnedDelta": 111,
+          "enemies": {
+            "bandit": 8,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.724,
+          "weight": 9.113,
+          "won": false,
+          "retreated": false,
+          "durationT": 43.2,
+          "lost": 12,
+          "loot": 0,
+          "goldDelta": -48,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 2,
+            "brute": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.307,
+          "weight": 11.212,
+          "won": false,
+          "retreated": false,
+          "durationT": 42,
+          "lost": 8,
+          "loot": 0,
+          "goldDelta": 14,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 5,
+            "wolf": 2,
+            "raider": 3
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2242
+    },
+    {
+      "seed": 8,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 119,
+      "flowT": 20,
+      "battles": 5,
+      "wins": 5,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 662,
+      "goldSpent": 422,
+      "finalGold": 320,
+      "finalWeight": 16.949,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 0.768,
+        "won": true,
+        "durationT": 19.9,
+        "lost": 4
+      },
+      "fights": [
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.309,
+          "weight": 3.275,
+          "won": true,
+          "retreated": false,
+          "durationT": 11.4,
+          "lost": 0,
+          "loot": 26,
+          "goldDelta": 26,
+          "earnedDelta": 26,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.429,
+          "weight": 4.538,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.9,
+          "lost": 5,
+          "loot": 39,
+          "goldDelta": 99,
+          "earnedDelta": 99,
+          "enemies": {
+            "wolf": 1,
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.57,
+          "weight": 7.177,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.8,
+          "lost": 1,
+          "loot": 56,
+          "goldDelta": 116,
+          "earnedDelta": 116,
+          "enemies": {
+            "brute": 1,
+            "bandit": 5
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.733,
+          "weight": 9.582,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.3,
+          "lost": 2,
+          "loot": 70,
+          "goldDelta": 130,
+          "earnedDelta": 130,
+          "enemies": {
+            "bandit": 3,
+            "raider": 4,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.768,
+          "weight": 13.015,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.9,
+          "lost": 4,
+          "loot": 91,
+          "goldDelta": 291,
+          "earnedDelta": 291,
+          "enemies": {
+            "raider": 3,
+            "wolf": 4,
+            "brute": 1,
+            "bandit": 6
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 2036
+    },
+    {
+      "seed": 9,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 125,
+      "flowT": 20,
+      "battles": 4,
+      "wins": 3,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 333,
+      "goldSpent": 347,
+      "finalGold": 46,
+      "finalWeight": 17.43,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 1.001,
+        "won": false,
+        "durationT": 42.4,
+        "lost": 16
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.403,
+          "weight": 4.265,
+          "won": true,
+          "retreated": false,
+          "durationT": 15,
+          "lost": 0,
+          "loot": 32,
+          "goldDelta": 92,
+          "earnedDelta": 92,
+          "enemies": {
+            "bandit": 3,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.567,
+          "weight": 7.142,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.1,
+          "lost": 3,
+          "loot": 55,
+          "goldDelta": 115,
+          "earnedDelta": 115,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1,
+            "brute": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.709,
+          "weight": 8.918,
+          "won": true,
+          "retreated": false,
+          "durationT": 18,
+          "lost": 0,
+          "loot": 66,
+          "goldDelta": 126,
+          "earnedDelta": 126,
+          "enemies": {
+            "wolf": 1,
+            "raider": 2,
+            "bandit": 4,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.001,
+          "weight": 17.455,
+          "won": false,
+          "retreated": false,
+          "durationT": 42.4,
+          "lost": 16,
+          "loot": 0,
+          "goldDelta": -20,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 3,
+            "wolf": 3,
+            "bandit": 4,
+            "raider": 3
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2182
+    },
+    {
+      "seed": 10,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 137,
+      "flowT": 20,
+      "battles": 4,
+      "wins": 3,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 332,
+      "goldSpent": 332,
+      "finalGold": 56,
+      "finalWeight": 17.55,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 0.922,
+        "won": false,
+        "durationT": 54.6,
+        "lost": 16
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.42,
+          "weight": 4.44,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.9,
+          "lost": 0,
+          "loot": 33,
+          "goldDelta": 93,
+          "earnedDelta": 93,
+          "enemies": {
+            "wolf": 4,
+            "raider": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.521,
+          "weight": 6.555,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.8,
+          "lost": 1,
+          "loot": 51,
+          "goldDelta": 111,
+          "earnedDelta": 111,
+          "enemies": {
+            "wolf": 1,
+            "raider": 2,
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.742,
+          "weight": 9.338,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.2,
+          "lost": 1,
+          "loot": 68,
+          "goldDelta": 128,
+          "earnedDelta": 128,
+          "enemies": {
+            "wolf": 1,
+            "brute": 1,
+            "raider": 4,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.922,
+          "weight": 16.174,
+          "won": false,
+          "retreated": false,
+          "durationT": 54.6,
+          "lost": 16,
+          "loot": 0,
+          "goldDelta": -24,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 7,
+            "bandit": 5,
+            "raider": 2,
+            "brute": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2459
+    },
+    {
+      "seed": 11,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 115,
+      "flowT": 20,
+      "battles": 4,
+      "wins": 4,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 643,
+      "goldSpent": 347,
+      "finalGold": 376,
+      "finalWeight": 17.43,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 0.808,
+        "won": true,
+        "durationT": 23.7,
+        "lost": 12
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.47,
+          "weight": 4.972,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.8,
+          "lost": 1,
+          "loot": 42,
+          "goldDelta": 102,
+          "earnedDelta": 102,
+          "enemies": {
+            "brute": 1,
+            "bandit": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.548,
+          "weight": 6.898,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.5,
+          "lost": 2,
+          "loot": 53,
+          "goldDelta": 113,
+          "earnedDelta": 113,
+          "enemies": {
+            "brute": 1,
+            "raider": 1,
+            "wolf": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.753,
+          "weight": 9.479,
+          "won": true,
+          "retreated": false,
+          "durationT": 24.9,
+          "lost": 0,
+          "loot": 64,
+          "goldDelta": 124,
+          "earnedDelta": 124,
+          "enemies": {
+            "raider": 5,
+            "wolf": 3,
+            "bandit": 4
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.808,
+          "weight": 14.075,
+          "won": true,
+          "retreated": false,
+          "durationT": 23.7,
+          "lost": 12,
+          "loot": 104,
+          "goldDelta": 304,
+          "earnedDelta": 304,
+          "enemies": {
+            "bandit": 7,
+            "wolf": 2,
+            "brute": 2,
+            "raider": 1
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 2198
+    },
+    {
+      "seed": 12,
+      "policy": "campRaider",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 323,
+      "flowT": 18,
+      "battles": 7,
+      "wins": 2,
+      "losses": 4,
+      "retreats": 1,
+      "goldEarned": 53,
+      "goldSpent": 142,
+      "finalGold": 25,
+      "finalWeight": 2.53,
+      "razed": 0,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 0,
+      "storm": {
+        "ratio": 3.476,
+        "won": false,
+        "durationT": 33.6,
+        "lost": 2
+      },
+      "fights": [
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.802,
+          "weight": 8.486,
+          "won": false,
+          "retreated": false,
+          "durationT": 48.3,
+          "lost": 10,
+          "loot": 0,
+          "goldDelta": 17,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "brute": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.887,
+          "weight": 4.773,
+          "won": false,
+          "retreated": false,
+          "durationT": 41,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.993,
+          "weight": 3.526,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.7,
+          "lost": 2,
+          "loot": 28,
+          "goldDelta": 28,
+          "earnedDelta": 28,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 2.351,
+          "weight": 3.487,
+          "won": false,
+          "retreated": false,
+          "durationT": 21.4,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": -3,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 1,
+            "wolf": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.902,
+          "weight": 3.201,
+          "won": true,
+          "retreated": false,
+          "durationT": 27.7,
+          "lost": 0,
+          "loot": 25,
+          "goldDelta": 25,
+          "earnedDelta": 25,
+          "enemies": {
+            "raider": 1,
+            "wolf": 3,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 1.191,
+          "weight": 4.227,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 3,
+            "bandit": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 3.476,
+          "weight": 8.794,
+          "won": false,
+          "retreated": false,
+          "durationT": 33.6,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 20,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 2,
+            "raider": 4
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2717
+    },
+    {
+      "seed": 1,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 119,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 4,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 633,
+      "goldSpent": 390,
+      "finalGold": 323,
+      "finalWeight": 14.828,
+      "razed": 3,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 5,
+      "storm": {
+        "ratio": 0.657,
+        "won": true,
+        "durationT": 24.6,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.546,
+          "weight": 4.135,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.9,
+          "lost": 0,
+          "loot": 37,
+          "goldDelta": 97,
+          "earnedDelta": 97,
+          "enemies": {
+            "brute": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.655,
+          "weight": 7.59,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.5,
+          "lost": 3,
+          "loot": 58,
+          "goldDelta": 118,
+          "earnedDelta": 118,
+          "enemies": {
+            "bandit": 3,
+            "brute": 1,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.886,
+          "weight": 11.146,
+          "won": true,
+          "retreated": false,
+          "durationT": 24.3,
+          "lost": 5,
+          "loot": 80,
+          "goldDelta": 140,
+          "earnedDelta": 140,
+          "enemies": {
+            "raider": 4,
+            "bandit": 5,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.657,
+          "weight": 9.744,
+          "won": true,
+          "retreated": false,
+          "durationT": 24.6,
+          "lost": 6,
+          "loot": 78,
+          "goldDelta": 278,
+          "earnedDelta": 278,
+          "enemies": {
+            "brute": 2,
+            "bandit": 3,
+            "raider": 1
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 1999
+    },
+    {
+      "seed": 2,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 443,
+      "flowT": 24,
+      "battles": 8,
+      "wins": 2,
+      "losses": 3,
+      "retreats": 3,
+      "goldEarned": 148,
+      "goldSpent": 245,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 1,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 1,
+      "unresolved": 3,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 2.512,
+        "won": false,
+        "durationT": 31.1,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.533,
+          "weight": 4.036,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.5,
+          "lost": 1,
+          "loot": 31,
+          "goldDelta": 91,
+          "earnedDelta": 91,
+          "enemies": {
+            "bandit": 4,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.78,
+          "weight": 7.47,
+          "won": true,
+          "retreated": false,
+          "durationT": 25.4,
+          "lost": 2,
+          "loot": 57,
+          "goldDelta": 57,
+          "earnedDelta": 57,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.926,
+          "weight": 7.019,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 7,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 1,
+            "brute": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": false,
+          "ratio": 1.217,
+          "weight": 5.551,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "raider": 1,
+            "wolf": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 4.357,
+          "weight": 4.773,
+          "won": false,
+          "retreated": false,
+          "durationT": 26.6,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 17,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": false,
+          "ratio": 1.212,
+          "weight": 3.067,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 6.178,
+          "weight": 6.768,
+          "won": false,
+          "retreated": false,
+          "durationT": 15.3,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 2,
+            "wolf": 2,
+            "bandit": 5
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.512,
+          "weight": 8.918,
+          "won": false,
+          "retreated": false,
+          "durationT": 31.1,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "bandit": 4,
+            "raider": 2,
+            "brute": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3720
+    },
+    {
+      "seed": 3,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 213,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 2,
+      "losses": 1,
+      "retreats": 1,
+      "goldEarned": 209,
+      "goldSpent": 280,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 2,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 4,
+      "storm": {
+        "ratio": 1.228,
+        "won": false,
+        "durationT": 46,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.597,
+          "weight": 4.525,
+          "won": true,
+          "retreated": false,
+          "durationT": 15.6,
+          "lost": 0,
+          "loot": 34,
+          "goldDelta": 94,
+          "earnedDelta": 94,
+          "enemies": {
+            "raider": 1,
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.756,
+          "weight": 7.996,
+          "won": true,
+          "retreated": false,
+          "durationT": 23.8,
+          "lost": 0,
+          "loot": 55,
+          "goldDelta": 115,
+          "earnedDelta": 115,
+          "enemies": {
+            "wolf": 2,
+            "raider": 4,
+            "bandit": 4
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.866,
+          "weight": 10.898,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 12,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 2,
+            "brute": 2,
+            "bandit": 3,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.228,
+          "weight": 8.074,
+          "won": false,
+          "retreated": false,
+          "durationT": 46,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 16,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "raider": 1,
+            "bandit": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2210
+    },
+    {
+      "seed": 4,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 110,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 4,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 625,
+      "goldSpent": 410,
+      "finalGold": 295,
+      "finalWeight": 17.43,
+      "razed": 3,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 5,
+      "storm": {
+        "ratio": 0.593,
+        "won": true,
+        "durationT": 20.9,
+        "lost": 15
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.597,
+          "weight": 4.525,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.7,
+          "lost": 0,
+          "loot": 34,
+          "goldDelta": 94,
+          "earnedDelta": 94,
+          "enemies": {
+            "bandit": 4,
+            "raider": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.734,
+          "weight": 7.763,
+          "won": true,
+          "retreated": false,
+          "durationT": 23,
+          "lost": 0,
+          "loot": 54,
+          "goldDelta": 114,
+          "earnedDelta": 114,
+          "enemies": {
+            "raider": 3,
+            "bandit": 5,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.832,
+          "weight": 10.474,
+          "won": true,
+          "retreated": false,
+          "durationT": 17.3,
+          "lost": 2,
+          "loot": 76,
+          "goldDelta": 136,
+          "earnedDelta": 136,
+          "enemies": {
+            "bandit": 6,
+            "brute": 1,
+            "raider": 2,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.593,
+          "weight": 10.327,
+          "won": true,
+          "retreated": false,
+          "durationT": 20.9,
+          "lost": 15,
+          "loot": 81,
+          "goldDelta": 281,
+          "earnedDelta": 281,
+          "enemies": {
+            "brute": 2,
+            "bandit": 3,
+            "raider": 1,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 1911
+    },
+    {
+      "seed": 5,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 204,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 2,
+      "losses": 1,
+      "retreats": 1,
+      "goldEarned": 207,
+      "goldSpent": 285,
+      "finalGold": 25,
+      "finalWeight": 1.483,
+      "razed": 2,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 4,
+      "storm": {
+        "ratio": 4.119,
+        "won": false,
+        "durationT": 41.4,
+        "lost": 1
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.528,
+          "weight": 3.998,
+          "won": true,
+          "retreated": false,
+          "durationT": 15.4,
+          "lost": 0,
+          "loot": 30,
+          "goldDelta": 90,
+          "earnedDelta": 90,
+          "enemies": {
+            "raider": 2,
+            "bandit": 2,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.652,
+          "weight": 7.555,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.9,
+          "lost": 6,
+          "loot": 57,
+          "goldDelta": 117,
+          "earnedDelta": 117,
+          "enemies": {
+            "raider": 3,
+            "brute": 1,
+            "bandit": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.855,
+          "weight": 10.763,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 12,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "brute": 2,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 4.119,
+          "weight": 6.11,
+          "won": false,
+          "retreated": false,
+          "durationT": 41.4,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 23,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 1,
+            "wolf": 2,
+            "raider": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2213
+    },
+    {
+      "seed": 6,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 120,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 4,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 630,
+      "goldSpent": 420,
+      "finalGold": 290,
+      "finalWeight": 13.587,
+      "razed": 3,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 5,
+      "storm": {
+        "ratio": 0.7,
+        "won": true,
+        "durationT": 23.7,
+        "lost": 12
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.63,
+          "weight": 4.773,
+          "won": true,
+          "retreated": false,
+          "durationT": 20.4,
+          "lost": 2,
+          "loot": 41,
+          "goldDelta": 101,
+          "earnedDelta": 101,
+          "enemies": {
+            "brute": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.792,
+          "weight": 7.59,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.6,
+          "lost": 6,
+          "loot": 58,
+          "goldDelta": 118,
+          "earnedDelta": 118,
+          "enemies": {
+            "bandit": 3,
+            "brute": 1,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.895,
+          "weight": 10.366,
+          "won": true,
+          "retreated": false,
+          "durationT": 22.2,
+          "lost": 3,
+          "loot": 75,
+          "goldDelta": 135,
+          "earnedDelta": 135,
+          "enemies": {
+            "raider": 4,
+            "brute": 1,
+            "bandit": 4
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.7,
+          "weight": 9.51,
+          "won": true,
+          "retreated": false,
+          "durationT": 23.7,
+          "lost": 12,
+          "loot": 76,
+          "goldDelta": 276,
+          "earnedDelta": 276,
+          "enemies": {
+            "brute": 2,
+            "bandit": 2,
+            "raider": 1,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 2368
+    },
+    {
+      "seed": 7,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 319,
+      "flowT": 21,
+      "battles": 6,
+      "wins": 1,
+      "losses": 4,
+      "retreats": 1,
+      "goldEarned": 27,
+      "goldSpent": 115,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 2.512,
+        "won": false,
+        "durationT": 32.6,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.602,
+          "weight": 4.563,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 5,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 6
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.1,
+          "weight": 5.313,
+          "won": false,
+          "retreated": false,
+          "durationT": 58.3,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 20,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 1,
+            "wolf": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.394,
+          "weight": 3.526,
+          "won": false,
+          "retreated": false,
+          "durationT": 23.2,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.982,
+          "weight": 3.487,
+          "won": true,
+          "retreated": false,
+          "durationT": 20.6,
+          "lost": 0,
+          "loot": 27,
+          "goldDelta": 27,
+          "earnedDelta": 27,
+          "enemies": {
+            "bandit": 2,
+            "raider": 1,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.33,
+          "weight": 4.721,
+          "won": false,
+          "retreated": false,
+          "durationT": 54.7,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": -11,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 1,
+            "raider": 3,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.512,
+          "weight": 8.916,
+          "won": false,
+          "retreated": false,
+          "durationT": 32.6,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 24,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "bandit": 2,
+            "raider": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2986
+    },
+    {
+      "seed": 8,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 150,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 3,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 349,
+      "goldSpent": 360,
+      "finalGold": 48,
+      "finalWeight": 14.948,
+      "razed": 3,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 5,
+      "storm": {
+        "ratio": 0.733,
+        "won": false,
+        "durationT": 45.3,
+        "lost": 14
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.599,
+          "weight": 4.538,
+          "won": true,
+          "retreated": false,
+          "durationT": 15.5,
+          "lost": 0,
+          "loot": 39,
+          "goldDelta": 99,
+          "earnedDelta": 99,
+          "enemies": {
+            "wolf": 1,
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.69,
+          "weight": 7.996,
+          "won": true,
+          "retreated": false,
+          "durationT": 22.5,
+          "lost": 0,
+          "loot": 55,
+          "goldDelta": 115,
+          "earnedDelta": 115,
+          "enemies": {
+            "raider": 4,
+            "bandit": 4,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.877,
+          "weight": 11.038,
+          "won": true,
+          "retreated": false,
+          "durationT": 34.8,
+          "lost": 6,
+          "loot": 75,
+          "goldDelta": 135,
+          "earnedDelta": 135,
+          "enemies": {
+            "bandit": 8,
+            "raider": 4,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.733,
+          "weight": 10.963,
+          "won": false,
+          "retreated": false,
+          "durationT": 45.3,
+          "lost": 14,
+          "loot": 0,
+          "goldDelta": -21,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "bandit": 2,
+            "raider": 3
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2199
+    },
+    {
+      "seed": 9,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 169,
+      "flowT": 20,
+      "battles": 5,
+      "wins": 2,
+      "losses": 3,
+      "retreats": 0,
+      "goldEarned": 147,
+      "goldSpent": 230,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 1,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 2.641,
+        "won": false,
+        "durationT": 27.6,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.563,
+          "weight": 4.265,
+          "won": true,
+          "retreated": false,
+          "durationT": 20.8,
+          "lost": 1,
+          "loot": 32,
+          "goldDelta": 92,
+          "earnedDelta": 92,
+          "enemies": {
+            "bandit": 3,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.832,
+          "weight": 7.974,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.6,
+          "lost": 0,
+          "loot": 55,
+          "goldDelta": 55,
+          "earnedDelta": 55,
+          "enemies": {
+            "raider": 3,
+            "bandit": 4,
+            "wolf": 4
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.745,
+          "weight": 7.142,
+          "won": false,
+          "retreated": false,
+          "durationT": 33.8,
+          "lost": 9,
+          "loot": 0,
+          "goldDelta": -20,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1,
+            "brute": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.342,
+          "weight": 7.47,
+          "won": false,
+          "retreated": false,
+          "durationT": 34.7,
+          "lost": 5,
+          "loot": 0,
+          "goldDelta": 23,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 2,
+            "brute": 1,
+            "bandit": 4
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.641,
+          "weight": 9.373,
+          "won": false,
+          "retreated": false,
+          "durationT": 27.6,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "raider": 3,
+            "bandit": 4
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2126
+    },
+    {
+      "seed": 10,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 114,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 4,
+      "losses": 0,
+      "retreats": 0,
+      "goldEarned": 630,
+      "goldSpent": 410,
+      "finalGold": 300,
+      "finalWeight": 15.068,
+      "razed": 3,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 5,
+      "storm": {
+        "ratio": 0.714,
+        "won": true,
+        "durationT": 20.8,
+        "lost": 9
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.586,
+          "weight": 4.44,
+          "won": true,
+          "retreated": false,
+          "durationT": 20.6,
+          "lost": 2,
+          "loot": 33,
+          "goldDelta": 93,
+          "earnedDelta": 93,
+          "enemies": {
+            "wolf": 4,
+            "raider": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.767,
+          "weight": 7.349,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.2,
+          "lost": 1,
+          "loot": 56,
+          "goldDelta": 116,
+          "earnedDelta": 116,
+          "enemies": {
+            "wolf": 1,
+            "raider": 2,
+            "brute": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.849,
+          "weight": 10.687,
+          "won": true,
+          "retreated": false,
+          "durationT": 19.4,
+          "lost": 7,
+          "loot": 77,
+          "goldDelta": 137,
+          "earnedDelta": 137,
+          "enemies": {
+            "bandit": 5,
+            "wolf": 1,
+            "brute": 1,
+            "raider": 3
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 0.714,
+          "weight": 10.763,
+          "won": true,
+          "retreated": false,
+          "durationT": 20.8,
+          "lost": 9,
+          "loot": 84,
+          "goldDelta": 284,
+          "earnedDelta": 284,
+          "enemies": {
+            "brute": 2,
+            "raider": 2,
+            "bandit": 3
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 1843
+    },
+    {
+      "seed": 11,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 197,
+      "flowT": 24,
+      "battles": 4,
+      "wins": 2,
+      "losses": 1,
+      "retreats": 1,
+      "goldEarned": 217,
+      "goldSpent": 295,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 2,
+      "captures": 2,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 2,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "exposed",
+      "strongholdPointsAtStorm": 4,
+      "storm": {
+        "ratio": 1.163,
+        "won": false,
+        "durationT": 35.8,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.52,
+          "weight": 3.939,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.4,
+          "lost": 0,
+          "loot": 36,
+          "goldDelta": 96,
+          "earnedDelta": 96,
+          "enemies": {
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.702,
+          "weight": 8.136,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.1,
+          "lost": 2,
+          "loot": 61,
+          "goldDelta": 121,
+          "earnedDelta": 121,
+          "enemies": {
+            "bandit": 3,
+            "raider": 2,
+            "brute": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.831,
+          "weight": 10.457,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 11,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "wolf": 3,
+            "brute": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.163,
+          "weight": 7.647,
+          "won": false,
+          "retreated": false,
+          "durationT": 35.8,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 23,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "wolf": 1,
+            "bandit": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2066
+    },
+    {
+      "seed": 12,
+      "policy": "captureThenRaze",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 400,
+      "flowT": 24,
+      "battles": 9,
+      "wins": 1,
+      "losses": 6,
+      "retreats": 2,
+      "goldEarned": 25,
+      "goldSpent": 115,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 1,
+      "unresolved": 2,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 2.512,
+        "won": false,
+        "durationT": 28.5,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "party",
+          "resolved": false,
+          "ratio": 1.12,
+          "weight": 8.486,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 5,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "brute": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 1.887,
+          "weight": 4.773,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.377,
+          "weight": 3.526,
+          "won": false,
+          "retreated": false,
+          "durationT": 13.3,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 20,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.987,
+          "weight": 5.026,
+          "won": false,
+          "retreated": false,
+          "durationT": 15.9,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.394,
+          "weight": 3.526,
+          "won": false,
+          "retreated": false,
+          "durationT": 14.5,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.488,
+          "weight": 3.764,
+          "won": false,
+          "retreated": false,
+          "durationT": 25.4,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "wolf": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.902,
+          "weight": 3.201,
+          "won": true,
+          "retreated": false,
+          "durationT": 27.7,
+          "lost": 0,
+          "loot": 25,
+          "goldDelta": 25,
+          "earnedDelta": 25,
+          "enemies": {
+            "raider": 1,
+            "wolf": 3,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.489,
+          "weight": 5.285,
+          "won": false,
+          "retreated": false,
+          "durationT": 39.2,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": -10,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "bandit": 5,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.512,
+          "weight": 8.918,
+          "won": false,
+          "retreated": false,
+          "durationT": 28.5,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "raider": 2,
+            "brute": 1,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3425
+    },
+    {
+      "seed": 1,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 49,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.389,
+        "won": false,
+        "durationT": 38,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.389,
+          "weight": 9.128,
+          "won": false,
+          "retreated": false,
+          "durationT": 38,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "raider": 3,
+            "bandit": 3,
+            "brute": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 1527
+    },
+    {
+      "seed": 2,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 52,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.338,
+        "won": false,
+        "durationT": 41.3,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.338,
+          "weight": 8.794,
+          "won": false,
+          "retreated": false,
+          "durationT": 41.3,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 4,
+            "brute": 1,
+            "bandit": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 1508
+    },
+    {
+      "seed": 3,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 55,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.326,
+        "won": false,
+        "durationT": 44.4,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.326,
+          "weight": 8.718,
+          "won": false,
+          "retreated": false,
+          "durationT": 44.4,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "brute": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 1407
+    },
+    {
+      "seed": 4,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 44,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.417,
+        "won": false,
+        "durationT": 32.9,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.417,
+          "weight": 9.31,
+          "won": false,
+          "retreated": false,
+          "durationT": 32.9,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 3,
+            "brute": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 748
+    },
+    {
+      "seed": 5,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 55,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.321,
+        "won": false,
+        "durationT": 44.3,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.321,
+          "weight": 8.683,
+          "won": false,
+          "retreated": false,
+          "durationT": 44.3,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 1,
+            "brute": 2,
+            "bandit": 1,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 1347
+    },
+    {
+      "seed": 6,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 63,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.321,
+        "won": false,
+        "durationT": 51.7,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.321,
+          "weight": 8.683,
+          "won": false,
+          "retreated": false,
+          "durationT": 51.7,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "raider": 1,
+            "bandit": 1,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 865
+    },
+    {
+      "seed": 7,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 54,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.332,
+        "won": false,
+        "durationT": 43.1,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.332,
+          "weight": 8.756,
+          "won": false,
+          "retreated": false,
+          "durationT": 43.1,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 4,
+            "bandit": 5,
+            "wolf": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 1035
+    },
+    {
+      "seed": 8,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 56,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.421,
+        "won": false,
+        "durationT": 44.6,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.421,
+          "weight": 9.338,
+          "won": false,
+          "retreated": false,
+          "durationT": 44.6,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "raider": 4,
+            "bandit": 2,
+            "brute": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 874
+    },
+    {
+      "seed": 9,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 49,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.405,
+        "won": false,
+        "durationT": 38.1,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.405,
+          "weight": 9.236,
+          "won": false,
+          "retreated": false,
+          "durationT": 38.1,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 5,
+            "brute": 1,
+            "wolf": 2,
+            "raider": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 807
+    },
+    {
+      "seed": 10,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 52,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.326,
+        "won": false,
+        "durationT": 40.5,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.326,
+          "weight": 8.718,
+          "won": false,
+          "retreated": false,
+          "durationT": 40.5,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "bandit": 3
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 1237
+    },
+    {
+      "seed": 11,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 47,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.407,
+        "won": false,
+        "durationT": 35.5,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.407,
+          "weight": 9.251,
+          "won": false,
+          "retreated": false,
+          "durationT": 35.5,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "wolf": 5,
+            "brute": 1,
+            "raider": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 1415
+    },
+    {
+      "seed": 12,
+      "policy": "claimRush",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 50,
+      "flowT": 9,
+      "battles": 1,
+      "wins": 0,
+      "losses": 1,
+      "retreats": 0,
+      "goldEarned": 0,
+      "goldSpent": 60,
+      "finalGold": 25,
+      "finalWeight": 6.573,
+      "razed": 0,
+      "captures": 1,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 3,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.338,
+        "won": false,
+        "durationT": 39.3,
+        "lost": 6
+      },
+      "fights": [
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.338,
+          "weight": 8.794,
+          "won": false,
+          "retreated": false,
+          "durationT": 39.3,
+          "lost": 6,
+          "loot": 0,
+          "goldDelta": 5,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "raider": 4,
+            "bandit": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 789
+    },
+    {
+      "seed": 1,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 429,
+      "flowT": 32,
+      "battles": 11,
+      "wins": 2,
+      "losses": 8,
+      "retreats": 1,
+      "goldEarned": 39,
+      "goldSpent": 115,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 0,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 0,
+      "storm": {
+        "ratio": 2.572,
+        "won": false,
+        "durationT": 33.4,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.718,
+          "weight": 3.275,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.4,
+          "lost": 1,
+          "loot": 26,
+          "goldDelta": 26,
+          "earnedDelta": 26,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 1.047,
+          "weight": 3.715,
+          "won": false,
+          "retreated": false,
+          "durationT": 23.9,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": -32,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 3,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 1.378,
+          "weight": 3.487,
+          "won": false,
+          "retreated": false,
+          "durationT": 25.1,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": -22,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 2,
+            "wolf": 2,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.217,
+          "weight": 5.551,
+          "won": false,
+          "retreated": false,
+          "durationT": 36.6,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 13,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 1,
+            "raider": 1,
+            "wolf": 1,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.187,
+          "weight": 3.004,
+          "won": false,
+          "retreated": false,
+          "durationT": 26.8,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 2,
+            "wolf": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.993,
+          "weight": 3.526,
+          "won": false,
+          "retreated": false,
+          "durationT": 33.7,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "bandit": 4
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": false,
+          "ratio": 2.252,
+          "weight": 7.993,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "raider": 5
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 4.589,
+          "weight": 5.026,
+          "won": false,
+          "retreated": false,
+          "durationT": 15.7,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.489,
+          "weight": 1.238,
+          "won": true,
+          "retreated": false,
+          "durationT": 11,
+          "lost": 0,
+          "loot": 13,
+          "goldDelta": 13,
+          "earnedDelta": 13,
+          "enemies": {
+            "bandit": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.692,
+          "weight": 1.751,
+          "won": false,
+          "retreated": false,
+          "durationT": 50.8,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": -11,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.572,
+          "weight": 9.128,
+          "won": false,
+          "retreated": false,
+          "durationT": 33.4,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 23,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 3,
+            "raider": 3,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3361
+    },
+    {
+      "seed": 2,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 470,
+      "flowT": 38,
+      "battles": 13,
+      "wins": 2,
+      "losses": 10,
+      "retreats": 1,
+      "goldEarned": 41,
+      "goldSpent": 120,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 0,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 0,
+      "storm": {
+        "ratio": 2.542,
+        "won": false,
+        "durationT": 26.1,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.673,
+          "weight": 3.067,
+          "won": true,
+          "retreated": false,
+          "durationT": 12.5,
+          "lost": 0,
+          "loot": 31,
+          "goldDelta": 31,
+          "earnedDelta": 31,
+          "enemies": {
+            "brute": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.711,
+          "weight": 3.241,
+          "won": false,
+          "retreated": false,
+          "durationT": 24.1,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": -33,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 2,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.72,
+          "weight": 3.275,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.523,
+          "weight": 2.764,
+          "won": false,
+          "retreated": false,
+          "durationT": 21.3,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 17,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.953,
+          "weight": 7.47,
+          "won": false,
+          "retreated": false,
+          "durationT": 14,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.503,
+          "weight": 3.802,
+          "won": false,
+          "retreated": false,
+          "durationT": 21.8,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 5
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.345,
+          "weight": 4.773,
+          "won": false,
+          "retreated": false,
+          "durationT": 40.9,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.194,
+          "weight": 5.551,
+          "won": false,
+          "retreated": false,
+          "durationT": 36.4,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "raider": 1,
+            "wolf": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.887,
+          "weight": 4.773,
+          "won": false,
+          "retreated": false,
+          "durationT": 34.3,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.466,
+          "weight": 3.708,
+          "won": false,
+          "retreated": false,
+          "durationT": 35.3,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.686,
+          "weight": 4.265,
+          "won": false,
+          "retreated": false,
+          "durationT": 24.6,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.301,
+          "weight": 0.76,
+          "won": true,
+          "retreated": false,
+          "durationT": 14.4,
+          "lost": 0,
+          "loot": 10,
+          "goldDelta": 10,
+          "earnedDelta": 10,
+          "enemies": {
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.542,
+          "weight": 9.022,
+          "won": false,
+          "retreated": false,
+          "durationT": 26.1,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 15,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 2,
+            "bandit": 6,
+            "brute": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3707
+    },
+    {
+      "seed": 3,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 336,
+      "flowT": 31,
+      "battles": 9,
+      "wins": 4,
+      "losses": 4,
+      "retreats": 1,
+      "goldEarned": 212,
+      "goldSpent": 225,
+      "finalGold": 25,
+      "finalWeight": 2.53,
+      "razed": 2,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 2,
+      "storm": {
+        "ratio": 3.432,
+        "won": false,
+        "durationT": 35.6,
+        "lost": 2
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.71,
+          "weight": 3.237,
+          "won": true,
+          "retreated": false,
+          "durationT": 25,
+          "lost": 1,
+          "loot": 25,
+          "goldDelta": 25,
+          "earnedDelta": 25,
+          "enemies": {
+            "wolf": 1,
+            "raider": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.987,
+          "weight": 3.502,
+          "won": false,
+          "retreated": false,
+          "durationT": 28.8,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": -31,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.661,
+          "weight": 3.004,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.1,
+          "lost": 0,
+          "loot": 24,
+          "goldDelta": 84,
+          "earnedDelta": 84,
+          "enemies": {
+            "wolf": 1,
+            "bandit": 2,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.167,
+          "weight": 0.76,
+          "won": true,
+          "retreated": false,
+          "durationT": 7,
+          "lost": 0,
+          "loot": 10,
+          "goldDelta": 10,
+          "earnedDelta": 10,
+          "enemies": {
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.806,
+          "weight": 3.764,
+          "won": false,
+          "retreated": false,
+          "durationT": 26.1,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": -29,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.806,
+          "weight": 4.486,
+          "won": true,
+          "retreated": false,
+          "durationT": 27.4,
+          "lost": 0,
+          "loot": 33,
+          "goldDelta": 93,
+          "earnedDelta": 93,
+          "enemies": {
+            "raider": 2,
+            "wolf": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.861,
+          "weight": 8.247,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 7,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 5,
+            "wolf": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 3.766,
+          "weight": 5.585,
+          "won": false,
+          "retreated": false,
+          "durationT": 22.1,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 18,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 3.432,
+          "weight": 8.683,
+          "won": false,
+          "retreated": false,
+          "durationT": 35.6,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "wolf": 1,
+            "raider": 1,
+            "bandit": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2955
+    },
+    {
+      "seed": 4,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 346,
+      "flowT": 33,
+      "battles": 9,
+      "wins": 3,
+      "losses": 5,
+      "retreats": 1,
+      "goldEarned": 173,
+      "goldSpent": 255,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 1,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 3,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 2.549,
+        "won": false,
+        "durationT": 26,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.497,
+          "weight": 3.764,
+          "won": true,
+          "retreated": false,
+          "durationT": 14,
+          "lost": 0,
+          "loot": 29,
+          "goldDelta": 89,
+          "earnedDelta": 89,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.674,
+          "weight": 5.109,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.1,
+          "lost": 3,
+          "loot": 42,
+          "goldDelta": 42,
+          "earnedDelta": 42,
+          "enemies": {
+            "brute": 1,
+            "wolf": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.596,
+          "weight": 5.109,
+          "won": true,
+          "retreated": false,
+          "durationT": 13.1,
+          "lost": 0,
+          "loot": 42,
+          "goldDelta": 42,
+          "earnedDelta": 42,
+          "enemies": {
+            "wolf": 2,
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.662,
+          "weight": 5.989,
+          "won": false,
+          "retreated": false,
+          "durationT": 46,
+          "lost": 5,
+          "loot": 0,
+          "goldDelta": -14,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 1,
+            "raider": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.564,
+          "weight": 5.551,
+          "won": false,
+          "retreated": false,
+          "durationT": 35.6,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 16,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "wolf": 1,
+            "bandit": 1,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 3.476,
+          "weight": 8.794,
+          "won": false,
+          "retreated": false,
+          "durationT": 25.3,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 4,
+            "brute": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": false,
+          "ratio": 1.557,
+          "weight": 3.939,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 4.796,
+          "weight": 5.254,
+          "won": false,
+          "retreated": false,
+          "durationT": 18.8,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "raider": 3
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.549,
+          "weight": 9.049,
+          "won": false,
+          "retreated": false,
+          "durationT": 26,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 8,
+            "wolf": 2,
+            "raider": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2986
+    },
+    {
+      "seed": 5,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 414,
+      "flowT": 18,
+      "battles": 9,
+      "wins": 4,
+      "losses": 3,
+      "retreats": 2,
+      "goldEarned": 225,
+      "goldSpent": 285,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 2,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 2,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 2,
+      "storm": {
+        "ratio": 2.662,
+        "won": false,
+        "durationT": 30.8,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.606,
+          "weight": 2.764,
+          "won": true,
+          "retreated": false,
+          "durationT": 14.2,
+          "lost": 0,
+          "loot": 23,
+          "goldDelta": 23,
+          "earnedDelta": 23,
+          "enemies": {
+            "bandit": 3,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": false,
+          "ratio": 0.773,
+          "weight": 3.526,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": false,
+          "ratio": 2.8,
+          "weight": 3.067,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.661,
+          "weight": 3.004,
+          "won": true,
+          "retreated": false,
+          "durationT": 13.8,
+          "lost": 0,
+          "loot": 24,
+          "goldDelta": 84,
+          "earnedDelta": 84,
+          "enemies": {
+            "raider": 1,
+            "wolf": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.167,
+          "weight": 0.76,
+          "won": true,
+          "retreated": false,
+          "durationT": 6.1,
+          "lost": 0,
+          "loot": 10,
+          "goldDelta": 10,
+          "earnedDelta": 10,
+          "enemies": {
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.698,
+          "weight": 5.989,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.8,
+          "lost": 2,
+          "loot": 48,
+          "goldDelta": 108,
+          "earnedDelta": 108,
+          "enemies": {
+            "brute": 1,
+            "bandit": 1,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.443,
+          "weight": 3.067,
+          "won": false,
+          "retreated": false,
+          "durationT": 41,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": -34,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.154,
+          "weight": 5.247,
+          "won": false,
+          "retreated": false,
+          "durationT": 59.4,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 14,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 2,
+            "bandit": 3,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.662,
+          "weight": 9.449,
+          "won": false,
+          "retreated": false,
+          "durationT": 30.8,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 2,
+            "raider": 2,
+            "brute": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3099
+    },
+    {
+      "seed": 6,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 370,
+      "flowT": 24,
+      "battles": 11,
+      "wins": 5,
+      "losses": 5,
+      "retreats": 1,
+      "goldEarned": 129,
+      "goldSpent": 225,
+      "finalGold": 25,
+      "finalWeight": 5.568,
+      "razed": 0,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 2,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 0,
+      "storm": {
+        "ratio": 1.559,
+        "won": false,
+        "durationT": 30.8,
+        "lost": 4
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.649,
+          "weight": 2.96,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.2,
+          "lost": 0,
+          "loot": 23,
+          "goldDelta": 23,
+          "earnedDelta": 23,
+          "enemies": {
+            "raider": 3
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.673,
+          "weight": 3.067,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.1,
+          "lost": 2,
+          "loot": 31,
+          "goldDelta": 31,
+          "earnedDelta": 31,
+          "enemies": {
+            "brute": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.722,
+          "weight": 4.738,
+          "won": true,
+          "retreated": false,
+          "durationT": 15.4,
+          "lost": 0,
+          "loot": 40,
+          "goldDelta": 40,
+          "earnedDelta": 40,
+          "enemies": {
+            "brute": 1,
+            "raider": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.583,
+          "weight": 3.965,
+          "won": false,
+          "retreated": false,
+          "durationT": 27.9,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": -13,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 3,
+            "bandit": 2,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.137,
+          "weight": 4.036,
+          "won": false,
+          "retreated": false,
+          "durationT": 29.7,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 19,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.233,
+          "weight": 7.927,
+          "won": false,
+          "retreated": false,
+          "durationT": 40.9,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "raider": 1,
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.279,
+          "weight": 3.237,
+          "won": true,
+          "retreated": false,
+          "durationT": 22.2,
+          "lost": 0,
+          "loot": 25,
+          "goldDelta": 25,
+          "earnedDelta": 25,
+          "enemies": {
+            "wolf": 1,
+            "raider": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": false,
+          "ratio": 1.212,
+          "weight": 3.067,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 3.893,
+          "weight": 4.265,
+          "won": false,
+          "retreated": false,
+          "durationT": 17.9,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": -15,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.301,
+          "weight": 0.76,
+          "won": true,
+          "retreated": false,
+          "durationT": 7.8,
+          "lost": 0,
+          "loot": 10,
+          "goldDelta": 10,
+          "earnedDelta": 10,
+          "enemies": {
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.559,
+          "weight": 8.68,
+          "won": false,
+          "retreated": false,
+          "durationT": 30.8,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 6,
+            "wolf": 4,
+            "bandit": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3052
+    },
+    {
+      "seed": 7,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 383,
+      "flowT": 27,
+      "battles": 9,
+      "wins": 3,
+      "losses": 6,
+      "retreats": 0,
+      "goldEarned": 73,
+      "goldSpent": 180,
+      "finalGold": 25,
+      "finalWeight": 4.561,
+      "razed": 0,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 1,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 0,
+      "storm": {
+        "ratio": 1.955,
+        "won": false,
+        "durationT": 31.8,
+        "lost": 4
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.764,
+          "weight": 3.487,
+          "won": true,
+          "retreated": false,
+          "durationT": 39,
+          "lost": 2,
+          "loot": 27,
+          "goldDelta": 27,
+          "earnedDelta": 27,
+          "enemies": {
+            "bandit": 2,
+            "raider": 1,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.573,
+          "weight": 3.764,
+          "won": true,
+          "retreated": false,
+          "durationT": 14.9,
+          "lost": 0,
+          "loot": 29,
+          "goldDelta": 29,
+          "earnedDelta": 29,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.533,
+          "weight": 3.502,
+          "won": false,
+          "retreated": false,
+          "durationT": 80.4,
+          "lost": 5,
+          "loot": 0,
+          "goldDelta": -11,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 2,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.497,
+          "weight": 5.313,
+          "won": false,
+          "retreated": false,
+          "durationT": 34.7,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 1,
+            "wolf": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.394,
+          "weight": 3.526,
+          "won": false,
+          "retreated": false,
+          "durationT": 23.2,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.103,
+          "weight": 7.465,
+          "won": false,
+          "retreated": false,
+          "durationT": 56.3,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 5,
+            "wolf": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.866,
+          "weight": 4.721,
+          "won": false,
+          "retreated": false,
+          "durationT": 41.3,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 1,
+            "raider": 3,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.78,
+          "weight": 1.973,
+          "won": true,
+          "retreated": false,
+          "durationT": 12.8,
+          "lost": 0,
+          "loot": 17,
+          "goldDelta": 17,
+          "earnedDelta": 17,
+          "enemies": {
+            "raider": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.955,
+          "weight": 8.916,
+          "won": false,
+          "retreated": false,
+          "durationT": 31.8,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 13,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "bandit": 2,
+            "raider": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3392
+    },
+    {
+      "seed": 8,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 350,
+      "flowT": 27,
+      "battles": 9,
+      "wins": 2,
+      "losses": 6,
+      "retreats": 1,
+      "goldEarned": 110,
+      "goldSpent": 205,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 1,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 1,
+      "unresolved": 1,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 2.446,
+        "won": false,
+        "durationT": 35.1,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.718,
+          "weight": 3.275,
+          "won": true,
+          "retreated": false,
+          "durationT": 18.6,
+          "lost": 0,
+          "loot": 26,
+          "goldDelta": 26,
+          "earnedDelta": 26,
+          "enemies": {
+            "bandit": 3,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.35,
+          "weight": 3.004,
+          "won": true,
+          "retreated": false,
+          "durationT": 11.9,
+          "lost": 0,
+          "loot": 24,
+          "goldDelta": 84,
+          "earnedDelta": 84,
+          "enemies": {
+            "bandit": 2,
+            "raider": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.651,
+          "weight": 5.585,
+          "won": false,
+          "retreated": false,
+          "durationT": 32.2,
+          "lost": 7,
+          "loot": 0,
+          "goldDelta": -27,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.299,
+          "weight": 7.235,
+          "won": false,
+          "retreated": false,
+          "durationT": 31.4,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 17,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 4,
+            "bandit": 3,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 2.429,
+          "weight": 6.145,
+          "won": false,
+          "retreated": false,
+          "durationT": 23.4,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3,
+            "wolf": 1,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 1.887,
+          "weight": 4.773,
+          "won": false,
+          "retreated": false,
+          "durationT": 36.6,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": false,
+          "ratio": 2.103,
+          "weight": 7.465,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 5,
+            "wolf": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 3.214,
+          "weight": 4.767,
+          "won": false,
+          "retreated": false,
+          "durationT": 16.7,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 5,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.446,
+          "weight": 8.683,
+          "won": false,
+          "retreated": false,
+          "durationT": 35.1,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "wolf": 1,
+            "bandit": 1,
+            "raider": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3193
+    },
+    {
+      "seed": 9,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 270,
+      "flowT": 22,
+      "battles": 9,
+      "wins": 5,
+      "losses": 4,
+      "retreats": 0,
+      "goldEarned": 282,
+      "goldSpent": 310,
+      "finalGold": 25,
+      "finalWeight": 3.55,
+      "razed": 2,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 2,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 2,
+      "storm": {
+        "ratio": 2.641,
+        "won": false,
+        "durationT": 28.5,
+        "lost": 3
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.71,
+          "weight": 3.237,
+          "won": false,
+          "retreated": false,
+          "durationT": 18.7,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": -24,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "raider": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 1.586,
+          "weight": 7.235,
+          "won": true,
+          "retreated": false,
+          "durationT": 35,
+          "lost": 3,
+          "loot": 50,
+          "goldDelta": 50,
+          "earnedDelta": 50,
+          "enemies": {
+            "raider": 4,
+            "bandit": 3,
+            "wolf": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.493,
+          "weight": 2.739,
+          "won": true,
+          "retreated": false,
+          "durationT": 16.6,
+          "lost": 0,
+          "loot": 22,
+          "goldDelta": 82,
+          "earnedDelta": 82,
+          "enemies": {
+            "raider": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.315,
+          "weight": 1.751,
+          "won": true,
+          "retreated": false,
+          "durationT": 12.2,
+          "lost": 0,
+          "loot": 16,
+          "goldDelta": 16,
+          "earnedDelta": 16,
+          "enemies": {
+            "raider": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.62,
+          "weight": 6.016,
+          "won": true,
+          "retreated": false,
+          "durationT": 15.2,
+          "lost": 0,
+          "loot": 43,
+          "goldDelta": 103,
+          "earnedDelta": 103,
+          "enemies": {
+            "bandit": 4,
+            "raider": 3
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.301,
+          "weight": 3.067,
+          "won": true,
+          "retreated": false,
+          "durationT": 12.5,
+          "lost": 4,
+          "loot": 31,
+          "goldDelta": 31,
+          "earnedDelta": 31,
+          "enemies": {
+            "brute": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.882,
+          "weight": 3.237,
+          "won": false,
+          "retreated": false,
+          "durationT": 36.5,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": -41,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "raider": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.148,
+          "weight": 6.385,
+          "won": false,
+          "retreated": false,
+          "durationT": 51.2,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 13,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.641,
+          "weight": 9.373,
+          "won": false,
+          "retreated": false,
+          "durationT": 28.5,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "raider": 3,
+            "bandit": 4
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2761
+    },
+    {
+      "seed": 10,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 460,
+      "flowT": 39,
+      "battles": 12,
+      "wins": 2,
+      "losses": 8,
+      "retreats": 2,
+      "goldEarned": 33,
+      "goldSpent": 145,
+      "finalGold": 25,
+      "finalWeight": 4.561,
+      "razed": 0,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 1,
+      "unresolved": 2,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 0,
+      "storm": {
+        "ratio": 2.009,
+        "won": false,
+        "durationT": 24.4,
+        "lost": 4
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.597,
+          "weight": 2.725,
+          "won": true,
+          "retreated": false,
+          "durationT": 14.1,
+          "lost": 0,
+          "loot": 22,
+          "goldDelta": 22,
+          "earnedDelta": 22,
+          "enemies": {
+            "wolf": 2,
+            "raider": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": false,
+          "ratio": 0.877,
+          "weight": 3.998,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 2,
+            "wolf": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": false,
+          "ratio": 0.669,
+          "weight": 3.042,
+          "won": false,
+          "retreated": true,
+          "durationT": 95,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 3.339,
+          "weight": 4.953,
+          "won": false,
+          "retreated": false,
+          "durationT": 14.1,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 13,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 4,
+            "bandit": 4
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.679,
+          "weight": 4.248,
+          "won": false,
+          "retreated": false,
+          "durationT": 24.3,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 2,
+            "raider": 1,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.564,
+          "weight": 5.551,
+          "won": false,
+          "retreated": false,
+          "durationT": 21.8,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 25,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 1,
+            "brute": 1,
+            "bandit": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 3,
+          "weight": 7.59,
+          "won": false,
+          "retreated": false,
+          "durationT": 21.9,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 2,
+            "brute": 1,
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 2.194,
+          "weight": 5.551,
+          "won": false,
+          "retreated": false,
+          "durationT": 14.7,
+          "lost": 1,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 1,
+            "brute": 1,
+            "bandit": 1,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.965,
+          "weight": 4.972,
+          "won": false,
+          "retreated": false,
+          "durationT": 18.6,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 1,
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.972,
+          "weight": 4.989,
+          "won": false,
+          "retreated": false,
+          "durationT": 38.2,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": 0,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "raider": 3,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.39,
+          "weight": 0.987,
+          "won": true,
+          "retreated": false,
+          "durationT": 9.2,
+          "lost": 0,
+          "loot": 11,
+          "goldDelta": 11,
+          "earnedDelta": 11,
+          "enemies": {
+            "raider": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 2.009,
+          "weight": 9.164,
+          "won": false,
+          "retreated": false,
+          "durationT": 24.4,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 19,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 5,
+            "brute": 1,
+            "raider": 2
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 3697
+    },
+    {
+      "seed": 11,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "route",
+      "playT": 253,
+      "flowT": 22,
+      "battles": 7,
+      "wins": 4,
+      "losses": 3,
+      "retreats": 0,
+      "goldEarned": 181,
+      "goldSpent": 255,
+      "finalGold": 25,
+      "finalWeight": 4.561,
+      "razed": 1,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 3,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "entrenched",
+      "strongholdPointsAtStorm": 1,
+      "storm": {
+        "ratio": 1.904,
+        "won": false,
+        "durationT": 45.8,
+        "lost": 4
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.773,
+          "weight": 3.526,
+          "won": true,
+          "retreated": false,
+          "durationT": 30.4,
+          "lost": 1,
+          "loot": 28,
+          "goldDelta": 28,
+          "earnedDelta": 28,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.52,
+          "weight": 3.939,
+          "won": true,
+          "retreated": false,
+          "durationT": 22.9,
+          "lost": 4,
+          "loot": 36,
+          "goldDelta": 96,
+          "earnedDelta": 96,
+          "enemies": {
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 0.78,
+          "weight": 5.903,
+          "won": true,
+          "retreated": false,
+          "durationT": 21,
+          "lost": 1,
+          "loot": 47,
+          "goldDelta": 47,
+          "earnedDelta": 47,
+          "enemies": {
+            "wolf": 2,
+            "bandit": 2,
+            "brute": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.866,
+          "weight": 5.787,
+          "won": false,
+          "retreated": false,
+          "durationT": 55.4,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": -15,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "raider": 1,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.5,
+          "weight": 5.323,
+          "won": false,
+          "retreated": false,
+          "durationT": 30.1,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": 14,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 7
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.301,
+          "weight": 0.76,
+          "won": true,
+          "retreated": false,
+          "durationT": 9.1,
+          "lost": 0,
+          "loot": 10,
+          "goldDelta": 10,
+          "earnedDelta": 10,
+          "enemies": {
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.904,
+          "weight": 8.683,
+          "won": false,
+          "retreated": false,
+          "durationT": 45.8,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 20,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 2,
+            "wolf": 1,
+            "bandit": 1,
+            "raider": 1
+          }
+        }
+      ],
+      "won": false,
+      "wallClockMs": 2339
+    },
+    {
+      "seed": 12,
+      "policy": "farmer",
+      "resolve": "real",
+      "outcome": "won",
+      "playT": 386,
+      "flowT": 26,
+      "battles": 13,
+      "wins": 7,
+      "losses": 6,
+      "retreats": 0,
+      "goldEarned": 592,
+      "goldSpent": 265,
+      "finalGold": 274,
+      "finalWeight": 8.577,
+      "razed": 3,
+      "captures": 0,
+      "raidsLanded": 0,
+      "raidsDefended": 0,
+      "claimsRefused": 0,
+      "floorFires": 0,
+      "unresolved": 0,
+      "strongholdStateAtStorm": "weakened",
+      "strongholdPointsAtStorm": 3,
+      "storm": {
+        "ratio": 1.089,
+        "won": true,
+        "durationT": 22.7,
+        "lost": 4
+      },
+      "fights": [
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.702,
+          "weight": 3.201,
+          "won": true,
+          "retreated": false,
+          "durationT": 35.2,
+          "lost": 1,
+          "loot": 25,
+          "goldDelta": 25,
+          "earnedDelta": 25,
+          "enemies": {
+            "raider": 1,
+            "wolf": 3,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.993,
+          "weight": 3.526,
+          "won": false,
+          "retreated": false,
+          "durationT": 21.3,
+          "lost": 3,
+          "loot": 0,
+          "goldDelta": -31,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "wolf": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 1.987,
+          "weight": 5.026,
+          "won": false,
+          "retreated": false,
+          "durationT": 16.2,
+          "lost": 0,
+          "loot": 0,
+          "goldDelta": -22,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 4,
+            "raider": 2
+          }
+        },
+        {
+          "kind": "party",
+          "resolved": true,
+          "ratio": 1.861,
+          "weight": 8.486,
+          "won": false,
+          "retreated": false,
+          "durationT": 48.9,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": 13,
+          "earnedDelta": 0,
+          "enemies": {
+            "wolf": 1,
+            "brute": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 1.083,
+          "weight": 2.739,
+          "won": true,
+          "retreated": false,
+          "durationT": 22.4,
+          "lost": 0,
+          "loot": 22,
+          "goldDelta": 82,
+          "earnedDelta": 82,
+          "enemies": {
+            "raider": 2,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.902,
+          "weight": 2.281,
+          "won": false,
+          "retreated": false,
+          "durationT": 20.6,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": -32,
+          "earnedDelta": 0,
+          "enemies": {
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 1.384,
+          "weight": 3.502,
+          "won": false,
+          "retreated": false,
+          "durationT": 41.3,
+          "lost": 2,
+          "loot": 0,
+          "goldDelta": -22,
+          "earnedDelta": 0,
+          "enemies": {
+            "raider": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.764,
+          "weight": 3.487,
+          "won": true,
+          "retreated": false,
+          "durationT": 24.4,
+          "lost": 0,
+          "loot": 27,
+          "goldDelta": 87,
+          "earnedDelta": 87,
+          "enemies": {
+            "raider": 1,
+            "wolf": 2,
+            "bandit": 2
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.216,
+          "weight": 0.987,
+          "won": true,
+          "retreated": false,
+          "durationT": 6.6,
+          "lost": 0,
+          "loot": 11,
+          "goldDelta": 11,
+          "earnedDelta": 11,
+          "enemies": {
+            "raider": 1
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.5,
+          "weight": 2.281,
+          "won": true,
+          "retreated": false,
+          "durationT": 12.5,
+          "lost": 0,
+          "loot": 20,
+          "goldDelta": 20,
+          "earnedDelta": 20,
+          "enemies": {
+            "bandit": 3
+          }
+        },
+        {
+          "kind": "hunt",
+          "resolved": true,
+          "ratio": 0.781,
+          "weight": 3.939,
+          "won": false,
+          "retreated": false,
+          "durationT": 34.7,
+          "lost": 4,
+          "loot": 0,
+          "goldDelta": -39,
+          "earnedDelta": 0,
+          "enemies": {
+            "brute": 1,
+            "bandit": 1
+          }
+        },
+        {
+          "kind": "raid",
+          "resolved": true,
+          "ratio": 0.951,
+          "weight": 5.285,
+          "won": true,
+          "retreated": false,
+          "durationT": 21.5,
+          "lost": 1,
+          "loot": 39,
+          "goldDelta": 99,
+          "earnedDelta": 99,
+          "enemies": {
+            "wolf": 1,
+            "bandit": 5,
+            "raider": 1
+          }
+        },
+        {
+          "kind": "storm",
+          "resolved": true,
+          "ratio": 1.089,
+          "weight": 9.338,
+          "won": true,
+          "retreated": false,
+          "durationT": 22.7,
+          "lost": 4,
+          "loot": 68,
+          "goldDelta": 268,
+          "earnedDelta": 268,
+          "enemies": {
+            "brute": 1,
+            "raider": 4,
+            "bandit": 2,
+            "wolf": 1
+          }
+        }
+      ],
+      "won": true,
+      "wallClockMs": 2951
+    }
+  ]
+}

@@ -7,15 +7,15 @@
 // seam a row calls). It owns no drawing — world-screens.js draws the model — and it owns no
 // rules: every row commits through the method that already held the rule, so a row's price
 // tag and its charge cannot disagree.
-import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=rbf9ac38b53d8';
-import { bannerCost, bannerLabel } from '../progression.js?v=rbf9ac38b53d8';
-import { ACTIONS } from '../input-actions.js?v=rbf9ac38b53d8';
+import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=rf03ab8f72f41';
+import { bannerCost, bannerLabel } from '../progression.js?v=rf03ab8f72f41';
+import { ACTIONS } from '../input-actions.js?v=rf03ab8f72f41';
 import {
   OWNERSHIP, SPECIALIZATIONS, REGION,
   encounterObjective, strongholdModifiers, strongholdAdvantageLines, settlementRecord,
   STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=rbf9ac38b53d8';
-import { restAndHeal, expandArmy } from './settlement-interactions.js?v=rbf9ac38b53d8';
+} from '../region.js?v=rf03ab8f72f41';
+import { restAndHeal, expandArmy } from './settlement-interactions.js?v=rf03ab8f72f41';
 
 const P = PAL.world;
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
@@ -111,11 +111,16 @@ function settlementRows(world, s) {
 
   const rec = settlementRecord(world.save, s.id);
   if (rec?.owner === OWNERSHIP.NEUTRAL) {
+    // Plan 038: a claim is a purchase, priced like every other row here — the label
+    // states what it costs, the row refuses when the purse is short, and both read the
+    // one formula World.claimCost() charges.
+    const claimCost = world.claimCost(s);
     rows.push({
       id: 'claim',
-      label: 'Claim it for your banner',
-      detail: 'No fight — nobody hostile holds it. Then choose what it becomes.',
-      enabled: true, disabledReason: null,
+      label: `Claim it for your banner — ${claimCost}g`,
+      detail: 'No fight — nobody hostile holds it, its people want paying. Then choose what it becomes.',
+      enabled: world.save.gold >= claimCost,
+      disabledReason: world.save.gold < claimCost ? `Need ${claimCost} gold` : null,
     });
   } else if (rec?.owner === OWNERSHIP.PLAYER && !rec.spec) {
     rows.push({
@@ -239,6 +244,12 @@ export function performSiteAction(world, rowId) {
     case 'claim': {
       const rec = settlementRecord(world.save, s.id);
       if (rec?.owner !== OWNERSHIP.NEUTRAL) break;
+      // Plan 038: a claim can now be REFUSED for price, and a refusal must keep the
+      // panel up so its notice line reports claimSettlement own wording, exactly as
+      // a refused recruit or a refused expansion does. Only a claim that will land
+      // closes the menu first, because the spec choice it raises is swallowed while a
+      // screen is open.
+      if (world.save.gold < world.claimCost(s)) { world.claimSettlement(s); break; }
       world.screen = null;
       if (world.claimSettlement(s)) world.particles.ring(world.hero.x, world.hero.y, 44, P.hero, 0.6, 4);
       return;
