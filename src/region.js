@@ -16,7 +16,7 @@
 // presentation state, touches RNG, or mutates its inputs, so the whole regional
 // model is test-addressable in plain Node (tests/e2e/region.spec.js imports this
 // file directly).
-import { WORLD, UNIT_TYPES, BALANCE } from './data.js?v=r1c72333e9790';
+import { WORLD, UNIT_TYPES, BALANCE } from './data.js?v=ra324aad8885b';
 
 // ---------------------------------------------------------------------------
 // Regional configuration — one named region (Milestone 025 scope: exactly one).
@@ -134,14 +134,28 @@ export function findSpecSettlements(save, spec) {
 // campaign recomputes the identical state.
 // ---------------------------------------------------------------------------
 
-// points = held settlements + razed linked camps. Thresholds below decide the
-// state; every supported seed reaches Exposed by capturing all four settlements
-// even if no camp ever falls (4 >= exposedAt), so a beatable route always exists.
+// points = held settlements + razed linked camps. Each state row carries BOTH of its
+// requirements as fields, and strongholdStateId() applies them uniformly - there is no
+// per-state conditional anywhere.
+//
+// PLAN 037 ADDED `minRazedCamps` AND IT INVERTS WHAT THIS COMMENT USED TO PROMISE. It
+// read: "every supported seed reaches Exposed by capturing all four settlements even if
+// no camp ever falls, so a beatable route always exists". Measured, that was not a safety
+// net but the dominant strategy: four free claims reached EXPOSED on 12 of 12 seeds, and
+// EXPOSED thins the hold's garrison to 55%, so the only policy that ever won a campaign
+// was the one that never fought (`critiques/campaign-arc-baseline.md`). Supply lines are
+// what leave a hold exposed, so EXPOSED now needs at least one linked camp broken.
+//
+// The beatable route that the old comment was protecting still exists and is now the one
+// the game's own toasts point at: camp c1 at tier 0.7, priced off the campaign stage
+// rather than off the warband (Plan 037 Slice B), which the harness measures at a 92%
+// win rate for a fresh warband that gives orders. The `campRaider` and `captureThenRaze`
+// rows of `critiques/campaign-arc-comparison.md` are the evidence, not this sentence.
 export const STRONGHOLD_POWER = Object.freeze({
   states: [
-    { id: 'entrenched', label: 'ENTRENCHED', minPoints: 0 },
-    { id: 'weakened', label: 'WEAKENED', minPoints: 2 },
-    { id: 'exposed', label: 'EXPOSED', minPoints: 4 },
+    { id: 'entrenched', label: 'ENTRENCHED', minPoints: 0, minRazedCamps: 0 },
+    { id: 'weakened', label: 'WEAKENED', minPoints: 2, minRazedCamps: 0 },
+    { id: 'exposed', label: 'EXPOSED', minPoints: 4, minRazedCamps: 1 },
   ],
   // Exposed strips the starting garrison down to this fraction of its rolled size.
   exposedGarrisonFrac: 0.55,
@@ -166,8 +180,11 @@ export function strongholdPoints(save) {
 
 export function strongholdStateId(save) {
   const points = strongholdPoints(save);
+  const razed = razedLinkedCamps(save);
   let current = STRONGHOLD_POWER.states[0];
-  for (const s of STRONGHOLD_POWER.states) if (points >= s.minPoints) current = s;
+  for (const s of STRONGHOLD_POWER.states) {
+    if (points >= s.minPoints && razed >= (s.minRazedCamps || 0)) current = s;
+  }
   return current.id;
 }
 

@@ -603,6 +603,59 @@ tracking the player forever. An explicit `band` argument still overrides the
 draw (used by QA to probe `BALANCE.encounterWeightClamp` directly); never assert
 a tier-distribution property from a single seed — sweep several.
 
+**What those bands MULTIPLY changed in Plan 037, and this is the rule to know
+before touching any generator: two questions, two numbers.**
+
+- *"What can this player beat?"* reads `World.myStrength()` — the warband's
+  measured fighting weight. The floor guarantee (`enforceBeatableFloor`,
+  `trimToBeatable`), `oddsWord()` and both its thresholds, the party chase/flee
+  thresholds, the brief's "yours N" line and every hover panel read this. They
+  answer a question about the player, and they must keep reading the player.
+- *"How big is the next fight?"* reads `World.encounterBase()` — the campaign
+  STAGE curve, `BALANCE.encounterStage.base + perPoint * strongholdPoints(save)`,
+  corrected toward the warband by a fractional exponent and multiplied by
+  `hardEncounterMul` on HARD. It is the SINGLE place a generator target is
+  computed. `spawnParty`, `rollGarrison` (target and frozen seed), the regional
+  raid dispatch and the stronghold's reserve wave all read it and nothing else.
+
+Until Plan 037 both questions read `myStrength()`, so recruiting, the army-cap
+ladder and the banner raised both sides of every fight equally and camp c1 sat at
+a ratio of 0.71 whether the warband weighed 4.6 or 12.6. Measured end to end over
+48 scripted campaigns, the only policy that ever won a run was the one that never
+fought (`critiques/campaign-arc-baseline.md`). Never make `myStrength()` read
+stage, and never add a fifth generator target that reads `myStrength()` directly.
+
+**Every** generated force reads it, and the one that used to be an exception is
+worth knowing about because it was the most expensive bug in the campaign.
+Razing the LAST linked camp makes the surviving bands fall back on the hold
+(`campVictoryExtra` in `src/world/settlement-interactions.js`), and that
+absorption was unbounded: it pushed every party onto the garrison and then
+deleted them from the map. Measured, it was worth more than everything a warband
+gained by fighting — a `campRaider` reaching the hold at fighting weight 17.4
+against a `claimRush` at 6.6 still faced worse odds. It is now bounded by
+`BALANCE.strongholdRemnantCeiling`, computed from the same expression
+`rollGarrison` targets, and the bands the walls have no room for stay on the
+March. Two rules there are load-bearing: the ceiling bounds what may be ADDED and
+never trims a garrison the player already scouted, and the walk over the bands
+consumes no RNG. See `critiques/campaign-arc-comparison.md`.
+
+Claiming neutral ground (Plan 037): a claim is a PURCHASE, priced by settlement
+kind in `BALANCE.claimCost` and charged in `World.claimSettlement`, which refuses
+when the purse is short. It buys no raid grace — `winSettlement` extends
+`raidCdT` only when the capture came through a battle, which the peaceful claim
+signals by passing `{ claimed: true }`. EXPOSED additionally requires at least one
+razed linked camp (`STRONGHOLD_POWER.states[].minRazedCamps`), so riding past four
+settlements no longer thins the hold's garrison.
+
+Loot (Plan 037): `lootFor(comp)` in `src/data.js` is the ONE loot formula and
+`endBattle` is its only caller in `src/`. It pays `BALANCE.lootBase` plus each
+body's `ENEMY_TYPES[type].gold`, tuned so gold per unit of fighting weight is flat
+across the light bodies and about 1.33x for the brute. Retuning `UNIT_TYPES` or
+`POWER_EFFICIENCY` moves those weights and therefore that table — recompute with
+`enemyStrength([type])`, never by hand. The predecessor rule (`lootBase +
+totalEnemies * lootPerEnemy`) left the per-type field with no reader at all for
+four plans; adding a second loot formula anywhere would recreate that.
+
 ## Fighting weight (Plan 028)
 
 There is exactly ONE answer to "how strong is this force", it lives in

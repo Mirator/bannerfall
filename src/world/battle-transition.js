@@ -12,15 +12,15 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r1c72333e9790';
-import { dist2, clamp } from '../engine.js?v=r1c72333e9790';
-import { ACTIONS } from '../input-actions.js?v=r1c72333e9790';
-import { buildBriefModel, veteranLine } from '../world-screens.js?v=r1c72333e9790';
-import { sampleBattlefield } from './battlefield-brief.js?v=r1c72333e9790';
-import { FIELD } from '../battle/constants.js?v=r1c72333e9790';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r1c72333e9790';
-import { awardVeterancy, perkMods } from '../progression.js?v=r1c72333e9790';
-import { performSiteAction } from './site-menu.js?v=r1c72333e9790';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=ra324aad8885b';
+import { dist2, clamp } from '../engine.js?v=ra324aad8885b';
+import { ACTIONS } from '../input-actions.js?v=ra324aad8885b';
+import { buildBriefModel, veteranLine } from '../world-screens.js?v=ra324aad8885b';
+import { sampleBattlefield } from './battlefield-brief.js?v=ra324aad8885b';
+import { FIELD } from '../battle/constants.js?v=ra324aad8885b';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=ra324aad8885b';
+import { awardVeterancy, perkMods } from '../progression.js?v=ra324aad8885b';
+import { performSiteAction } from './site-menu.js?v=ra324aad8885b';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -289,13 +289,14 @@ export function confirmBrief(world) {
       // simRng so the whole assault stays seed-deterministic.
       const waves = [];
       for (let i = 0; i < (mods.waves || 0); i++) {
-        const mine = world.myStrength();
-        // Plan 028: a reserve wave is 0.8x the player's fighting weight, bounded by the
-        // same encounter clamp every other generated force uses.
+        // Plan 028 made a reserve wave 0.8x of measured fighting weight; Plan 037 made it
+        // 0.8x of the campaign's STAGE (World.encounterBase), like every other generated
+        // force. Same encounter clamp as all of them.
         const cl = BALANCE.encounterWeightClamp;
         waves.push({
           at: STRONGHOLD_WAVE_AT,
-          comp: rollComposition(clamp(mine * 0.8, cl.min, cl.max), world.simRng, BALANCE.compRolls.garrison),
+          comp: rollComposition(clamp(world.encounterBase() * 0.8, cl.min, cl.max),
+            world.simRng, BALANCE.compRolls.garrison),
         });
       }
       extras.waves = waves;

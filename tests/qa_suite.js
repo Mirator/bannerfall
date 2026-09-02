@@ -1,5 +1,5 @@
 // Bannerfall QA regression suite — browser module against window.game / window.__g.
-import { BALANCE, HERO, ODDS_WORDS, UNIT_TYPES, WORLD, oddsWord, playerStrength, rankOf } from '../src/data.js';
+import { BALANCE, HERO, ODDS_WORDS, UNIT_TYPES, WORLD, lootFor, oddsWord, playerStrength, rankOf } from '../src/data.js';
 import { awardVeterancy } from '../src/progression.js';
 //
 // It preserves the historical window.runQaSuite / window.__qaResult browser
@@ -96,7 +96,6 @@ function runQaSuiteImpl() {
   const HEAL_COST = BALANCE.healCost;
   const DEFEAT_GOLD_LOSS = BALANCE.defeatGoldLoss;
   const LOOT_BASE = BALANCE.lootBase;
-  const LOOT_PER_ENEMY = BALANCE.lootPerEnemy;
   const ARMY_CAP_BASE = BALANCE.armyCapBase;
   const BATTLE_GRACE = BALANCE.battleGrace;
   const HERO_START = WORLD.heroStart;
@@ -384,7 +383,16 @@ function runQaSuiteImpl() {
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world after forced victory, scene=' + g.scene());
     const save2 = G.scene.save;
-    const expectedLoot = LOOT_BASE + LOOT_PER_ENEMY * enemyComp.length;
+    // Plan 037: loot is paid per body TYPE through the one exported formula, and this
+    // record reads that formula rather than restating the arithmetic - restating it is
+    // exactly how ENEMY_TYPES[type].gold came to sit unread for four plans. The comp is
+    // deliberately mixed (bandit, raider and wolf are three different rates), and the
+    // expected figure is pinned to the TABLE below, so a rule that quietly went back to
+    // counting bodies could not pass this line.
+    const expectedLoot = lootFor(enemyComp);
+    const byType = LOOT_BASE + 5 + 5 + 6 + 3; // 2 bandits + a raider + a wolf
+    assert(expectedLoot === byType,
+      'lootFor must pay per body type: expected ' + byType + ', got ' + expectedLoot);
     assert(save2.gold === startGold + expectedLoot,
       'loot formula: expected gold ' + (startGold + expectedLoot) + ', got ' + save2.gold);
     assert(save2.troops.length === 3, 'expected all 3 troops to survive an uncontested forced victory, got ' + save2.troops.length);
@@ -678,13 +686,20 @@ function runQaSuiteImpl() {
     g.tap('Enter');
     assert(g.scene() === 'battle', 'confirming the assault brief did not start a battle, scene=' + g.scene());
     const nEnemies = G.scene.totalEnemies;
+    // The force that ENTERED, captured before the fight resolves: it is what endBattle
+    // pays for, and reading it back off the camp record afterwards would let a garrison
+    // mutation hide a loot bug.
+    const enemyTypes = G.scene.setup.enemies.map(e => e.type);
     G.scene.endBattle(true);
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world after camp raid, scene=' + g.scene());
     const save2 = G.scene.save;
     const c1After = save2.camps.find(c => c.id === 'c1');
     assert(c1After.razed === true, 'camp c1 razed flag not set true after victorious raid');
-    const expectedLoot = LOOT_BASE + LOOT_PER_ENEMY * nEnemies + 60; // battle loot + non-stronghold camp bonus
+    // battle loot (per body type since Plan 037) + the non-stronghold camp bonus
+    const expectedLoot = lootFor(enemyTypes) + 60;
+    assert(enemyTypes.length === nEnemies,
+      'the rolled garrison and the force that deployed disagree: ' + enemyTypes.length + ' vs ' + nEnemies);
     assert(save2.gold === goldBefore + expectedLoot, 'expected gold ' + (goldBefore + expectedLoot) + ', got ' + save2.gold);
     // Razing a camp pays gold only — the warband grows at settlements, never from a raid.
     assert(save2.troops.length === troopsBefore,
@@ -808,6 +823,12 @@ function runQaSuiteImpl() {
   record('world_party_spawn_tiers_weighted_toward_strong', () => {
     const seeds = [1, 42, 999, 20260817, 555];
     const N = 200;
+    // Plan 037 semantic update: the bands are ratios of `World.encounterBase()` - the
+    // campaign STAGE curve - rather than of `myStrength()`. That is the whole point of
+    // the slice: recruiting must not raise both sides of every fight at once. The
+    // classification below is otherwise untouched, and it is the reason this record has
+    // to read the generator's own target rather than restating one.
+    //
     // Plan 028 semantic update: the tier bands are ratios of measured FIGHTING WEIGHT now,
     // not of headcount strength points, so the classification boundaries move with them.
     // They are derived from BALANCE rather than restated here, and sit at the MIDPOINTS OF
@@ -837,11 +858,14 @@ function runQaSuiteImpl() {
     for (const seed of seeds) {
       g.scenario('world', { seed });
       const scene = G.scene;
-      const mine = scene.myStrength();
-      const tol = Math.max(...['bandit', 'raider', 'wolf'].map(t => scene.strength([t]))) / mine;
+      // The generator's own target, not the warband's weight. It is stable across this
+      // loop (neither the roster nor the stronghold points move) and is recomputed after
+      // the razing below, which DOES move it.
+      let base = scene.encounterBase();
+      const tol = Math.max(...['bandit', 'raider', 'wolf'].map(t => scene.strength([t]))) / base;
       for (let i = 0; i < N; i++) {
         scene.spawnParty(CAMP_C1); // no band -> the weighted tier draw under test
-        const ratio = scene.strength(scene.parties[scene.parties.length - 1].comp) / mine;
+        const ratio = scene.strength(scene.parties[scene.parties.length - 1].comp) / base;
         if (!inABand(ratio, tol)) { other++; if (outside.length < 5) outside.push(ratio.toFixed(2)); }
         const tier = tierOf(ratio);
         if (tier === 'weak') { weak++; weakAtZero++; }
@@ -851,9 +875,10 @@ function runQaSuiteImpl() {
       // now with every raidable camp razed, to confirm design decision 1: weights shift
       // toward `strong` (and away from `weak`) as camps fall across a run.
       for (const c of scene.save.camps) if (c.id !== 'strong') c.razed = true;
+      base = scene.encounterBase(); // three razed camps are three stage points
       for (let i = 0; i < N; i++) {
         scene.spawnParty(CAMP_C1);
-        const ratio = scene.strength(scene.parties[scene.parties.length - 1].comp) / mine;
+        const ratio = scene.strength(scene.parties[scene.parties.length - 1].comp) / base;
         const tier = tierOf(ratio);
         if (tier === 'weak') weakAtThree++;
         else if (tier === 'strong') strongAtThree++;

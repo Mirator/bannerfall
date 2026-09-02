@@ -121,7 +121,7 @@ const runs = await page.evaluate(async ({ fights, seeds }) => {
       heal: BALANCE.healCost,
       armyCapFirst: BALANCE.armyCapCostBase, armyCapStep: BALANCE.armyCapCostStep,
       banner: BALANCE.bannerCosts,
-      lootBase: BALANCE.lootBase, lootPerEnemy: BALANCE.lootPerEnemy,
+      lootBase: BALANCE.lootBase,
     },
   };
 }, { fights: FIGHTS, seeds: SEEDS });

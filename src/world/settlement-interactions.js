@@ -7,10 +7,10 @@
 // called by a row of the site menu (world/site-menu.js), which is what the one map verb
 // opens. The rules — and their refusal wording — stay here, so the menu's row state and
 // the charge it makes can never disagree.
-import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp } from '../data.js?v=r1c72333e9790';
-import { perkMods, recruitTroop } from '../progression.js?v=r1c72333e9790';
-import { dist2 } from '../engine.js?v=r1c72333e9790';
-import { REGION, SPECIALIZATIONS, OWNERSHIP, settlementRecord } from '../region.js?v=r1c72333e9790';
+import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp, enemyStrength } from '../data.js?v=ra324aad8885b';
+import { perkMods, recruitTroop } from '../progression.js?v=ra324aad8885b';
+import { dist2 } from '../engine.js?v=ra324aad8885b';
+import { REGION, SPECIALIZATIONS, OWNERSHIP, settlementRecord } from '../region.js?v=ra324aad8885b';
 
 const P = PAL.world;
 
@@ -166,13 +166,43 @@ export function campVictoryExtra(world, camp, st) {
       if (razedNow >= REGION.linkedCamps.length) {
         const strongSt = world.save.camps.find(c => c.id === 'strong');
         if (!strongSt.garrison) strongSt.garrison = world.rollGarrison(strongCamp);
-        const remnants = (world.save.parties || []).filter(p => p.camp === 'strong');
+        // Bands with nowhere left to muster fall back on the hold — but the hold is a
+        // generator target like every other force, and this used to be the one place in
+        // the game that bypassed that. Every surviving party was pushed onto the garrison
+        // with no bound at all, which measured as worth more than everything a warband
+        // gained by fighting for it (see BALANCE.strongholdRemnantCeiling).
+        //
+        // The ceiling is computed from the SAME expression rollGarrison targets, so a
+        // reinforced hold is still a stage-priced fight, just a harder one. It is a bound
+        // on what may be ADDED and never a trim: a garrison the player already scouted is
+        // never quietly reduced, which is rollGarrison's own house rule ("what you scouted
+        // is what you fight"), so a hold already at or over the ceiling simply takes
+        // nobody in.
+        const ceiling = Math.max(strongCamp.size * BALANCE.campWeightPerSize,
+          world.encounterBase() * (strongCamp.tier || 1)) * BALANCE.strongholdRemnantCeiling;
+        const taken = new Set();
         let absorbed = 0;
-        for (const p of remnants) { strongSt.garrison.push(...p.comp); absorbed += p.comp.length; }
-        world.save.parties = (world.save.parties || []).filter(p => p.camp !== 'strong');
+        // Whole bands, in save order, greedily. A band that does not fit is passed over
+        // rather than ending the walk, so one oversized band cannot block the smaller ones
+        // behind it. Save order is stable and this consumes no RNG, so it replays exactly.
+        for (const p of (world.save.parties || [])) {
+          if (p.camp !== 'strong') continue;
+          if (enemyStrength([...strongSt.garrison, ...p.comp]) > ceiling) continue;
+          strongSt.garrison.push(...p.comp);
+          taken.add(p);
+          absorbed += p.comp.length;
+        }
+        // Whoever the walls had no room for STAYS ON THE MARCH. Deleting them was the old
+        // rule's other half and it emptied the map at the exact moment the campaign asked
+        // the player to go and win it.
+        world.save.parties = (world.save.parties || []).filter(p => !taken.has(p));
+        const stillRiding = (world.save.parties || []).some(p => p.camp === 'strong');
         remnantNote = absorbed > 0
-          ? ` ${absorbed} bandit remnants withdraw into Wolfsjaw and man its walls — storm it!`
-          : ' Wolfsjaw stands alone — storm it!';
+          ? ` ${absorbed} bandit remnants withdraw into Wolfsjaw and man its walls` +
+            (stillRiding ? ' — the rest still ride the March. Storm it!' : ' — storm it!')
+          : stillRiding
+            ? ' Wolfsjaw has no room for them — the last bands still ride the March. Storm it!'
+            : ' Wolfsjaw stands alone — storm it!';
       }
       world.save.toast = `Camp razed (${razedNow}/${REGION.linkedCamps.length})!` + remnantNote;
     }

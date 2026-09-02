@@ -1142,3 +1142,94 @@ is contradicted - fighting still starts there, just always misclassified.
 Same family of defect as this slice, different mechanism (a radius mismatch,
 not a mood/velocity conflation); out of scope here, recorded in
 `plans/036-initiative-reads-who-closed.md`.
+
+## Plan 037 — measure the campaign arc, then make gold buy something (2026-09-02)
+
+Built the first harness in this repository that measures a whole RUN rather than a
+battle (`tests/e2e/campaign-harness.js`, `tests/e2e/campaign-arc.spec.js`,
+`scripts/zz-campaign-probe.mjs`), took a baseline on the untouched tree, then changed
+three rules and measured each. Four scripted policies driven end to end through the
+production entries with every edge asserted; 12 seeds per column, ~4 s of wall clock per
+campaign; the same seed and policy replay byte-identically, asserted before any number
+was written down.
+
+The baseline (`critiques/campaign-arc-baseline.md`) confirmed the audit by measurement:
+the policy that never fights until the storm won 2 of 12 campaigns in a mean 54 flowing
+seconds and ONE battle, while every policy that fought won none. Fighting more than
+doubled the difficulty of the final fight (storm ratio 1.04 against 2.34), because a
+camp raid cost men that gold bought back at a worse rate, and because four free claims
+reached EXPOSED on 12 of 12 seeds and EXPOSED strips the hold's garrison to 55%.
+
+Three changes, each measured (`critiques/campaign-arc-comparison.md`):
+
+- **Encounters are priced off campaign STAGE, not off the warband.**
+  `BALANCE.encounterStage` plus `World.encounterBase()`, the one place a generator
+  target is computed; `spawnParty`, `rollGarrison` (target and frozen seed), the
+  regional raid and the stronghold's reserve wave all read it. `base` and `perPoint` are
+  computed from the unit tables, never typed. The floor guarantee, the odds words and
+  the chase/flee thresholds deliberately keep reading `myStrength()` — two questions,
+  two numbers. HARD's 1.25 moved out of `rollGarrison` into `encounterBase()`, so it
+  finally touches roaming parties and raids too (audit finding 15), and quantising the
+  frozen garrison roll on the stage base closes finding 12 as a side effect.
+- **A claim is a purchase** (`BALANCE.claimCost`, 60/100, more in total than the 80-gold
+  starting purse), it buys no raid grace, and EXPOSED now requires at least one razed
+  linked camp (`STRONGHOLD_POWER.states[].minRazedCamps`). A settlement taken by BATTLE
+  is still free and still buys grace; both halves have their own test.
+- **Loot is paid per body TYPE** through one exported `lootFor(comp)`, replacing
+  `lootBase + totalEnemies * lootPerEnemy`. `ENEMY_TYPES[type].gold` had no reader
+  anywhere in `src/` and the four values were retuned against `enemyStrength([type])`.
+  `lootBase` was halved to absorb the 25% income rise the retune caused on its own (the
+  brute went 5 -> 26 and camp garrisons are where the brutes are): scaling the four
+  per-type values down instead, as the plan suggested, cannot hold the flat rate at
+  integer granularity, and the flat base is the one body-blind term in the formula.
+  Re-scoring every won fight under both rules puts `campRaider` at +13.2%, inside the
+  plan's +/-15%.
+
+A fourth change followed, outside the plan's original scope and added only after
+measurement showed nothing inside it could deliver acceptance criterion 3:
+
+- **Wolfsjaw's remnant absorption is bounded.** Razing the LAST linked camp made every
+  surviving roaming party fall back on the hold, and that absorption was unbounded - it
+  pushed every band onto the garrison and then deleted it from the map. It was the ONE
+  force in the game that bypassed `encounterBase()`, and it was worth more than everything
+  a warband gained by fighting: seed 3's `campRaider` reached the hold at fighting weight
+  17.4 against a `claimRush` at 6.6, two and a half times stronger, and still faced worse
+  odds (1.42 against 1.33) because its 15.5 garrison had been topped up to 24.8. It is now
+  bounded by `BALANCE.strongholdRemnantCeiling` (1.25x the same expression `rollGarrison`
+  targets), it never trims a garrison the player already scouted, and the bands the walls
+  have no room for stay on the March instead of vanishing with the camp. Its own regression
+  test drives an overstacked fixture through the production raid path.
+
+Measured effect, 12 seeds before and after with identical policies: **the campaign's
+dominant strategy inverted.** `claimRush`, the route that never fights and was the only
+policy that ever won a run, goes from 2 wins of 12 to none; it can afford one claim of
+four and reaches the hold ENTRENCHED on 12 of 12 at weight 6.6 instead of EXPOSED at 12.6.
+`campRaider` goes from 0 wins to 4, its battle win rate 33% -> 73%, its campaign
+246 s -> 155 s, its storm ratio 2.29 -> 1.27, and the fighting weight it reaches Wolfsjaw
+with 4.3 -> 12.9. `captureThenRaze` goes from 1 win to 4. Gold per unit of fighting weight
+across roaming fights went from spanning 2.53x (a wolf paid 12.36, a brute 4.89) to 1.23x,
+with the three light bodies inside 3% of each other. `farmer` is the policy that did NOT
+improve - hunting weak parties still leaves it at weight 4.3 - which is the right outcome
+rather than a miss: farming was never a route, it was just overpaid.
+
+**Acceptance criterion 3 holds on 9 of 12 seeds (up from 2 of 12 before the remnant fix)
+and the assertion stays open with `test.fail()`.** The three failures are a different
+finding, and one this plan lists as out of scope: the wipe death spiral (finding 5). On
+seeds 1, 2 and 12 the warband lost a fight costing it ten to twelve men, landed on the
+25-gold defeat floor and never rebuilt - all three end at exactly 25 gold, at weight 4.6,
+6.6 and 2.5. A warband that fought and LOST does not arrive at Wolfsjaw stronger and no
+encounter pricing can make it so; what is missing is a recovery path. Head of Plan 038.
+
+Also found, not fixed: the shipped `@sweep` guard still passes (chargeAll 100% against
+idle 94%, direction and margin intact) but its fixture installs a near-capped roster
+into a stage-0 campaign, which under the stage curve is by construction the easiest
+fight the game can produce — idle went 49 -> 94 and chargeAll 60 -> 100. It has little
+headroom left to detect a regression and wants re-basing on a matching stage. And
+`raidsLanded` is still 0 across all 48 runs on both columns: removing the claim's grace
+extension was not enough, because `RAID.firstDelayT` is 110 flowing seconds and a
+`claimRush` campaign is over in 52.
+
+Gates: `npm test` 193 passed / 1 failed — the pre-existing Windows-only
+`battle-break.png` rasterization drift already on record from Plans 035 and 036,
+reconfirmed by measuring the untouched tree first. `npm run test:balance`,
+`npm run test:qa`, `npm run test:perf`, `npm run release:cache` + `npm run test:release`.

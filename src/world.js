@@ -1,26 +1,27 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=r1c72333e9790';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r1c72333e9790';
-import { SAVE_VERSION } from './save.js?v=r1c72333e9790';
+} from './data.js?v=ra324aad8885b';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra324aad8885b';
+import { SAVE_VERSION } from './save.js?v=ra324aad8885b';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
-} from './region.js?v=r1c72333e9790';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r1c72333e9790';
+  strongholdPoints,
+} from './region.js?v=ra324aad8885b';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=ra324aad8885b';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=r1c72333e9790';
-import { drawScene } from './world/render-scene.js?v=r1c72333e9790';
+} from './progression.js?v=ra324aad8885b';
+import { drawScene } from './world/render-scene.js?v=ra324aad8885b';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r1c72333e9790';
+} from './world/battle-transition.js?v=ra324aad8885b';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -30,16 +31,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=r1c72333e9790';
+} from './world/settlement-interactions.js?v=ra324aad8885b';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=r1c72333e9790';
+} from './world/site-menu.js?v=ra324aad8885b';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r1c72333e9790';
-import { WORLD_ART } from './world/visual-style.js?v=r1c72333e9790';
+} from './world/terrain.js?v=ra324aad8885b';
+import { WORLD_ART } from './world/visual-style.js?v=ra324aad8885b';
 
 const P = PAL.world;
 
@@ -428,17 +429,19 @@ export class World {
     return rollComposition(target, this.simRng, BALANCE.compRolls.party);
   }
 
-  // Spawn a party aimed at a POWER band around the player's warband (Plan 028: the band
-  // multiplies myStrength(), which is now measured fighting weight rather than a body
-  // count). `band`, when given explicitly, overrides the weighted tier draw (used by the
-  // floor guarantee's callers and by QA to probe the encounterWeightClamp directly).
+  // Spawn a party aimed at a POWER band around the CAMPAIGN'S STAGE (Plan 037: the band
+  // multiplies encounterBase(), not myStrength() — recruiting no longer raises both sides
+  // of every fight at once). Plan 028 is what made the band a band of measured fighting
+  // weight rather than of body counts; that part is unchanged. `band`, when given
+  // explicitly, overrides the weighted tier draw (used by the floor guarantee's callers
+  // and by QA to probe the encounterWeightClamp directly).
   spawnParty(camp, band) {
     const R = this.simRng;
-    const mine = this.myStrength();
     const razed = this.save.camps.filter(c => c.razed && c.id !== 'strong').length;
     const effectiveBand = band ?? this.rollPartyBand(razed);
     const cl = BALANCE.encounterWeightClamp;
-    const target = clamp(mine * effectiveBand, cl.min, cl.max);
+    // Plan 037: the band multiplies the STAGE curve, not the warband. See encounterBase().
+    const target = clamp(this.encounterBase() * effectiveBand, cl.min, cl.max);
     const comp = this.rollComp(target);
     // never spawn a party inside a river or mountain — retry a few scatter offsets
     let px = camp.x, py = camp.y;
@@ -545,12 +548,17 @@ export class World {
   // fractionally different warband cannot re-roll it.
   rollGarrison(camp) {
     const mine = this.myStrength();
-    const garrisonSeed = (camp.x * 31 + camp.y * 7 + Math.round(mine) * 13 + (this.save.runSeed ?? 0)) >>> 0;
+    const base = this.encounterBase();
+    // Plan 037: the frozen roll is quantised on the STAGE base rather than on `mine`, so
+    // what a camp holds is a function of how far the campaign has come. That also closes
+    // the audit's finding 12 as a side effect - scouting every camp on the opening ride
+    // used to freeze all three at starter weight for the rest of the run.
+    const garrisonSeed = (camp.x * 31 + camp.y * 7 + Math.round(base) * 13 + (this.save.runSeed ?? 0)) >>> 0;
     const R = makeRng(deriveSeed(garrisonSeed, RNG_DOMAINS.WORLD_GARRISON));
-    const hardMul = this.save.hard ? 1.25 : 1;
     const caps = BALANCE.garrisonBruteCaps;
-    const target = Math.max(camp.size * BALANCE.campWeightPerSize,
-      mine * (camp.tier || 1) * hardMul);
+    // HARD rides inside encounterBase() now, so it touches every generated force rather
+    // than only this one.
+    const target = Math.max(camp.size * BALANCE.campWeightPerSize, base * (camp.tier || 1));
     const bruteCap = camp.stronghold ? caps.strongholdCap
       : mine >= caps.twoAt ? 2 : mine >= caps.oneAt ? 1 : 0;
     return rollComposition(target, R, BALANCE.compRolls.garrison, bruteCap);
@@ -560,10 +568,25 @@ export class World {
     const st = this.save.camps.find(c => c.id === camp.id);
     return st && st.garrison ? this.strength(st.garrison) : null;
   }
+  // TWO QUESTIONS, TWO NUMBERS (Plan 037). "What can this player beat" reads
+  // myStrength(); "how big is the next fight" reads encounterBase(). Keeping them apart
+  // is the whole point of that slice - do not make myStrength() read stage.
   myStrength() {
     // The Drillyard shift rides along: the battle grants rank with it applied, so the
     // generator must price the warband that will actually deploy (see playerStrength).
     return playerStrength(this.save.troops, perkMods(this.save.perks).rankEarlier);
+  }
+
+  // The single place a generator TARGET is computed (Plan 037). Every roaming party, camp
+  // garrison, regional raid and stronghold reserve wave is sized off this; the floor
+  // guarantee, the odds words, the party chase/flee thresholds and every number a screen
+  // shows the player still read myStrength(). The formula and the reasoning behind the
+  // fractional exponent live in the BALANCE.encounterStage block in data.js.
+  encounterBase() {
+    const S = BALANCE.encounterStage;
+    const stage = S.base + S.perPoint * strongholdPoints(this.save);
+    const corr = clamp(Math.pow(this.myStrength() / stage, S.alpha), S.corrMin, S.corrMax);
+    return stage * corr * (this.save.hard ? BALANCE.hardEncounterMul : 1);
   }
 
   // Army-cap upgrade price: rises by a step per +2 already bought. The charge site and the
@@ -963,8 +986,10 @@ export class World {
 
   // The single capture bookkeeping path. `reclaimed` marks a settlement that was
   // already ours and is being taken back from an occupier (no captures-counter
-  // change, no second spec choice — the choice is permanent for the run).
-  winSettlement(settlement, { reclaimed = false } = {}) {
+  // change, no second spec choice — the choice is permanent for the run). `claimed`
+  // marks the peaceful purchase below, which is the one capture that never passes
+  // through a battle.
+  winSettlement(settlement, { reclaimed = false, claimed = false } = {}) {
     const st = this.save.settlements.find(s => s.id === settlement.id);
     if (!st) return;
     const wasOwned = st.owner === OWNERSHIP.PLAYER;
@@ -974,7 +999,14 @@ export class World {
       this.save.stats.captures += 1;
       // Cadence grace after a capture: the stronghold does not instantly punish
       // expansion (milestone requirement — a grace period after capture).
-      this.raidCdT = Math.max(this.raidCdT, RAID.graceAfterCaptureT);
+      //
+      // Plan 037: GRACE IS EARNED BY WINNING A FIGHT, NOT BY RIDING PAST. A peaceful
+      // claim skips it. Four claims used to push the raid clock out by 60 s each on top
+      // of RAID.firstDelayT's 110, which is most of why the harness measured zero landed
+      // raids across 48 campaigns. Driving an occupier off neutral ground still reaches
+      // this branch through onWinExtra and still buys the grace, because that one was a
+      // fight.
+      if (!claimed) this.raidCdT = Math.max(this.raidCdT, RAID.graceAfterCaptureT);
       this.say(`${settlement.name} joins your banner! Choose what it becomes.`, 3.4);
     } else if (reclaimed) {
       this.say(`${settlement.name} is free again — its service resumes, banner intact.`, 3.2);
@@ -982,12 +1014,27 @@ export class World {
     if (!st.spec) this.queueSpecChoice(settlement.id);
   }
 
-  // Peaceful claim of a neutral settlement (G at its gates). No battle — nobody
-  // hostile holds it — but the same checkpoint + spec-choice flow as a won fight.
+  // The price of a peaceful claim, by settlement kind. One formula, read by the site
+  // menu's row and by the charge below, so the price tag and the debit cannot disagree.
+  claimCost(settlement) {
+    return BALANCE.claimCost[settlement.kind] ?? BALANCE.claimCost.village;
+  }
+
+  // Peaceful claim of a neutral settlement (a row of the site menu at its gates). No
+  // battle — nobody hostile holds it — but the same checkpoint + spec-choice flow as a
+  // won fight, and since Plan 037 the same kind of cost: it is bought, not taken.
   claimSettlement(settlement) {
     const st = this.save.settlements.find(s => s.id === settlement.id);
     if (!st || st.occupied || st.owner === OWNERSHIP.PLAYER) return false;
-    this.winSettlement(settlement);
+    const cost = this.claimCost(settlement);
+    if (this.save.gold < cost) {
+      this.say(`${settlement.name} will not raise your banner for less than ${cost} gold`, 2.6);
+      return false;
+    }
+    this.save.gold -= cost;
+    this.save.stats.goldSpent += cost;
+    this.game.sfx.coin();
+    this.winSettlement(settlement, { claimed: true });
     // Explicit persistence checkpoint at the moment ownership changes (milestone
     // contract): scene is still `world`, so persistRun() writes a coherent map.
     this.game.persistRun();
@@ -1163,11 +1210,12 @@ export class World {
     if (this.parties.some(p => p.raidKind === 'regional' && p.raid)) return;
     const target = targets[(this.simRng() * targets.length) | 0];
     const hold = WORLD.camps.find(c => c.id === REGION.strongholdId);
-    const mine = this.myStrength();
-    // Plan 028: a regional raid rides out at 1.1x the player's fighting weight — the same
-    // number it always carried, now measured rather than counted in bodies.
+    // Plan 028 made this 1.1x of measured fighting weight rather than of a body count;
+    // Plan 037 made the thing it is 1.1x OF the campaign's stage instead of the warband,
+    // so riding out to punish expansion is not something recruiting makes harder.
     const cl = BALANCE.encounterWeightClamp;
-    const comp = rollComposition(clamp(mine * 1.1, cl.min, cl.max), this.simRng, BALANCE.compRolls.garrison);
+    const comp = rollComposition(clamp(this.encounterBase() * 1.1, cl.min, cl.max),
+      this.simRng, BALANCE.compRolls.garrison);
     const R = this.simRng;
     let px = hold.x, py = hold.y;
     for (let i = 0; i < 8; i++) {

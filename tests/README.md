@@ -85,6 +85,43 @@ digit for digit across two runs — and the `test.fail` annotation came off on i
 terms. The assertion is now a guard: a change that makes the idle default the best policy
 again fails the sweep.
 
+## The campaign arc
+
+`tests/e2e/campaign-harness.js` and `tests/e2e/campaign-arc.spec.js` are Plan 037's
+harness, and they are the first thing in this repository that measures a whole RUN rather
+than a battle. Four scripted policies (`claimRush`, `campRaider`, `captureThenRaze`,
+`farmer`) — each a route of objectives plus a spend rule — are driven end to end through
+the production entries, with every edge asserted: the one map verb opens the site menu, a
+row opens the brief, the brief opens the deployment phase, the deployment confirm starts
+the fight. A run records time-to-victory, the gold curve, fights per run, the ratio the
+warband reaches Wolfsjaw with, and every fight it had on the way.
+
+The split is the one the config already makes. The four-policy, twelve-seed sweep is
+tagged `@sweep` and runs under `npm run test:balance`; ONE smoke test (two seeds, four
+fights, `forced` resolution) runs in the PR gate so the harness cannot rot silently. The
+three `@sweep` tests share a single 48-campaign measurement through a module-level cache,
+which is sound only because the config pins `workers: 1`.
+
+Before trusting a number from it, read the harness header. Three limitations are stated
+there and all three shape the results: travel is teleport-plus-clock (so nothing
+intercepts a ride), the hero never swings, and orders are always `chargeAll`. The hard
+contract underneath everything is determinism — the same seed and policy must produce a
+byte-identical record — and it is asserted first, because averaging over a
+non-deterministic run would make every other number meaningless.
+
+One assertion in that file carries `test.fail()`: Plan 037's acceptance criterion 3, that
+a warband which fought and spent storms Wolfsjaw at better odds than one that rode past.
+It holds on 9 of 12 seeds. The three that fail are the wipe death spiral (audit finding 5,
+out of scope for that plan): a warband that loses a fight costing it ten men lands on the
+25-gold defeat floor and never rebuilds, and no amount of encounter pricing can make a
+warband that LOST arrive stronger. Do not weaken it; remove the annotation when a wiped
+warband has a recovery path. The reason is recorded in the test and in
+`critiques/campaign-arc-comparison.md`.
+
+`scripts/zz-campaign-probe.mjs` is the scratch probe for wide exploration and shares the
+same harness module, so a number a plan quotes and a number a gate asserts come from one
+piece of code.
+
 `tests/e2e/facing-flank.spec.js` owns the Plan 032 mechanic itself: the sweep says what the
 rule did to a campaign, this spec says what the rule IS. Four two-body fixtures, each stepped
 exactly as far as it takes for one blow to land — a melee blow from outside the defender's
