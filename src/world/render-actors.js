@@ -1,12 +1,12 @@
 // Campaign-map actors and HUD: the hero's rider, enemy party tokens with one body-count
 // badge, and the top/bottom HUD chrome. Presentation only — these read the
 // World instance (and its save) and draw; they never advance simulation state.
-import { PAL, WORLD, BALANCE, armySlots, rankOf } from '../data.js?v=r3729900262ac';
-import { perkMods } from '../progression.js?v=r3729900262ac';
-import { TAU, rrect, shadow } from '../engine.js?v=r3729900262ac';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from '../region.js?v=r3729900262ac';
-import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r3729900262ac';
-import { nearestSite, siteChipLabel } from './site-menu.js?v=r3729900262ac';
+import { PAL, WORLD, BALANCE, armySlots, rankOf } from '../data.js?v=r68c3ea5d32ff';
+import { perkMods } from '../progression.js?v=r68c3ea5d32ff';
+import { TAU, rrect, shadow } from '../engine.js?v=r68c3ea5d32ff';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS } from '../region.js?v=r68c3ea5d32ff';
+import { WORLD_ART, worldHudLayout, heroPresentationPosition } from './visual-style.js?v=r68c3ea5d32ff';
+import { nearestSite, siteChipLabel } from './site-menu.js?v=r68c3ea5d32ff';
 
 const P = PAL.world;
 const WORLD_LANDMARKS = [...WORLD.settlements, ...WORLD.camps];
@@ -151,10 +151,15 @@ export function drawHud(world, ctx) {
     ctx.fillText(`Wolfsjaw: ${label}`, objective.x + objective.w - 14, objective.y + 14);
     ctx.fillStyle = P.hero;
     ctx.font = '800 12px Inter, system-ui, sans-serif';
-    ctx.fillText(`◇  Weaken it (${mods.points}/${mods.maxPoints})`, objective.x + objective.w - 14, objective.y + 32);
+    // The fraction counts against the LADDER's top (4), not the map's total of settlements
+    // plus linked camps (7): the ladder stops at EXPOSED, so a chip reading "4/7" invented
+    // three points of missing progress. The hint line below states the outstanding
+    // requirement by name, which the old fixed "Capture settlements · raze camps" could
+    // not — four captures and no razed camp is WEAKENED, and nothing said why.
+    ctx.fillText(`◇  Weaken it (${mods.ladderPoints}/${mods.topPoints})`, objective.x + objective.w - 14, objective.y + 32);
     ctx.font = '600 10px Inter, system-ui, sans-serif';
     ctx.fillStyle = '#B8C2D8';
-    ctx.fillText('Capture settlements · raze camps', objective.x + objective.w - 14, objective.y + 47);
+    ctx.fillText(mods.nextStep || 'Weakened as far as it goes — storm it', objective.x + objective.w - 14, objective.y + 47);
   }
 
   // Milestone 025 Slice D: an active regional raid warns above the toast line.

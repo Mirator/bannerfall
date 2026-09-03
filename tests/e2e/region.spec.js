@@ -5,7 +5,8 @@ import {
   settlementRecord, settlementState, isPlayerOwned, heldSettlements,
   specializationOf, isSpecActive, findSpecSettlements,
   STRONGHOLD_POWER, razedLinkedCamps, strongholdPoints, strongholdStateId,
-  STRONGHOLD_POWER_LABELS, ownsWatchtower, strongholdModifiers, strongholdAdvantageLines,
+  STRONGHOLD_POWER_LABELS, STRONGHOLD_TOP_POINTS, nextStepHint,
+  ownsWatchtower, strongholdModifiers, strongholdAdvantageLines,
   OBJECTIVES, encounterObjective, OBJECTIVE_LABELS, RAID, SUMMARY_FIELDS,
 } from '../../src/region.js';
 
@@ -111,13 +112,72 @@ test('stronghold power climbs the documented ladder from deterministic inputs on
   expect(strongholdPoints(unlinkedOnly)).toBe(0);
 });
 
+test('the HUD counts against the ladder top and names the outstanding requirement', () => {
+  // The defect this guards: `maxPoints` was settlements + linked camps (7) while the ladder
+  // has topped out at EXPOSED's minPoints (4) since Plan 038, and the chip's fixed hint
+  // ('Capture settlements · raze camps') never mentioned `minRazedCamps`. A campaign with
+  // four captures and no razed camp therefore read "4/7" at WEAKENED and was told nothing
+  // about the one input it was actually missing.
+  expect(STRONGHOLD_TOP_POINTS).toBe(
+    Math.max(...STRONGHOLD_POWER.states.map(s => s.minPoints)));
+  expect(STRONGHOLD_TOP_POINTS).toBe(STRONGHOLD_POWER.states.find(s => s.id === 'exposed').minPoints);
+  expect(STRONGHOLD_TOP_POINTS).toBeLessThan(WORLD.settlements.length + REGION.linkedCamps.length);
+
+  // Four captures, no razed camp: the points are at the top of the ladder and the state is
+  // still WEAKENED, so the hint has to name the camp.
+  const fourClaims = saveWith({ owned: WORLD.settlements.map(s => s.id) });
+  const claimsMods = strongholdModifiers(fourClaims);
+  expect(claimsMods.stateId).toBe('weakened');
+  expect(claimsMods.points).toBe(4);
+  expect(claimsMods.ladderPoints).toBe(STRONGHOLD_TOP_POINTS);
+  expect(claimsMods.nextStep).toBe('Raze one linked camp to expose it');
+  expect(nextStepHint(fourClaims)).toBe(claimsMods.nextStep);
+
+  // The same four captures plus one razed camp: EXPOSED, and there is nothing left to owe.
+  const exposed = saveWith({ owned: WORLD.settlements.map(s => s.id), razedCamps: ['c1'] });
+  const exposedMods = strongholdModifiers(exposed);
+  expect(exposedMods.stateId).toBe('exposed');
+  expect(exposedMods.nextStep).toBe('');
+  expect(nextStepHint(exposed)).toBe('');
+  // Points overshoot the top once camps stack on captures; the chip's numerator is clamped
+  // so it can never read "7/4".
+  const everything = saveWith({ owned: WORLD.settlements.map(s => s.id), razedCamps: REGION.linkedCamps });
+  expect(strongholdModifiers(everything).points).toBe(7);
+  expect(strongholdModifiers(everything).ladderPoints).toBe(STRONGHOLD_TOP_POINTS);
+  expect(strongholdModifiers(everything).nextStep).toBe('');
+
+  // The rungs below: a fresh campaign owes points only, and a WEAKENED one owes whichever
+  // of the two inputs is short — both deficits are stated, never just the point count.
+  expect(nextStepHint(saveWith())).toBe('Capture or raze 2 more');
+  expect(nextStepHint(saveWith({ owned: ['ashford'] }))).toBe('Capture or raze 1 more');
+  expect(nextStepHint(saveWith({ owned: ['ashford', 'brindle'] })))
+    .toBe('Capture or raze 2 more — one a linked camp');
+  // Camp requirement already met, points short: the hint drops the camp clause instead of
+  // asking again for something that is done.
+  expect(nextStepHint(saveWith({ owned: ['ashford', 'brindle'], razedCamps: ['c1'] })))
+    .toBe('Capture or raze 1 more');
+  // Razed camps alone: three points, WEAKENED, and the camp requirement is already met.
+  expect(nextStepHint(saveWith({ razedCamps: REGION.linkedCamps }))).toBe('Capture or raze 1 more');
+
+  // The hint reaches the pre-battle brief through the derived advantage lines, so the
+  // decision to storm now is made against it rather than against a bare point count.
+  expect(strongholdAdvantageLines(claimsMods)).toContain('Raze one linked camp to expose it');
+  expect(strongholdAdvantageLines(exposedMods).some(l => l.includes('Raze'))).toBe(false);
+});
+
 test('stronghold modifiers implement the milestone mapping exactly', () => {
   // Entrenched, nothing achieved: full defenses.
   const entrenched = strongholdModifiers(saveWith());
   expect(entrenched).toEqual({
-    stateId: 'entrenched', points: 0, maxPoints: WORLD.settlements.length + REGION.linkedCamps.length,
+    stateId: 'entrenched', points: 0,
+    // The denominator the HUD counts against is the LADDER's top, not the map's total of
+    // settlements plus linked camps. `maxPoints` (that total, 7) was the bundle's only
+    // denominator and the chip's, which is the legibility defect this shape replaces.
+    topPoints: STRONGHOLD_TOP_POINTS, ladderPoints: 0,
+    nextStep: 'Capture or raze 2 more',
     waves: 1, guards: 3, revealDeployment: false, garrisonMul: 1,
   });
+  expect(entrenched.topPoints).toBeLessThan(WORLD.settlements.length + REGION.linkedCamps.length);
 
   // Two captured settlements remove the reinforcement wave.
   expect(strongholdModifiers(saveWith({ owned: ['ashford', 'brindle'] })).waves).toBe(0);

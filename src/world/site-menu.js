@@ -7,15 +7,15 @@
 // seam a row calls). It owns no drawing — world-screens.js draws the model — and it owns no
 // rules: every row commits through the method that already held the rule, so a row's price
 // tag and its charge cannot disagree.
-import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=r3729900262ac';
-import { bannerCost, bannerLabel } from '../progression.js?v=r3729900262ac';
-import { ACTIONS } from '../input-actions.js?v=r3729900262ac';
+import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=r68c3ea5d32ff';
+import { bannerCost, bannerLabel } from '../progression.js?v=r68c3ea5d32ff';
+import { ACTIONS } from '../input-actions.js?v=r68c3ea5d32ff';
 import {
   OWNERSHIP, SPECIALIZATIONS, REGION,
   encounterObjective, strongholdModifiers, strongholdAdvantageLines, settlementRecord,
   STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r3729900262ac';
-import { restAndHeal, expandArmy } from './settlement-interactions.js?v=r3729900262ac';
+} from '../region.js?v=r68c3ea5d32ff';
+import { restAndHeal, expandArmy } from './settlement-interactions.js?v=r68c3ea5d32ff';
 
 const P = PAL.world;
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;
@@ -118,7 +118,11 @@ function settlementRows(world, s) {
     rows.push({
       id: 'claim',
       label: `Claim it for your banner — ${claimCost}g`,
-      detail: 'No fight — nobody hostile holds it, its people want paying. Then choose what it becomes.',
+      // The campaign-value clause leads: a playtest found nothing on this row linked the
+      // purchase to the only objective the map has, so a claim read as a shop for
+      // recruits. It is +1 on the same ladder the HUD chip counts. Kept short on purpose —
+      // world-screens.js truncates a detail, and a refused row appends its gold reason.
+      detail: '+1 toward weakening Wolfsjaw · no fight · then choose what it becomes',
       enabled: world.save.gold >= claimCost,
       disabledReason: world.save.gold < claimCost ? `Need ${claimCost} gold` : null,
     });
@@ -142,7 +146,10 @@ function campRows(world, camp) {
       // Milestone 025 Slice E: assaultable at ANY power state. The row is always
       // offered and the detail line says how weakened it actually is, rather than the
       // old prompt's habit of hiding the option below three razed camps.
-      detail: strongholdAdvantageLines(mods)[0],
+      //
+      // The hint is the same sentence the HUD chip carries, so the player standing at the
+      // gates reads what is still owed here too instead of only a point count.
+      detail: [strongholdAdvantageLines(mods)[0], mods.nextStep].filter(Boolean).join('  ·  '),
       enabled: true, disabledReason: null,
     }];
   }

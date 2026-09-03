@@ -7,10 +7,10 @@
 // called by a row of the site menu (world/site-menu.js), which is what the one map verb
 // opens. The rules — and their refusal wording — stay here, so the menu's row state and
 // the charge it makes can never disagree.
-import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp, enemyStrength } from '../data.js?v=r3729900262ac';
-import { perkMods, recruitTroop } from '../progression.js?v=r3729900262ac';
-import { dist2 } from '../engine.js?v=r3729900262ac';
-import { REGION, SPECIALIZATIONS, OWNERSHIP, settlementRecord } from '../region.js?v=r3729900262ac';
+import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp, enemyStrength } from '../data.js?v=r68c3ea5d32ff';
+import { perkMods, recruitTroop } from '../progression.js?v=r68c3ea5d32ff';
+import { dist2 } from '../engine.js?v=r68c3ea5d32ff';
+import { REGION, SPECIALIZATIONS, OWNERSHIP, settlementRecord } from '../region.js?v=r68c3ea5d32ff';
 
 const P = PAL.world;
 
