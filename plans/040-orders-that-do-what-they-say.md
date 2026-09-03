@@ -1,6 +1,15 @@
 # 040 — Orders that do what they say: a line that holds, arrows that land, a squad you can send
 
-STATUS: READY. Written 2026-09-02 as a handoff plan from the gameplay audit in
+STATUS: IN PROGRESS. Slice 2 shipped 2026-09-02 (`WOLF_STALK_R` 250 -> 180). Its
+before/after is in `critiques/orders-comparison.md`, including one thing this plan
+asserted that did not reproduce: the first wolf death under HOLD lands at 11.4 s at BOTH
+radii, so the stall-clock test the slice asked for would have been vacuous and a
+structural contract between `WOLF_STALK_R` and the archer's range is asserted instead.
+Also recorded there: the `@sweep` guard's margin narrowed from +7 to +3, because since
+Plan 033 "pressing nothing" IS a held line, so improving HOLD improves idle first.
+Slices 1, 3 and 4 remain.
+
+Written 2026-09-02 as a handoff plan from the gameplay audit in
 `critiques/gameplay-audit-2026-09-02.md` (battle findings 9, 15, 8, 11 — listed
 here in the order they should be executed, not the order the audit ranked
 them). Every code reference was re-verified against the tree at `9375040`

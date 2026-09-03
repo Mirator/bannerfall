@@ -1368,3 +1368,39 @@ Gates: `npm test` 197 passed / 1 failed - the pre-existing Windows-only `battle-
 rasterization drift on record since Plan 035, which CI's font environment passes.
 `npm run test:balance`, `npm run test:qa`, `npm run test:perf`, `npm run release:cache` +
 `npm run test:release`.
+
+## Plan 040 slice 2 — the bow line answers a pack (2026-09-02)
+
+One constant: `WOLF_STALK_R` 250 -> 180. A stalking wolf occupies the band [0.9R, 1.25R]
+around its target, so at 250 a pack stood at 225-312 px against an archer's 230 px reach -
+outside the only weapon the warband owns that can reach it, since nothing it fields except
+the knight (175) and the hero (315) can catch a body moving at 158. For the whole band to
+sit inside archer range, R <= 184.
+
+Measured on the four direct `startBattle` fixtures (no generator, no stage curve): the two
+mixed-composition HOLD fights carry the whole change. On `mixed` the hero finished at 3 hit
+points and now finishes at 93, with the fight 45.5s -> 34.4s; on `brute` a held line went
+36.4s and 2 men lost to 23.3s and none. `raiders` contains no wolves and did not move by a
+tick, which is the control.
+
+Two things worth recording rather than burying.
+
+The plan's own premise did not reproduce. It predicted a held line "does nothing until the
+14 s no-death stall clock forces bloodlust" and asked for a test that the first wolf death
+lands before STALL_NO_DEATH. Measured, the first kill under HOLD is at 11.4 s at BOTH 250
+and 180 - the number does not move - so that test would have passed with the change fully
+reverted, which is exactly the failure Plan 019 had to retract. What is real here is
+arithmetic, so the shipped test asserts the arithmetic: `the wolf stand band lies inside the
+bow line reach` checks `WOLF_STALK_R * 1.25 <= archer.range` and `WOLF_STALK_R * 0.9 >
+spear.range`, both read from the shipped tables. It is a contract between two tables that
+nothing guarded, and it was verified to fail at 250 and pass at 180.
+
+And the `@sweep` guard's margin narrowed from +7 to +3 (idle 68 -> 73, chargeAll 75 -> 76,
+split 53 -> 51). It did not flip, which is the plan's STOP condition, and the fix is
+correct - but the narrowing is structural, not incidental: since Plan 033 "pressing
+nothing" means a formed line that HOLDS, so an improvement to HOLD is an improvement to
+idle first. At +3 on 120 raids per policy the guard is no longer comfortably resolvable,
+and slices 1 and 3 both touch what a held line does.
+
+Gates: `npm test` 198 passed / 1 failed (the pre-existing Windows-only `battle-break.png`
+drift), `npm run test:balance` 4 passed, `npm run release:cache` + `npm run test:release`.
