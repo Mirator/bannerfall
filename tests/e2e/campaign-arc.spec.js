@@ -132,8 +132,12 @@ test.describe('campaign arc', () => {
   });
 
   test('a warband that fought and spent storms Wolfsjaw at better odds than one that did not', { tag: '@sweep' }, async ({ page }) => {
-    // EXPECTED FAILURE on 1 of 12 seeds — Plan 038 acceptance criterion 3. Do not delete
-    // this annotation to tidy the suite and do not weaken the assertion.
+    // HARD FLOOR, NOT test.fail() — Plan 038 acceptance criterion 3. A blanket test.fail()
+    // here would pass on ANY throw: a regression to 0/12, a harness error unrelated to this
+    // property, and the known 1-of-12 gap all look identical to it. Instead this counts how
+    // many seeds the property actually holds on and asserts a floor of 11 (Plan 039's
+    // measured count, `critiques/campaign-recovery-and-pressure.md`) — a drop below 11 fails
+    // the test loudly. Do not lower the floor to tidy the suite and do not weaken it further.
     //
     // PLAN 039 TOOK IT FROM 3 FAILING SEEDS TO 1, by making a wipe recoverable: a defeat
     // musters the column back to the starting four instead of two, and while the warband
@@ -175,16 +179,30 @@ test.describe('campaign arc', () => {
     // fighting weight 17.4 against `claimRush`'s 6.6 and still stormed at a WORSE ratio,
     // 1.42 against 1.33. With the absorption bounded by
     // `BALANCE.strongholdRemnantCeiling`, that same seed storms at 0.69.
-    test.fail();
     test.setTimeout(1_800_000);
     const byPolicy = await sweep(page);
+    const HELD_FLOOR = 11; // Plan 039's measured count, out of 12 seeds — see comment above.
+    let measured = 0;
+    let held = 0;
+    const misses = [];
     for (const seed of SWEEP_SEEDS) {
       const raider = byPolicy.campRaider.find(r => r.seed === seed);
       const rush = byPolicy.claimRush.find(r => r.seed === seed);
       if (!raider.storm || !rush.storm) continue; // a run that never reached the hold says nothing
-      expect(raider.storm.ratio,
-        `seed ${seed}: campRaider must storm at better odds than claimRush ` +
-        `(${raider.storm.ratio} vs ${rush.storm.ratio})`).toBeLessThan(rush.storm.ratio);
+      measured++;
+      if (raider.storm.ratio < rush.storm.ratio) {
+        held++;
+      } else {
+        misses.push(`seed ${seed}: ${raider.storm.ratio} vs ${rush.storm.ratio}`);
+      }
     }
+    expect(held,
+      `campRaider must storm Wolfsjaw at better odds than claimRush on at least ` +
+      `${HELD_FLOOR} of ${measured} measured seeds; seeds where it did not: ` +
+      `${misses.join(', ') || 'none'}`).toBeGreaterThanOrEqual(HELD_FLOOR);
+    // Recorded, not asserted: this is 11/12, not 12/12. Plan 039 traced the outstanding seed
+    // (1) to a warband that recovered but not far enough to beat claimRush's fixed stage-1
+    // storm on that map, not to the wipe death spiral — see the comment above. Raise
+    // HELD_FLOOR to 12 when a future slice closes that gap; do not skip/fixme it meanwhile.
   });
 });
