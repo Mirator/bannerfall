@@ -43,7 +43,7 @@ otherwise.
 | `src/world.js`, `src/world/` | campaign map: tick pipeline, party AI, terrain, rendering |
 | `src/battle.js`, `src/battle/` | fight scene: ordered phases, combat, separation, objectives, HUD |
 | `src/region.js` | regional conquest model (ownership, specializations, stronghold power, raid cadence) — pure data, single source |
-| `src/save.js` | versioned save schema and migration boundary (currently v4) |
+| `src/save.js` | versioned save schema and migration boundary (currently v5) |
 | `src/audio.js` | `Sfx`: sample-backed one-shots, two streamed music beds, master/music/sfx buses |
 | `assets/audio/` | the shipped clips; `SOURCES.md` records CC0 provenance per file |
 | `src/platform/`, `src/persistence/` | capability + storage adapters (Steam-ready boundary) |

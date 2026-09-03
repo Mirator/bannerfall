@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r3729900262ac';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r3b20caaaa2ab';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -147,6 +147,24 @@ export const BOW_SPREAD_BRACED = 0.05;
 export const CHARGE_EXPOSURE = 1.35;
 // How long shields stay down after a charge order is rescinded.
 export const CHARGE_RECOVER = 1.1;
+// How far a HELD melee body reaches for anything at all: one spear-line's worth of ground.
+// A held body that shoots uses its own `range` instead; this is the melee half of the
+// `holdReach` in updateTroopPhase (ai-phases.js), and Plan 040 slice 1 made the
+// Break-the-position guard read the SAME number, because "a held line may take a guard
+// only inside the reach its stance already uses for hostiles" is one concept and was two
+// literals. Both uses are the same reach; if they ever need to differ, that is two names.
+//
+// It is also the lower bound of Plan 040 slice 2's wolf arithmetic: a stalking wolf stands
+// no closer than WOLF_STALK_R * 0.9 (162), which must stay OUTSIDE this reach or a pack
+// stops being a skirmisher problem and walks into the spears. `the wolf stand band lies
+// inside the bow line reach` in stance-balance.spec.js asserts that against this constant,
+// not against UNIT_TYPES.spear.range (30) — the spear's own range is the gap it closes to
+// swing, not the ground a braced line covers, and asserting on it left 130 px of slack.
+//
+// FOLLOW's melee reach (150 in updateTroopPhase) is deliberately a separate literal: an
+// advancing line is allowed to leave its formation slot further than a braced one leaves
+// its anchor, so the two numbers moving together is not wanted.
+export const HOLD_REACH_MELEE = 140;
 // A fight in which nobody has died for this long is not a battle, it is a grind.
 export const STALL_NO_DEATH = 14;
 // The arena margin every body is clamped inside. Named by Plan 040 because it is now read

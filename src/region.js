@@ -16,7 +16,10 @@
 // presentation state, touches RNG, or mutates its inputs, so the whole regional
 // model is test-addressable in plain Node (tests/e2e/region.spec.js imports this
 // file directly).
-import { WORLD, UNIT_TYPES, BALANCE } from './data.js?v=r3729900262ac';
+// Only BALANCE is read here: `WORLD` went unused when strongholdModifiers stopped
+// publishing the map's total as a point denominator (see STRONGHOLD_TOP_POINTS), and
+// `UNIT_TYPES` had already been dead alongside it.
+import { BALANCE } from './data.js?v=r3b20caaaa2ab';
 
 // ---------------------------------------------------------------------------
 // Regional configuration — one named region (Milestone 025 scope: exactly one).
@@ -192,6 +195,42 @@ export function strongholdStateId(save) {
 export const STRONGHOLD_POWER_LABELS = Object.freeze(
   Object.fromEntries(STRONGHOLD_POWER.states.map(s => [s.id, s.label])));
 
+// The ladder's REAL top: the highest point threshold any state asks for. It is not the
+// map's total of settlements plus linked camps — that is 7 — and the HUD used the total as
+// its denominator until this fix, so a campaign standing at the top of the ladder was told
+// "4/7" and looked 43% short of something that does not exist. Derived from the states, so
+// retuning `minPoints` moves the HUD with it.
+export const STRONGHOLD_TOP_POINTS =
+  STRONGHOLD_POWER.states.reduce((top, s) => Math.max(top, s.minPoints), 0);
+
+// The rung above the current one, or null at the top. strongholdStateId() returns the last
+// state whose BOTH requirements are met, so the next entry in declaration order is what is
+// still owed.
+function nextLadderState(save) {
+  const id = strongholdStateId(save);
+  const i = STRONGHOLD_POWER.states.findIndex(s => s.id === id);
+  return STRONGHOLD_POWER.states[i + 1] || null;
+}
+
+// What the campaign still owes for that next rung, as one short sentence, or '' at the top.
+//
+// Points stopped being the whole story in Plan 038: EXPOSED needs `minPoints` AND
+// `minRazedCamps`, so four free claims sit at the point threshold and stay WEAKENED. The
+// HUD said nothing about the missing camp, and that is the state a playtest reached. Both
+// deficits are computed here and the sentence names whichever are outstanding.
+export function nextStepHint(save) {
+  const next = nextLadderState(save);
+  if (!next) return '';
+  const needPoints = next.minPoints - strongholdPoints(save);
+  const needRazed = (next.minRazedCamps || 0) - razedLinkedCamps(save);
+  const camps = n => (n === 1 ? 'one linked camp' : `${n} linked camps`);
+  if (needPoints <= 0 && needRazed > 0) return `Raze ${camps(needRazed)} to expose it`;
+  if (needRazed > 0) {
+    return `Capture or raze ${needPoints} more — ${needRazed === 1 ? 'one a linked camp' : `${needRazed} of them linked camps`}`;
+  }
+  return `Capture or raze ${needPoints} more`;
+}
+
 export function ownsWatchtower(save) {
   return findSpecSettlements(save, 'watchtower').length > 0;
 }
@@ -202,10 +241,19 @@ export function strongholdModifiers(save) {
   const stateId = strongholdStateId(save);
   const captures = heldSettlements(save).length;
   const razed = razedLinkedCamps(save);
+  const points = strongholdPoints(save);
   return {
     stateId,
-    points: strongholdPoints(save),
-    maxPoints: WORLD.settlements.length + REGION.linkedCamps.length,
+    points,
+    // What the HUD counts against: the ladder's top, not the map's total. `maxPoints` (the
+    // total) was this bundle's only denominator and nothing but the chip ever read it, so
+    // it is gone rather than left here to be picked up again by mistake.
+    topPoints: STRONGHOLD_TOP_POINTS,
+    // Clamped progress, because razing all three camps on top of four captures scores 7
+    // and a chip reading "7/4" is worse than one reading "4/4".
+    ladderPoints: Math.min(points, STRONGHOLD_TOP_POINTS),
+    // What is still owed, in words — '' once the hold cannot be weakened any further.
+    nextStep: nextStepHint(save),
     // Entrenched gets one reinforcement wave; `waveRemovalCaptures` captures remove it.
     waves: captures >= STRONGHOLD_POWER.waveRemovalCaptures ? 0 : 1,
     // Break-the-position guard count for the stronghold fight.
@@ -230,6 +278,9 @@ export function strongholdAdvantageLines(mods) {
   if (mods.garrisonMul < 1) lines.push('The garrison is thin — the hold is EXPOSED');
   if (!mods.revealDeployment) lines.push('Their deployment is unscouted');
   else lines.push('Your watchtowers read their deployment');
+  // The one line about the player's next move rather than the hold's advantages. The brief
+  // is where storming now is chosen, so what would weaken it first belongs in it.
+  if (mods.nextStep) lines.push(mods.nextStep);
   return lines;
 }
 

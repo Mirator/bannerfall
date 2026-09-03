@@ -22,16 +22,24 @@ test('a stopped hero holds every world clock', async ({ page }) => {
   const result = await page.evaluate(() => {
     const world = window.__g.scene;
     const snapshot = () => ({
-      time: world.time, grace: world.grace, spawnT: world.spawnT, msgT: world.msgT,
+      time: world.time, grace: world.grace, spawnT: world.spawnT,
       particles: world.particles.list.length,
       parties: world.parties.map(p => [p.x, p.y, p.waryT, p.chaseT, p.wanderT, p.navT, p.mood]),
     });
-    world.say('a toast that must stay pinned while time is stale', 3);
+    // `msgT` is deliberately NOT in that snapshot: it is the toast timer, which is
+    // presentation and drains on every tick (asserted below). It used to be pinned here
+    // with the simulation clocks, which meant a message raised on the last riding tick
+    // stayed on screen forever once the horse stopped.
+    world.say('a toast that must clear even though time is stale', 3);
     const before = snapshot();
     window.game.step(5);
-    return { before, after: snapshot(), state: window.game.state().world };
+    return {
+      before, after: snapshot(), state: window.game.state().world,
+      toastCleared: world.msgT <= 0,
+    };
   });
   expect(result.after).toEqual(result.before);
+  expect(result.toastCleared, 'a toast raised before the freeze never expired').toBe(true);
   expect(result.state.flowing).toBe(false);
   expect(result.state.time).toBe(0);
   expect(result.state.speed).toBe(0);

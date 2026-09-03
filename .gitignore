@@ -18,3 +18,11 @@ blob-report/
 
 # scratch Playwright specs (captures, balance sweeps) — see playwright.config.js testIgnore
 tests/e2e/zz-*.spec.js
+
+# scratch measurement dumps and one-off probes (regenerable raw output; cited probes and any
+# raw JSON whose numbers are quoted in a critiques/ table stay tracked in scripts/ instead)
+scripts/zz-*.json
+scripts/zz-enemy-command-probe.mjs
+scripts/zz-power-fit.mjs
+# new scratch probes are ignored by default; the cited ones already tracked stay tracked
+scripts/zz-*.mjs

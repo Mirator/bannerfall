@@ -719,3 +719,24 @@ export function rollComposition(target, R, weights, bruteCap = Infinity) {
   if (comp.length > 1 && over > target && (target - under) < (over - target)) comp.pop();
   return comp;
 }
+
+// The light bodies — everything but the brute — ordered HEAVIEST FIRST by their own
+// fighting weight. Derived from ENEMY_POWER, so retuning a body reorders this for free
+// instead of stranding a hand-written order beside the tables it claims to describe.
+const LIGHT_BODIES = Object.freeze(Object.keys(ENEMY_POWER)
+  .filter(type => type !== 'brute')
+  .map(type => Object.freeze({ type, weight: forceWeight(ENEMY_POWER[type].dps, ENEMY_POWER[type].hp) }))
+  .sort((a, b) => b.weight - a.weight));
+
+// The heaviest SINGLE light body whose own fighting weight fits under `cap`, or a bandit
+// when none does. `World.trimToBeatable` is the caller: popping bodies off the end cannot
+// reach the LAST one, and `rollComposition`'s brute gate reads the TARGET rather than any
+// later cap, so a comp whose first draw is a brute is legitimately one 3.07-weight body
+// against a beatable cap of 1.33. The floor guarantee therefore has to be able to REPLACE
+// that body, and it must do it without drawing on `simRng` — which is why this is a lookup
+// and not a roll. A cap below every body in the game returns the bandit and stays honestly
+// above it: an empty party is not an encounter, so there is nothing better to return.
+export function heaviestLightBody(cap) {
+  for (const body of LIGHT_BODIES) if (body.weight <= cap) return body.type;
+  return 'bandit';
+}

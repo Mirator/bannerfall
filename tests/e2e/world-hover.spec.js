@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors, bootWorld } from './test-helpers.js';
 import { WORLD } from '../../src/data.js';
+import { REGION } from '../../src/region.js';
 
 const boot = (page, seed = 20260817) => bootWorld(page, { seed });
 
@@ -178,5 +179,63 @@ test('hover cannot touch simulation: state() is identical whether hovering a par
   expect(withHover.hover).not.toBeNull();
   expect(withoutHover.hover).toBeNull();
   expect(strip(withHover)).toEqual(strip(withoutHover));
+  expect(runtimeErrors).toEqual([]);
+});
+
+// The objective chip is the map's only statement of what the campaign is FOR, and it is
+// canvas text, so nothing but a baseline PNG covered its wording until this fixture. It
+// lives beside the hover specs because they share the one thing reading drawn text needs:
+// a world scene whose draw() the test can drive on demand.
+//
+// The defect it guards: the denominator was WORLD.settlements + REGION.linkedCamps (7)
+// while the ladder has topped out at EXPOSED's minPoints (4) since Plan 038, and the line
+// under it was the fixed string 'Capture settlements · raze camps', which never mentioned
+// that EXPOSED also needs a razed camp. Four captures and no camp razed drew "4/7" beneath
+// WEAKENED with no word about the missing input.
+async function chipText(page, regionOpts) {
+  await page.evaluate(o => window.game.scenario('world_region', o), regionOpts);
+  await expect.poll(() => page.evaluate(() => window.__g.sceneName)).toBe('world');
+  // One draw with fillText recorded, then the prototype goes back — the same idiom
+  // performance.spec.js uses to count beginPath calls, for the same reason: the drawn frame
+  // is the only place this string exists.
+  return page.evaluate(() => {
+    const proto = CanvasRenderingContext2D.prototype;
+    const original = proto.fillText;
+    const drawn = [];
+    proto.fillText = function (text, ...rest) { drawn.push(String(text)); return original.call(this, text, ...rest); };
+    try { window.__g.draw(); } finally { proto.fillText = original; }
+    return drawn;
+  });
+}
+
+test('the objective chip counts against the ladder top and names what is missing', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const mapTotal = WORLD.settlements.length + REGION.linkedCamps.length;
+
+  const fresh = await chipText(page, { seed: 20260817 });
+  expect(fresh).toContain('Wolfsjaw: ENTRENCHED');
+  expect(fresh).toContain('◇  Weaken it (0/4)');
+  expect(fresh).toContain('Capture or raze 2 more');
+  // However the ladder is retuned, the chip must never count against the map's total.
+  expect(fresh.some(line => line.includes(`/${mapTotal})`))).toBe(false);
+
+  // The playtested state: every settlement claimed, no camp razed. WEAKENED, already at the
+  // top of the point ladder, so the hint has to say what the fraction cannot.
+  const claimsOnly = await chipText(page, {
+    seed: 20260817, owned: WORLD.settlements.map(s => s.id),
+  });
+  expect(claimsOnly).toContain('Wolfsjaw: WEAKENED');
+  expect(claimsOnly).toContain('◇  Weaken it (4/4)');
+  expect(claimsOnly).toContain('Raze one linked camp to expose it');
+
+  // Camps razed as well: EXPOSED, nothing left to earn, and the numerator stays clamped at
+  // the top instead of reading 7/4 once camps stack on captures.
+  const exposed = await chipText(page, {
+    seed: 20260817, owned: WORLD.settlements.map(s => s.id), razed: ['c1', 'c2', 'c3'],
+  });
+  expect(exposed).toContain('Wolfsjaw: EXPOSED');
+  expect(exposed).toContain('◇  Weaken it (4/4)');
+  expect(exposed).toContain('Weakened as far as it goes — storm it');
   expect(runtimeErrors).toEqual([]);
 });

@@ -1444,3 +1444,59 @@ comment says the hysteresis was added for.
 
 Gates: `npm test` 199 passed / 1 failed (the pre-existing Windows-only `battle-break.png`
 drift), `npm run test:balance` 4 passed, `release:cache` + `test:release`.
+
+## Plan 041 — ten verified defects from the second gameplay audit, fixed in parallel (2026-09-03)
+
+`critiques/gameplay-audit-2026-09-03.md` re-ran the six-dimension audit against `de819e0`
+and found, alongside the open AA gaps, a handful of defects that were verified in source or
+in the headless playtest and small enough to fix without a design review. Nine of them went
+to nine agents at once, each in its own git worktree with a disjoint file set; the shared
+Playwright port (8474) was serialised behind a lockfile so no run ever tested another
+worktree's code. `progress.md`, `plans/README.md` and the release-cache tokens were reserved
+for the merge, because every branch rewrites the tokens and nine appends to one log cannot
+merge. Full table in `plans/041-top-ten-audit-fixes.md`.
+
+What shipped, one line each. A total wipe now reports its casualties (the muster used to
+push volunteers into the very array the aftermath read) and says why the fight was lost.
+The Plan 040 slice 2 wolf test now asserts against a named `HOLD_REACH_MELEE` (140) instead
+of `UNIT_TYPES.spear.range` (30). Twenty-seven `scripts/zz-*` scratch files are untracked, removed from the working tree (their
+numbers survive in the critiques that cite them) and ignored, the save-version docs say v5, and campaign criterion 3 asserts a seed count
+(`>= 11`) instead of a `test.fail` that swallowed 0/12. The beatable floor is structural
+(`trimToBeatable` replaces a lone brute rather than stopping on it), garrison targets are
+clamped, the floor fallback prices off `encounterBase()`, `partyCap()` bounds camp-homed and
+hold-homed bands separately and floors at 2 with the stronghold as spawn source, the
+garrison comment no longer claims the scout freeze is closed, and a toast raised on the
+last riding tick now decays. The stronghold chip reads progress against the ladder's real
+top (4) with a next-step hint, and the claim row says what a claim is for. The stale
+"raid the camps" toast is gated on live camps, the aftermath panel reserves height from
+the same wrap it draws, and a defeat names the distress relief only when it is in force.
+The hero slides along a river bank instead of jamming (measured on one fixture: 6.5 px and
+4 of 600 live ticks before, 324 px and 577 of 600 after) and the freeze cue says where to
+cross. The canvas backs at device pixel ratio up to 2 with layout, camera and input in CSS
+pixels. R on the pause overlay arms for 2 s before it abandons, Q quits to the menu with
+the campaign saved, Escape closes an open modal instead of pausing over it, and the
+victory screen is a steady two-row choice. The Break objective panel reports how the fight
+resolved, and the deployment camera frames both sides.
+
+Baselines: seven battle baselines re-recorded for the deploy framing (validated with
+`npm run test:visual:linux`, 24/24); `world-aftermath-defeat.png` re-recorded at the merge
+for the two new aftermath lines after reviewing the render; `battle-break.png`, the
+Windows-only drift on record since Plan 035, matches at the new framing.
+
+Merge: every branch conflicted on the token lines of all 33 modules. Resolved hunk by hunk
+(token-only hunks take main; a file the branch only re-tokenised takes main; anything else
+stops). Two hunks needed a decision: main.js where the DPR and pause fixes both appended at
+the same point (both kept) and world.js where the floor fix added an import (kept).
+
+Gate on the merged tree, after the deliberate `world-aftermath-defeat.png` re-record and an
+ink plate behind the river cue text (its stale-wash gate was reviewed and kept - see the plan):
+`npm test` 234 passed, `npm run test:visual` 24 passed, `npm run test:perf` 10 passed,
+`npm run test:balance` 4 passed (the `@sweep` guard holds at the re-based HELD = 4 fixture),
+`npm run test:release` verified. Each branch had also passed the full gate on its own worktree.
+
+The audit was then refreshed against the merged tree (two source verifiers plus a headless
+playtest on a second port): all nine fixes confirmed in play, and the "Refresh" section of
+`critiques/gameplay-audit-2026-09-03.md` records what they left open and what they surfaced -
+chiefly a chargeAll field fight that never resolves on four of four seeds (most likely the
+terrain stall Plan 035 recorded at world 1600,900; not yet bisected), and a defeat baseline
+that shows a reason line real play cannot produce.

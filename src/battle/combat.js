@@ -1,10 +1,10 @@
 // What a hit does and how a fight ends: damage application on both sides, arrow spawning,
 // and the win/loss/retreat resolution. Separated from the AI phases that decide to swing
 // and from the tick loop that orders them.
-import { lootFor } from '../data.js?v=r3729900262ac';
-import { len } from '../engine.js?v=r3729900262ac';
-import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r3729900262ac';
-import { objectiveVictory } from './objectives.js?v=r3729900262ac';
+import { lootFor } from '../data.js?v=r3b20caaaa2ab';
+import { len } from '../engine.js?v=r3b20caaaa2ab';
+import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r3b20caaaa2ab';
+import { objectiveVictory } from './objectives.js?v=r3b20caaaa2ab';
 
 export function damageEnemy(battle, e, dmg, kx, ky, source) {
   const P = battle.palette;
@@ -146,12 +146,30 @@ export function endBattle(battle, victory, retreated) {
 }
 
 export function resolveBattleResult(battle, dt, h, ax) {
+  // `battle.resolvedBy` records WHICH condition ended the fight, and it is written here
+  // because this is the single terminal decision point — the only place that knows. It
+  // exists for presentation: an elimination win in a Break fight leaves every guard
+  // standing, and the objective panel read "2 guards standing" with both bars full over an
+  // already-won battle (headless playtest finding). Written exactly once: `decide` refuses
+  // after the state has turned, so the FIRST condition to fire is the one recorded and the
+  // later checks below stay the no-ops endBattle's own guard already made them.
+  //
+  // Two endings deliberately do not pass through here and leave it null: the hero's death
+  // inside damageFriendly, and endBattle called from outside the pipeline (the campaign
+  // harness, QA records). The HUD therefore treats null as "read victory/retreated instead"
+  // rather than as a case to be enumerated — the panel must never depend on this field
+  // being set to tell the truth.
+  const decide = (reason, victory, retreated) => {
+    if (battle.state === 'end') return;
+    battle.resolvedBy = reason;
+    battle.endBattle(victory, retreated);
+  };
   // Milestone 025 Slice C: objective victories resolve HERE — the single terminal
   // decision point owns every ending. Hold completes its timer; Break has felled
   // every guard. Elimination (below) remains a valid parallel win for both.
-  if (!battle.onEndFired && objectiveVictory(battle)) battle.endBattle(true);
-  if (battle.enemies.length === 0) battle.endBattle(true);
-  if (h.hp <= 0) battle.endBattle(false); // standing check — never rely only on the damage path
+  if (!battle.onEndFired && objectiveVictory(battle)) decide('objective', true);
+  if (battle.enemies.length === 0) decide('elimination', true);
+  if (h.hp <= 0) decide('heroDown', false); // standing check — never rely only on the damage path
   // Retreat is a held INPUT decision; knockback, dashes, and drift never fill the bar.
   const inEscape = battle.approach === 'E' ? h.x < 70 : battle.approach === 'W' ? h.x > battle.W - 70
     : battle.approach === 'S' ? h.y < 70 : h.y > battle.H - 70;
@@ -159,7 +177,7 @@ export function resolveBattleResult(battle, dt, h, ax) {
     : battle.approach === 'S' ? ax.y < -0.3 : ax.y > 0.3;
   if (battle.setup.canRetreat !== false && inEscape && steeringOut && battle.time > 3) {
     battle.retreatT = (battle.retreatT || 0) + dt;
-    if (battle.retreatT >= 1.3) battle.endBattle(false, true);
+    if (battle.retreatT >= 1.3) decide('retreat', false, true);
   } else {
     battle.retreatT = 0;
   }

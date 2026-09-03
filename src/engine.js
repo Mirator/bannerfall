@@ -1,6 +1,6 @@
 // Shared engine: math, RNG, input, camera, particles, flat-shaded drawing helpers.
 // Audio lives in src/audio.js and imports from here; never the other way round.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r3729900262ac';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r3b20caaaa2ab';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -63,12 +63,19 @@ export function makeRng(seed) {
 
 // ---------------------------------------------------------------- Input
 export class Input {
-  constructor(canvas, platform = null) {
+  // `view` is the canvas's LOGICAL size in CSS pixels ({ w, h }, owned and kept current by
+  // main.js). The pointer must be reported in that space: it is what every hit region, HUD
+  // layout and Camera.toWorld() call is written in. canvas.width/height are the backing
+  // store — CSS size times the device pixel ratio — so mapping through them reported
+  // device pixels and was 2x off on a Retina or scaled display. Falls back to the
+  // element's own CSS box for a caller that supplies no view.
+  constructor(canvas, platform = null, view = null) {
     this.keys = new Set();
     this.pressed = new Set();     // cleared each frame — edge triggers
     this.actionKeys = new Set();
     this.actionPressed = new Set();
-    this.mouse = { x: canvas.width / 2, y: canvas.height / 2, down: false, clicked: false, moved: false };
+    this.view = view || { w: canvas.clientWidth || canvas.width, h: canvas.clientHeight || canvas.height };
+    this.mouse = { x: this.view.w / 2, y: this.view.h / 2, down: false, clicked: false, moved: false };
     this.canvas = canvas;
     window.addEventListener('keydown', e => {
       if (e.repeat) return;
@@ -81,8 +88,11 @@ export class Input {
     this.unsubscribeDeactivate = platform?.lifecycle?.onDeactivate?.(() => this.clear()) ?? null;
     canvas.addEventListener('mousemove', e => {
       const r = canvas.getBoundingClientRect();
-      this.mouse.x = (e.clientX - r.left) * (canvas.width / r.width);
-      this.mouse.y = (e.clientY - r.top) * (canvas.height / r.height);
+      // Ratio against the element's CSS box, not against the backing store: it corrects a
+      // logical size that differs from the displayed box (a letterboxed or stretched
+      // canvas) while staying entirely device-pixel-ratio independent.
+      this.mouse.x = (e.clientX - r.left) * (r.width ? this.view.w / r.width : 1);
+      this.mouse.y = (e.clientY - r.top) * (r.height ? this.view.h / r.height : 1);
       this.mouse.moved = true;
     });
     canvas.addEventListener('mousedown', e => { if (e.button === 0) { this.mouse.down = true; this.mouse.clicked = true; } });

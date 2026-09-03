@@ -49,6 +49,20 @@ async function openBattleHarness(page) {
       b.state = 'fight';
       return b;
     };
+    // Reads the strings one HUD frame actually puts on the canvas. The objective panel is
+    // presentation, so what it CLAIMS is asserted where the claim is made rather than
+    // through a mirrored state field — a panel can lie while every field behind it is right,
+    // which is exactly the defect these assertions guard.
+    window.__drawnText = () => {
+      const drawn = [];
+      const original = CanvasRenderingContext2D.prototype.fillText;
+      CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) {
+        drawn.push(String(text));
+        return original.call(this, text, ...rest);
+      };
+      try { window.__g.draw(); } finally { CanvasRenderingContext2D.prototype.fillText = original; }
+      return drawn;
+    };
   });
   await page.goto('/');
   await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
@@ -162,7 +176,10 @@ test('holding to the timeout wins through resolveBattleResult exactly once', asy
         for (const e of b.enemies) { e.x = b.W - 120; e.y = b.H - 120; e.hp = 99999; }
         step(0.1);
       }
-      const ended = { state: b.state, victory: b.victory, endCalls };
+      const ended = {
+        state: b.state, victory: b.victory, endCalls, resolvedBy: b.resolvedBy,
+        drawn: window.__drawnText(),
+      };
       step(3); // ride out the end-banner hold so onEnd fires
       return { ended, onEndFired: b.onEndFired, enemiesLeft: b.enemies.length };
     } finally { g.update = real; }
@@ -170,6 +187,11 @@ test('holding to the timeout wins through resolveBattleResult exactly once', asy
   expect(out.ended.state).toBe('end');
   expect(out.ended.victory).toBe(true);
   expect(out.ended.endCalls, 'objective timeout ends the fight exactly once').toBe(1);
+  expect(out.ended.resolvedBy).toBe('objective');
+  // The panel reports the resolution rather than a countdown over a won fight.
+  expect(out.ended.drawn).toContain('Ground held');
+  expect(out.ended.drawn.some(s => /^\d+s$/.test(s)),
+    'a decided hold must not still show seconds remaining').toBe(false);
   expect(out.onEndFired).toBe(true);
   // Killing every enemy remains a valid PARALLEL win — here the enemies survived.
   expect(out.enemiesLeft).toBeGreaterThan(0);
@@ -218,12 +240,20 @@ test('a hold defense lost or abandoned resolves as a non-victory', async ({ page
       const step = seconds => { for (let i = 0; i < Math.round(seconds / dt); i++) real(dt); };
       step(0.5);
       b.damageFriendly(b.hero, true, b.hero.hp + 1, { type: 'bandit', x: b.hero.x, y: b.hero.y });
-      return { state: b.state, victory: b.victory, retreated: b.retreated };
+      return {
+        state: b.state, victory: b.victory, retreated: b.retreated,
+        resolvedBy: b.resolvedBy, drawn: window.__drawnText(),
+      };
     } finally { g.update = real; }
   }, { setup: HOLD_DESC, dt: DT });
   expect(defeat.state).toBe('end');
   expect(defeat.victory).toBe(false);
   expect(defeat.retreated).toBe(false);
+  // The hero's death ends the fight inside damageFriendly, NOT through resolveBattleResult,
+  // so `resolvedBy` is null here on purpose — and the panel still has to say what happened.
+  // That is the whole reason the wording falls back to victory/retreated.
+  expect(defeat.resolvedBy ?? null).toBe(null);
+  expect(defeat.drawn).toContain('Ground lost');
 
   // Withdrawal: the held escape-edge decision — the player accepting the loss.
   const withdraw = await page.evaluate(({ setup, dt }) => {
@@ -244,12 +274,17 @@ test('a hold defense lost or abandoned resolves as a non-victory', async ({ page
         step(0.1);
       }
       g.input.injectKey('KeyA', false);
-      return { state: b.state, victory: b.victory, retreated: b.retreated };
+      return {
+        state: b.state, victory: b.victory, retreated: b.retreated,
+        resolvedBy: b.resolvedBy, drawn: window.__drawnText(),
+      };
     } finally { g.update = real; }
   }, { setup: HOLD_DESC, dt: DT });
   expect(withdraw.state).toBe('end');
   expect(withdraw.victory).toBe(false);
   expect(withdraw.retreated).toBe(true);
+  expect(withdraw.resolvedBy).toBe('retreat');
+  expect(withdraw.drawn).toContain('Ground lost — you withdrew');
   assertNoRuntimeErrors(runtimeErrors);
 });
 
@@ -351,13 +386,26 @@ test('eliminating every enemy also wins a break fight with guards still standing
         guardsAlive: b.objectiveTargets.filter(t => !t.dead).length,
       };
       step(0.2);
-      return { before, state: b.state, victory: b.victory };
+      return {
+        before, state: b.state, victory: b.victory, resolvedBy: b.resolvedBy,
+        guardsAlive: b.objectiveTargets.filter(t => !t.dead).length,
+        drawn: window.__drawnText(),
+      };
     } finally { g.update = real; }
   }, { setup: BREAK_DESC, dt: DT });
   expect(out.before.enemies).toBe(0);
   expect(out.before.guardsAlive).toBeGreaterThan(0);
   expect(out.state).toBe('end');
   expect(out.victory).toBe(true);
+  // The panel must report the RESOLUTION once the fight is over. This ending is the case
+  // that lied: the guards are genuinely untouched, so the live line ("2 guards standing",
+  // both bars full) sat over a victory banner and read as an unfinished objective.
+  expect(out.resolvedBy, 'the win condition that fired is what the panel reads').toBe('elimination');
+  expect(out.guardsAlive, 'the guards really do survive an elimination win').toBeGreaterThan(0);
+  expect(out.drawn).toContain('OBJECTIVE · BREAK THE POSITION');
+  expect(out.drawn).toContain('Position taken — garrison destroyed');
+  expect(out.drawn.some(s => /guards? standing/.test(s)),
+    'a decided fight must not still report standing guards as the objective').toBe(false);
   assertNoRuntimeErrors(runtimeErrors);
 });
 

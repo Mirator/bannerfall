@@ -1,20 +1,68 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r3729900262ac';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3729900262ac';
-import { Sfx } from './audio.js?v=r3729900262ac';
-import { Battle } from './battle.js?v=r3729900262ac';
-import { World } from './world.js?v=r3729900262ac';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r3729900262ac';
-import { FIELD } from './battle/constants.js?v=r3729900262ac';
-import { ACTIONS } from './input-actions.js?v=r3729900262ac';
-import { createWebPlatform } from './platform/web-platform.js?v=r3729900262ac';
-import { SaveRepository } from './persistence/save-repository.js?v=r3729900262ac';
-import { buildSummaryModel } from './world-screens.js?v=r3729900262ac';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r3729900262ac';
-import { perkChoiceDue, perkMods } from './progression.js?v=r3729900262ac';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r3b20caaaa2ab';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3b20caaaa2ab';
+import { Sfx } from './audio.js?v=r3b20caaaa2ab';
+import { Battle } from './battle.js?v=r3b20caaaa2ab';
+import { World } from './world.js?v=r3b20caaaa2ab';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r3b20caaaa2ab';
+import { FIELD } from './battle/constants.js?v=r3b20caaaa2ab';
+import { ACTIONS } from './input-actions.js?v=r3b20caaaa2ab';
+import { createWebPlatform } from './platform/web-platform.js?v=r3b20caaaa2ab';
+import { SaveRepository } from './persistence/save-repository.js?v=r3b20caaaa2ab';
+import { buildSummaryModel } from './world-screens.js?v=r3b20caaaa2ab';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r3b20caaaa2ab';
+import { perkChoiceDue, perkMods } from './progression.js?v=r3b20caaaa2ab';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+
+// ---------------------------------------------------------------- device pixel ratio
+// The canvas element is CSS-sized (index.html pins #game to 100vw/100vh); its BACKING
+// STORE is that size multiplied by the display's device pixel ratio. Without this the
+// backing store was CSS-pixel sized and the compositor upscaled it, so every 1.5-2.6px
+// stroke and 11-13px HUD label was blurred on a scaled or Retina display.
+//
+// Only the backing store changes. `view` is the LOGICAL size in CSS pixels, and it is what
+// layout must read: camera.w/h, every HUD rect and hit region, Camera.toWorld() and the
+// pointer all stay in CSS pixels, so nothing in the simulation or the layout code can see
+// the ratio at all. canvas.width/height are device pixels and mean nothing to layout.
+//
+// Capped at 2: past 2x the extra fill costs real frame time for a difference no player can
+// see, and a 3x phone would otherwise ask the fixed-timestep loop to paint nine times the
+// pixels of a 1x display.
+const MAX_DPR = 2;
+const view = { w: window.innerWidth || 1280, h: window.innerHeight || 720 };
+let viewScale = 1;
+
+function currentViewScale() {
+  const ratio = window.devicePixelRatio;
+  return Math.min(Number.isFinite(ratio) && ratio > 0 ? ratio : 1, MAX_DPR);
+}
+
+// The device scale is composed into the context's own setTransform rather than applied once
+// per frame or per resize, because it could not survive either: the draw paths reset the
+// transform mid-frame in five modules (`ctx.setTransform(1,0,0,1,0,0)` here, in
+// world-screens.js and in both render-scene.js files) and Camera.apply() installs its own
+// zoom matrix outright. Composing it means an identity reset still means "one unit is one
+// CSS pixel" for every caller, present and future, without a single draw site knowing the
+// ratio exists. At ratio 1 every argument passes through unmultiplied, so frames are
+// identical to the pre-DPR ones — which is what keeps the visual baselines (captured at
+// deviceScaleFactor 1) byte-for-byte valid. Call counts are unchanged, so the structural
+// Canvas budgets in test:perf are untouched.
+const deviceSetTransform = ctx.setTransform.bind(ctx);
+ctx.setTransform = function (a, b, c, d, e, f) {
+  if (a && typeof a === 'object') {
+    // setTransform(DOMMatrix) form. Nothing in src/ uses it today; handled so a future
+    // caller cannot silently drop the device scale.
+    const m = a;
+    a = m.a; b = m.b; c = m.c; d = m.d; e = m.e; f = m.f;
+  } else if (a === undefined) {
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+  }
+  const s = viewScale;
+  deviceSetTransform(a * s, b * s, c * s, d * s, e * s, f * s);
+};
+ctx.resetTransform = function () { ctx.setTransform(1, 0, 0, 1, 0, 0); };
 
 // Solid haze tone for distant scenery — blending colors and filling opaque avoids the
 // seams that globalAlpha leaves where a mountain's overlapping facets double-composite.
@@ -36,10 +84,21 @@ function mixColor(a, b, t) {
 }
 
 function resize() {
-  canvas.width = window.innerWidth || 1280;
-  canvas.height = window.innerHeight || 720;
+  view.w = window.innerWidth || 1280;
+  view.h = window.innerHeight || 720;
+  viewScale = currentViewScale();
+  const backingW = Math.max(1, Math.round(view.w * viewScale));
+  const backingH = Math.max(1, Math.round(view.h * viewScale));
+  // Assigning width/height clears the surface and resets the transform to the native
+  // identity, so only write them when they actually changed and reinstate the device
+  // scale afterwards either way (a ratio change alone can leave the size untouched).
+  if (canvas.width !== backingW || canvas.height !== backingH) {
+    canvas.width = backingW;
+    canvas.height = backingH;
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (game) {
-    game.camera.w = canvas.width; game.camera.h = canvas.height; game.invalidate();
+    game.camera.w = view.w; game.camera.h = view.h; game.invalidate();
     // Plan 023: camera follow (which owns the map-edge clamp) is frozen while world time
     // is stale, so a resize during a freeze would leave cam.x/y unclamped against the new
     // viewport and show a void strip at the map edge until the player moved again.
@@ -50,12 +109,39 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+// A device-pixel-ratio change on its own — the window dragged to a display with a
+// different scale factor — does not always fire a resize event, so the ratio is watched
+// directly. The media query can only be written against the ratio in force when it is
+// built, so it is re-armed after every change.
+let dprQuery = null;
+function onDevicePixelRatioChange() {
+  resize();
+  watchDevicePixelRatio();
+}
+function watchDevicePixelRatio() {
+  if (typeof window.matchMedia !== 'function') return;
+  const next = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  if (typeof next.addEventListener !== 'function') return;
+  if (dprQuery && typeof dprQuery.removeEventListener === 'function') {
+    dprQuery.removeEventListener('change', onDevicePixelRatioChange);
+  }
+  dprQuery = next;
+  dprQuery.addEventListener('change', onDevicePixelRatioChange);
+}
+watchDevicePixelRatio();
+
+// Plan 041: how long the pause overlay's R stays armed. Long enough that the second press
+// is comfortable, short enough that the arm cannot outlive the intent behind it — the same
+// bargain CHOICE_ARM_T makes for the spec and perk modals, at the scale of a key the hand
+// has to go and find rather than a row it is already looking at.
+const ABANDON_ARM_T = 2;
+
 class Game {
   constructor({ platform, saves }) {
     this.platform = platform;
     this.saves = saves;
-    this.input = new Input(canvas, platform);
-    this.camera = new Camera(canvas.width, canvas.height);
+    this.input = new Input(canvas, platform, view);
+    this.camera = new Camera(view.w, view.h);
     this.sfx = new Sfx(saves);
     this.shakeRng = makeRng(deriveSeed(99, RNG_DOMAINS.CAMERA_SHAKE));
     this.scene = null;
@@ -66,7 +152,11 @@ class Game {
     this.menuHitRegions = [];
     this.pendingHard = false;
     this.victoryT = 0;
+    this.victoryIndex = 0;
     this.paused = false;
+    // Plan 041: R on the pause overlay deleted the only save the game keeps, on one press.
+    // It arms first now, and this is the countdown.
+    this.abandonArmT = 0;
     this.saveTimer = 0;
     // once any headless test API call drives the game (scenario/step/tap/key/mouse/click),
     // persistence switches to a separate slot so critics/tests can never overwrite or wipe
@@ -276,6 +366,7 @@ class Game {
     this.scene = null;
     this.sceneName = 'victory';
     this.victoryT = 0;
+    this.victoryIndex = 0;
     this.finalSave = save;
     // Milestone 025 Slice E: the regional-conquest summary is built once, from the
     // final save, by the same pure model builder the tests read.
@@ -292,15 +383,28 @@ class Game {
       this.muteToastT = 2.5; this.invalidate();
     }
     if (this.muteToastT > 0) this.muteToastT -= dt;
-    // pause: any active scene, Escape or P
+    // pause: any active scene, Escape or P — but never ON TOP of an open modal. Plan 041:
+    // Escape is bound to both PAUSE and MENU_BACK, and this toggle ran before any scene
+    // ticked, so a world screen never saw the key at all: answering a brief or a site menu
+    // with the one key every other screen in the game backs out with drew the pause scrim
+    // over the panel being answered, and left Escape meaning two opposite things at once.
+    // A world modal is already a pause of its own (AGENTS.md), so while one is open the
+    // press belongs to the scene, which reads it as MENU_BACK.
+    //
+    // Leaving the pause is never gated on this: nothing can open a modal while paused (the
+    // scene does not tick), so the guard only ever refuses the ENTRY, and a pause the
+    // player is looking at must always be escapable.
+    const modalOpen = !!(this.scene && typeof this.scene.isBlocking === 'function' && this.scene.isBlocking());
     if (this.input.pressedAction(ACTIONS.PAUSE) &&
-        (this.sceneName === 'world' || this.sceneName === 'battle')) {
+        (this.sceneName === 'world' || this.sceneName === 'battle') &&
+        (this.paused || !modalOpen)) {
       this.paused = !this.paused;
+      this.abandonArmT = 0; // crossing the pause boundary never inherits a live arm
       if (this.paused) this.persistRun();
       this.invalidate();
     }
     if (this.paused) {
-      if (this.input.pressedAction(ACTIONS.ABANDON_RUN)) { this.clearRun(); this.enterMenu(); }
+      this.updatePause(dt);
       this.input.endFrame();
       return;
     }
@@ -308,12 +412,7 @@ class Game {
       this.updateMenu(dt);
     } else if (this.sceneName === 'victory') {
       this.victoryT += dt;
-      // Milestone 025: the summary IS the restart flow — Enter (after the reveal
-      // beat) starts a new campaign with a fresh seed, at the same difficulty the
-      // finished run was played on.
-      if (this.victoryT > 1.5 && this.input.pressedAction(ACTIONS.CONFIRM)) {
-        this.startNewCampaign(!!(this.finalSave && this.finalSave.hard));
-      }
+      this.updateVictory();
     } else if (this.scene) {
       this.scene.update(dt);
       // autosave the campaign every few seconds while on the map
@@ -335,6 +434,78 @@ class Game {
     this.input.endFrame();
   }
 
+  // The pause overlay's two exits, and the reason there are two of them. R used to call
+  // clearRun() and enterMenu() on a single press, from an overlay that advertised it as
+  // plainly as "resume": the only save the game keeps, gone, with no confirmation — while
+  // the menu's own replacement of that same save has always asked first. Quitting is the
+  // exit almost every press of R actually wanted (the campaign is written, and CONTINUE
+  // resumes it). Abandoning still exists and still deletes, but it arms before it commits,
+  // which is the rule the spec and perk modals already follow (CLAUDE.md).
+  updatePause(dt) {
+    if (this.abandonArmT > 0) {
+      this.abandonArmT = Math.max(0, this.abandonArmT - dt);
+      this.invalidate(); // the overlay draws the arm and its countdown, so no frame is clean
+    }
+    if (this.input.pressedAction(ACTIONS.QUIT_TO_MENU)) {
+      this.sfx.uiSelect();
+      // Still sceneName === 'world' at this point, which is the whole reason this is
+      // non-destructive: persistRun() no-ops from any other scene.
+      this.persistRun();
+      this.enterMenu();
+      return;
+    }
+    if (this.input.pressedAction(ACTIONS.ABANDON_RUN)) {
+      if (this.abandonArmT > 0) {
+        this.sfx.uiSelect();
+        this.clearRun();
+        this.enterMenu();
+      } else {
+        this.abandonArmT = ABANDON_ARM_T;
+        this.sfx.uiMove();
+        this.invalidate();
+      }
+    }
+  }
+
+  // Milestone 025 made the summary the restart flow. It was also the only thing the summary
+  // did: CONFIRM started another campaign and nothing else was bound, so a finished run had
+  // no route back to the menu — not to change difficulty, not to read the credits, not to
+  // stop playing. Two rows in the menu's own language instead, with the restart still the
+  // default one.
+  victoryOptions() {
+    return [
+      { id: 'again', label: 'NEW CAMPAIGN', hint: 'ENTER / E' },
+      { id: 'menu', label: 'MAIN MENU', hint: 'ESC' },
+    ];
+  }
+
+  updateVictory() {
+    // The 1.5s reveal arm stays: this screen arrives on the tick the last battle ended,
+    // which is a tick the player was pressing CONFIRM.
+    if (this.victoryT <= 1.5) return;
+    const options = this.victoryOptions();
+    // Two rows, so up and down are the same move. Written as a toggle rather than +/-1 so
+    // that adding a third row is a visible edit here instead of a silently wrong wrap.
+    if (this.input.pressedAction(ACTIONS.MENU_UP) || this.input.pressedAction(ACTIONS.MENU_DOWN)) {
+      this.victoryIndex = (this.victoryIndex + 1) % options.length;
+      this.sfx.uiMove();
+      this.invalidate();
+      return;
+    }
+    // MENU_BACK leaves from either row — the same key that backs out of every other screen
+    // in the game, and what stops this one being a dead end.
+    if (this.input.pressedAction(ACTIONS.MENU_BACK)) {
+      this.sfx.uiSelect();
+      this.enterMenu();
+      return;
+    }
+    if (this.input.pressedAction(ACTIONS.CONFIRM)) {
+      this.sfx.uiSelect();
+      if (options[this.victoryIndex].id === 'menu') this.enterMenu();
+      else this.startNewCampaign(!!(this.finalSave && this.finalSave.hard));
+    }
+  }
+
   draw() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.sceneName === 'menu') this.drawMenu();
@@ -345,17 +516,17 @@ class Game {
     if (this.sfx.muted && this.muteToastT > 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = 'rgba(30,42,74,0.85)';
-      rrect(ctx, canvas.width - 96, canvas.height - 40, 82, 26, 6); ctx.fill();
+      rrect(ctx, view.w - 96, view.h - 40, 82, 26, 6); ctx.fill();
       ctx.fillStyle = PAL.world.cream;
       ctx.font = '700 12px Inter, system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🔇 muted', canvas.width - 55, canvas.height - 27);
+      ctx.fillText('🔇 muted', view.w - 55, view.h - 27);
     }
     this.renderDirty = false;
   }
 
   drawPause() {
-    const W = canvas.width, H = canvas.height;
+    const W = view.w, H = view.h;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = 'rgba(21,22,46,0.72)';
     ctx.fillRect(0, 0, W, H);
@@ -364,10 +535,23 @@ class Game {
     ctx.font = '900 54px Inter, system-ui, sans-serif';
     ctx.fillText('PAUSED', W / 2, H * 0.4);
     ctx.font = '600 16px Inter, system-ui, sans-serif';
-    ctx.fillText('ESC / P — resume    ·    M — mute    ·    R — abandon run (menu)', W / 2, H * 0.4 + 54);
+    ctx.fillText('ESC / P — resume    ·    M — mute', W / 2, H * 0.4 + 54);
+    ctx.fillText('Q — quit to menu (campaign saved)', W / 2, H * 0.4 + 82);
+    // The destructive exit says it destroys, on its own line, in its own colour. While
+    // armed it says what the second press does and how long the offer stands, so the arm
+    // is a visible state rather than a key that silently did nothing the first time.
+    if (this.abandonArmT > 0) {
+      ctx.fillStyle = PAL.world.enemy;
+      ctx.font = '800 16px Inter, system-ui, sans-serif';
+      ctx.fillText(`Press R again to ABANDON — this deletes your campaign (${this.abandonArmT.toFixed(1)}s)`, W / 2, H * 0.4 + 112);
+    } else {
+      ctx.fillStyle = PAL.world.accent;
+      ctx.font = '600 16px Inter, system-ui, sans-serif';
+      ctx.fillText('R — abandon run (press R twice; it deletes the campaign)', W / 2, H * 0.4 + 112);
+    }
     ctx.font = '600 13px Inter, system-ui, sans-serif';
     ctx.fillStyle = '#9BA3BF';
-    ctx.fillText('Your campaign auto-saves on the map — closing the tab is safe', W / 2, H * 0.4 + 84);
+    ctx.fillText('Your campaign auto-saves on the map — closing the tab is safe', W / 2, H * 0.4 + 146);
   }
 
   menuLayout(W, H) {
@@ -689,7 +873,7 @@ class Game {
   }
 
   drawMenu() {
-    const W = canvas.width, H = canvas.height;
+    const W = view.w, H = view.h;
     const P = PAL.world;
     const layout = this.menuLayout(W, H);
     this.drawMenuScenery(W, H, P, layout.compact);
@@ -726,7 +910,9 @@ class Game {
     const headings = {
       new: ['CHOOSE YOUR CAMPAIGN', 'Difficulty cannot be changed after departure.'],
       confirm: ['REPLACE SAVED CAMPAIGN?', 'Your current campaign will be permanently replaced.'],
-      settings: ['SETTINGS', 'WASD ride · mouse aim · LMB swing · Space dash · 1/2/3 orders · TAB squad'],
+      // Plan 041: the movement basics stay here; E, X and the three different exits are a
+      // three-line block under the list, because there is only room for one line above it.
+      settings: ['SETTINGS', 'WASD ride · mouse aim · LMB swing · Space dash · 1/2/3 orders'],
       credits: ['CREDITS', 'Designed and built for the Bannerfall campaign.'],
     };
     const heading = headings[this.menuPanel];
@@ -774,6 +960,22 @@ class Game {
       }
       this.menuHitRegions.push({ id: item.id, x, y, w: pw, h: rowH });
     });
+    // Plan 041: the rest of the controls. E is the map's one verb and X its one exit, and
+    // ESC / Q / R are three different things to do with a run — none of which the SETTINGS
+    // panel named, which made the pause overlay the only place any of them were written
+    // down. Drawn under the list rather than over it: the space above the frame holds one
+    // line, and the credits panel already crowds it.
+    if (this.menuPanel === 'settings') {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = P.cream;
+      ctx.font = '600 13px Inter, system-ui, sans-serif';
+      const controls = [
+        'E  site menu / confirm    ·    X  leave / withdraw    ·    TAB  squad',
+        'ESC  backs out of an open menu — otherwise pauses the run',
+        'Q  quit to menu (campaign saved)    ·    R twice  abandon run (erases it)',
+      ];
+      controls.forEach((line, i) => ctx.fillText(line, layout.centerX, H - 24 - (controls.length - i) * 24));
+    }
     ctx.textAlign = 'center';
     ctx.fillStyle = P.cream;
     ctx.font = '700 12px Inter, system-ui, sans-serif';
@@ -781,7 +983,7 @@ class Game {
   }
 
   drawVictory() {
-    const W = canvas.width, H = canvas.height;
+    const W = view.w, H = view.h;
     const P = PAL.world;
     ctx.fillStyle = P.ink;
     ctx.fillRect(0, 0, W, H);
@@ -856,11 +1058,23 @@ class Game {
       ctx.fillText('No settlement flew a specialized banner.', W / 2, y + 8);
       y += 34;
     }
-    if (this.victoryT > 1.5 && Math.sin(this.victoryT * 4) > -0.3) {
+    // Plan 041: steady, and two rows rather than one instruction. The prompt was gated on
+    // Math.sin(victoryT * 4) > -0.3, so the only guidance on a terminal screen was absent
+    // about 30% of the time; the pulse that replaces the blink never falls below 0.65 alpha,
+    // so the motion that drew the eye survives and the text never leaves. The unselected row
+    // does not pulse at all — two things breathing out of phase reads as a fault.
+    if (this.victoryT > 1.5) {
+      const options = this.victoryOptions();
+      const pulse = 0.825 + 0.175 * Math.sin(this.victoryT * 3);
       ctx.textAlign = 'center';
-      ctx.fillStyle = P.hero;
-      ctx.font = '800 20px Inter, system-ui, sans-serif';
-      ctx.fillText('Press ENTER for a new campaign', W / 2, H * 0.90);
+      options.forEach((option, i) => {
+        const selected = i === this.victoryIndex;
+        ctx.globalAlpha = selected ? pulse : 1;
+        ctx.fillStyle = selected ? P.hero : mixColor(P.cream, P.ink, 0.35);
+        ctx.font = `800 ${selected ? 20 : 17}px Inter, system-ui, sans-serif`;
+        ctx.fillText(`${selected ? '▸  ' : ''}${option.label}   ·   ${option.hint}`, W / 2, H * 0.885 + i * 28);
+      });
+      ctx.globalAlpha = 1;
     }
   }
 }
@@ -976,7 +1190,18 @@ window.game = {
   state: () => {
     const s = { scene: game.sceneName };
     const sc = game.scene;
-    if (game.sceneName === 'victory') s.summary = game.summary;
+    if (game.sceneName === 'victory') {
+      s.summary = game.summary;
+      // Plan 041: the summary is a two-row choice now, so which row is live is part of the
+      // observable surface rather than something a test has to infer from a keypress.
+      const options = game.victoryOptions();
+      s.victory = {
+        index: game.victoryIndex,
+        selected: options[game.victoryIndex].id,
+        options: options.map(option => option.id),
+        armed: game.victoryT > 1.5,
+      };
+    }
     if (game.sceneName === 'menu') {
       const items = game.menuItems();
       s.menu = {

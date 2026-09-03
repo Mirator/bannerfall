@@ -11,9 +11,19 @@ export const ACTIONS = Object.freeze({
   CONFIRM: 'confirm', MENU_UP: 'menuUp', MENU_DOWN: 'menuDown', MENU_BACK: 'menuBack',
   CONTINUE_RUN: 'continueRun', NEW_HARD_RUN: 'newHardRun', PAUSE: 'pause', MUTE: 'mute', ABANDON_RUN: 'abandonRun',
   // Plan 021: cancel a pre-battle brief, and (Plan 030) close the site menu. Not
-  // WORLD_PRIMARY — see the CONFIRM note below — and not bound to Escape/PAUSE's keys
-  // (PAUSE already owns Escape and is handled first).
+  // WORLD_PRIMARY — see the CONFIRM note below — and not bound to Escape/PAUSE's keys.
+  //
+  // Plan 041: PAUSE is no longer unconditionally handled first. Escape still reaches the
+  // pause toggle whenever no modal is open, but while a scene reports isBlocking() the
+  // press is left for the scene, which reads Escape as MENU_BACK — and MENU_BACK now
+  // dismisses the three screens X dismisses (site, spec, perk). X stays the only key that
+  // withdraws from a brief: leaving a fight is an answer, not an exit.
   WITHDRAW: 'withdraw',
+  // Plan 041: the pause overlay's NON-destructive exit. ABANDON_RUN (R) deletes the only
+  // save the game keeps; this one writes it and returns to the menu, where CONTINUE picks
+  // the same campaign back up. Q was freed by Plan 030 along with the other one-service
+  // hotkeys, so it collides with nothing.
+  QUIT_TO_MENU: 'quitToMenu',
 });
 
 export const DEFAULT_BINDINGS = Object.freeze({
@@ -37,4 +47,5 @@ export const DEFAULT_BINDINGS = Object.freeze({
   [ACTIONS.MENU_BACK]: ['Escape'], [ACTIONS.CONTINUE_RUN]: ['KeyC'], [ACTIONS.NEW_HARD_RUN]: ['KeyH'],
   [ACTIONS.PAUSE]: ['Escape', 'KeyP'], [ACTIONS.MUTE]: ['KeyM'], [ACTIONS.ABANDON_RUN]: ['KeyR'],
   [ACTIONS.WITHDRAW]: ['KeyX'],
+  [ACTIONS.QUIT_TO_MENU]: ['KeyQ'],
 });

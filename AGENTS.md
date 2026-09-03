@@ -212,9 +212,15 @@ first tick is always a frozen one and gating it would hang a won campaign), plus
 `updateParties(dt, true)`, which runs the `tryClash()` encounter seam and nothing
 else so that letting go of the keys cannot shake off a party that has already
 closed to clash range. Everything else holds: `grace`, `spawnT`,
-`waryT`/`chaseT`/`clashT`, `msgT`, particles, the camera, and the ambient
+`waryT`/`chaseT`/`clashT`, particles, the camera, and the ambient
 presentation clock `world.time` that drives the river current, windmill vanes,
-tree sway, campfire, threatened-settlement pulse and hero banner. A frozen tick
+tree sway, campfire, threatened-settlement pulse and hero banner. The ONE
+exception on the presentation side is `msgT`, the toast timer, which drains on
+every tick this phase runs: it used to hold with the list above, so a message
+raised on the last riding tick stayed on screen for the rest of the session. It
+gates no simulation decision and draining it draws no RNG, so the frozen-tick
+promises are unaffected; an open MODAL still holds it, because a modal returns
+before `updateWorldClock` runs at all. A frozen tick
 consumes NO `simRng` or `fxRng` draws at all, so campaign randomness is
 independent of how long the player stood still — do not add a phase that breaks
 that. Initiative (`p.mood`, which decides ambush vs run-them-down vs mutual) is
@@ -677,10 +683,18 @@ whole layer dead code, and both are now pinned by tests:
   AFTER `onWinExtra` runs because a capture grants its grace by writing `raidCdT`. A
   genuine reload still re-arms, which is the conservative-defaults rule.
 
-`World.partyCap()` bounds what LIVE CAMPS field, counted through `World.campParties()`,
-not every party on the map. A stronghold dispatch is outside it — bounded separately at
-one riding at a time — because after three razes the cap is 0 and the hold must still
-be able to ride out.
+`World.partyCap()` bounds each HOME separately, and that is one rule with two counts:
+camp-homed bands through `World.campParties()`, hold-homed bands through
+`World.holdParties()`. Both are keyed on where a band is FROM (`p.camp`), never on its
+current errand, because a regional raider clears `raidKind` the moment it arrives. The
+one-regional-raid-at-a-time check in `updateRegionalPressure` rides on top, so the live
+count is at most `partyCap()` per home plus that dispatch. Two things used to fall
+between the counts: `campVictoryExtra` re-homes surviving bands to the hold on the last
+raze and nothing bounded them, and `partyCap()` returned 0 with no live camp left — which
+killed every spawn, and with it every fight and all the loot a fight pays, at the exact
+point the campaign asks the player to storm Wolfsjaw. It now floors at 2 and
+`updatePartySpawns` falls back to the stronghold as the source, counting the remnants it
+re-homed against the same floor.
 
 Claiming neutral ground (Plan 038): a claim is a PURCHASE, priced by settlement
 kind in `BALANCE.claimCost` and charged in `World.claimSettlement`, which refuses

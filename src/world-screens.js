@@ -6,14 +6,14 @@
 import {
   PAL, WORLD, UNIT_TYPES, ENEMY_TYPES, enemyStrength, playerStrength, oddsWord, ODDS_WORDS,
   weightText, armySlots, rankOf, rankName,
-} from './data.js?v=r3729900262ac';
-import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r3729900262ac';
-import { clamp, rrect } from './engine.js?v=r3729900262ac';
-import { SQUAD_LABELS } from './battle/constants.js?v=r3729900262ac';
+} from './data.js?v=r3b20caaaa2ab';
+import { PERKS, availablePerks, perkPointsEarned, bannerLabel, perkMods } from './progression.js?v=r3b20caaaa2ab';
+import { clamp, rrect } from './engine.js?v=r3b20caaaa2ab';
+import { SQUAD_LABELS } from './battle/constants.js?v=r3b20caaaa2ab';
 import {
   SPECIALIZATIONS, SPEC_IDS, OBJECTIVE_LABELS, STRONGHOLD_POWER_LABELS,
-} from './region.js?v=r3729900262ac';
-import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r3729900262ac';
+} from './region.js?v=r3b20caaaa2ab';
+import { pointInWorldHud, heroPresentationPosition } from './world/visual-style.js?v=r3b20caaaa2ab';
 
 // Same palette the world scene draws with — these panels sit on top of it.
 const P = PAL.world;
@@ -93,6 +93,22 @@ function rowBlock(rects, key) {
 // does nothing — a dead press with no explanation is worse than a short wait.
 function armHint(model, hint) {
   return model.armT > 0 ? '↑↓ choose · read it first…' : hint;
+}
+
+// Word-wrap against MEASURED width, in whatever font is currently set on ctx. The one
+// wrap: the aftermath both reserves its panel height from this and draws from it, because
+// reserving by a character-count estimate while wrapping by measured width is how a long
+// remnant note came to overprint the Continue button (audit 2026-09-03, finding 18).
+function wrapLines(ctx, text, maxW) {
+  const lines = [];
+  let line = '';
+  for (const word of String(text).split(' ')) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = word; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
 }
 
 // Truncate to fit rather than run past the panel border. The perk and brief panels both draw
@@ -782,11 +798,29 @@ function settlementName(id) {
 // in the next World's constructor) carries raw snapshots; this builds the display model
 // — per-side casualties by unit type — the same way hover/brief build theirs from raw
 // state rather than being handed already-formatted text.
+// Why the fight ended, in one line under the headline. DEFEAT alone said nothing: a lord
+// cut down while his braced spears watched from 100px away rendered as DEFEAT, losses
+// none, and no reason at all (audit 2026-09-03, finding 13). Derived from what the
+// transition already knows — `heroFell` (result.heroHp <= 1 on a non-retreat loss) and the
+// survivor snapshot — never from post-regen save state. A victory needs no excuse.
+function aftermathReason(payload) {
+  if (payload.victory) return null;
+  if (payload.retreated) return 'You broke off and rode clear';
+  const wiped = !(payload.survivorTypes || []).length;
+  // Hero death is the only non-retreat ending a fight actually has (combat.js ends it the
+  // instant hero hp hits 0), so this is the line a real defeat almost always shows — and
+  // when the column went down with him, it says so rather than reporting only one of them.
+  if (payload.heroFell) return wiped ? 'Your lord fell with the last of his men' : 'Your lord fell';
+  if (wiped) return 'Your warband was cut down';
+  return 'Your line broke';
+}
+
 export function buildAftermathModel(payload) {
   const playerLosses = lossRows(payload.preTroopTypes, payload.survivorTypes, UNIT_LABELS, UNIT_LABELS_PLURAL);
   const enemyLosses = countRows(payload.deadTypes, ENEMY_LABELS, ENEMY_LABELS_PLURAL);
   return {
     kind: 'aftermath',
+    reason: aftermathReason(payload),
     goldLost: payload.goldLost || 0,
     veterans: payload.veterans || null,
     victory: !!payload.victory,
@@ -800,6 +834,9 @@ export function buildAftermathModel(payload) {
   };
 }
 
+// One declaration, read by both the height reservation and the draw below.
+const CONSEQUENCE_FONT = '600 13px Inter, system-ui, sans-serif';
+
 export function drawAftermathPanel(ctx, cam, model) {
   const W = cam.w, H = cam.h;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -809,9 +846,13 @@ export function drawAftermathPanel(ctx, cam, model) {
   // roughly 200 of content and read as a mostly-empty box.
   const lossRows = Math.max(
     (model.playerLosses || []).length || 1, (model.enemyLosses || []).length || 1);
-  const consequenceLines = model.consequence ? Math.ceil(model.consequence.length / 62) : 0;
   const pw = Math.min(680, W - 60);
-  const ph = Math.min(196 + lossRows * 18 + (model.veterans ? 22 : 0) + consequenceLines * 18, H - 60);
+  // Reserve the consequence's height from the SAME wrap that draws it, in the same font
+  // and against the same width — a 62-char estimate under-counted a 125-char remnant note
+  // and the overflow landed on top of "E — Continue".
+  ctx.font = CONSEQUENCE_FONT;
+  const consequenceLines = model.consequence ? wrapLines(ctx, model.consequence, pw - 80) : [];
+  const ph = Math.min(196 + lossRows * 18 + (model.veterans ? 22 : 0) + consequenceLines.length * 18, H - 60);
   const px = W / 2 - pw / 2, py = H / 2 - ph / 2;
   drawModalFrame(ctx, px, py, pw, ph);
   ctx.textAlign = 'center';
@@ -819,6 +860,13 @@ export function drawAftermathPanel(ctx, cam, model) {
   ctx.fillStyle = model.victory ? P.good : model.retreated ? P.cream : P.enemy;
   ctx.font = '900 30px Inter, system-ui, sans-serif';
   ctx.fillText(headline, W / 2, py + 44);
+  if (model.reason) {
+    // In the gap the headline already left: no height is added, so a victory panel (which
+    // has no reason line) keeps its exact pixels.
+    ctx.font = '700 12px Inter, system-ui, sans-serif';
+    ctx.fillStyle = P.cream;
+    ctx.fillText(fitText(ctx, model.reason, pw - 80), W / 2, py + 67);
+  }
 
   ctx.textAlign = 'left';
   ctx.font = '800 14px Inter, system-ui, sans-serif';
@@ -851,22 +899,12 @@ export function drawAftermathPanel(ctx, cam, model) {
     ctx.fillText(fitText(ctx, model.veterans, pw - 80), leftX, y);
   }
   y += 24;
-  if (model.consequence) {
-    ctx.font = '600 13px Inter, system-ui, sans-serif';
+  if (consequenceLines.length) {
+    ctx.font = CONSEQUENCE_FONT;
     ctx.fillStyle = P.cream;
     ctx.textAlign = 'center';
-    // The consequence toast can run long (razed-camp remnant notes); wrap it instead of
-    // spilling off the panel edges.
-    const words = model.consequence.split(' ');
-    let line = '', lineY = y;
-    for (const word of words) {
-      const test = line ? `${line} ${word}` : word;
-      if (ctx.measureText(test).width > pw - 80 && line) {
-        ctx.fillText(line, W / 2, lineY);
-        line = word; lineY += 18;
-      } else line = test;
-    }
-    if (line) ctx.fillText(line, W / 2, lineY);
+    // Drawn from the very lines the height above was reserved from — one wrap, not two.
+    consequenceLines.forEach((line, i) => ctx.fillText(line, W / 2, y + i * 18));
   }
   ctx.textAlign = 'center';
   const continueLabel = 'E — Continue';

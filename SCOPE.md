@@ -3,7 +3,7 @@
 A snapshot of what the game is today: playable scope, technical shape, QA
 gates, and CI/CD. `AGENTS.md` remains the engineering contract; this file
 describes the product surface those rules protect. Last reviewed against the
-tree at Plan 025.
+tree at Plan 040 (slices 1-2 shipped).
 
 ## What it is
 
@@ -43,9 +43,10 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
   linked camp makes the surviving bands fall back on the hold and man its walls,
   bounded by the same stage-priced target its garrison is rolled against; the
   bands it has no room for stay out on the March.
-- Losing is recoverable: a defeat musters the column back to a playable size at the
-  settlement that takes you in, and while the warband is at or below its starting
-  weight the beatable-fight guarantee tightens to one it can actually win (Plan 039).
+- Losing is recoverable: a defeat musters the column back to four spearmen (was two)
+  at the settlement that takes you in, and while the warband is at or below its
+  starting weight the beatable-fight guarantee tightens to one it can actually win
+  (Plan 039).
 - Regional pressure: Wolfsjaw dispatches one raid at a time at held ground
   (grace after captures and after successful defenses), and at neutral ground when
   the player holds none, never taking the last unclaimed settlement; a raid landing
@@ -97,11 +98,12 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
 
 ### Persistence
 
-- Versioned save schema in `src/save.js`, currently **v4**, with
-  deterministic migrations from unversioned/v1/v2/v3 saves and validation that
-  rejects malformed data before simulation. v4 adds per-settlement ownership
-  and specialization records and the campaign-summary stat counters
-  (`battlesLost`, `goldEarned`, `goldSpent`, `captures`).
+- Versioned save schema in `src/save.js`, currently **v5**, with
+  deterministic migrations from unversioned/v1/v2/v3/v4 saves and validation
+  that rejects malformed data before simulation. v4 adds per-settlement
+  ownership and specialization records and the campaign-summary stat counters
+  (`battlesLost`, `goldEarned`, `goldSpent`, `captures`); v5 adds persistent
+  progression (`troop.vet`, `save.perks`, `save.banner`).
 - Explicit `persistRun()` checkpoints plus timed autosave; live map state
   reaches the save only through `World.syncLiveStateToSave()`.
 - Real (`bf_save`) and test (`bf_save_test`) slots are isolated; anything
@@ -127,7 +129,7 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
 | `src/world.js`, `src/world/` | campaign tick pipeline, party AI, terrain, rendering |
 | `src/battle.js`, `src/battle/` | battle phases, combat, separation, objectives, HUD, rendering |
 | `src/region.js` | regional conquest model: ownership, specializations, stronghold power, objective tuning, raid cadence (pure data) |
-| `src/save.js` | versioned schema + migration boundary (v4) |
+| `src/save.js` | versioned schema + migration boundary (v5) |
 | `src/platform/`, `src/persistence/` | capability/storage adapters (Steam-ready seam) |
 | `src/data.js` | unit stats and balance tuning |
 | `scripts/serve.py` | local no-cache server on `127.0.0.1:8474` |

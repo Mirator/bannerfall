@@ -1,18 +1,18 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=r3729900262ac';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r3729900262ac';
+import { PAL, WORLD } from '../data.js?v=r3b20caaaa2ab';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r3b20caaaa2ab';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
   drawSpecPanel, drawPerkPanel, drawSitePanel,
-} from '../world-screens.js?v=r3729900262ac';
+} from '../world-screens.js?v=r3b20caaaa2ab';
 import {
   settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
   strongholdStateId, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r3729900262ac';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=r3729900262ac';
-import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r3729900262ac';
+} from '../region.js?v=r3b20caaaa2ab';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=r3b20caaaa2ab';
+import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r3b20caaaa2ab';
 
 const P = PAL.world;
 
@@ -298,6 +298,39 @@ export function drawFreezeCue(world, ctx, cam) {
   ctx.globalAlpha = k;
   ctx.fillStyle = world._freezeVig;
   ctx.fillRect(0, 0, cam.w, cam.h);
+  ctx.restore();
+  drawWallCue(world, ctx, cam, k);
+}
+
+// One line for the ONE stall the wash cannot explain by itself: the rider is walled in and
+// still pushing (`heroWallT`, published by World.updateHeroMovement — read only, like
+// `staleT`). Everywhere else the wash means "you stopped", which needs no words. Costs
+// nothing when the hero is merely parked, since it draws only in the blocked-with-input
+// state, so the world baselines are unaffected.
+//
+// Deliberately gated on the wash (`k > 0`): since Plan 041's wall-slide a rider pushing
+// along a bank keeps moving and keeps the clock flowing, and the slide IS the feedback.
+// The line appears only when the slide has nowhere left to go — every heading blocked,
+// time stalled, key still held — which is the one case the wash cannot explain. The
+// 2026-09-03 audit refresh read the gate as a defect ("invisible in the common case");
+// it is the contract, pinned by world-movement.spec.js. An ink plate keeps the cream text
+// legible over any ground colour; `heroWallT` saturates in ~0.25s so it ramps the alpha.
+function drawWallCue(world, ctx, cam, k) {
+  if (!(world.heroWallT > 0) || !(k > 0)) return;
+  const text = world.heroWallRiver
+    ? 'The river bars the way — cross at a bridge or ford'
+    : 'Broken ground bars the way — ride around it';
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, k * 3) * Math.min(1, world.heroWallT);
+  ctx.font = '800 14px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle'; // declared, see drawSettlement
+  const w = ctx.measureText(text).width + 28, h = 30;
+  const x = cam.w / 2, y = cam.h * 0.24;
+  ctx.fillStyle = 'rgba(21,22,46,0.78)';
+  ctx.fillRect(x - w / 2, y - h / 2, w, h);
+  ctx.fillStyle = '#EFE6CE';
+  ctx.fillText(text, x, y);
   ctx.restore();
 }
 

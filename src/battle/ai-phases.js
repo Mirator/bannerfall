@@ -6,18 +6,18 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r3729900262ac';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r3729900262ac';
-import { ACTIONS } from '../input-actions.js?v=r3729900262ac';
+import { HERO } from '../data.js?v=r3b20caaaa2ab';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r3b20caaaa2ab';
+import { ACTIONS } from '../input-actions.js?v=r3b20caaaa2ab';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
-  BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH, ARENA_EDGE,
+  BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, HOLD_REACH_MELEE, STALL_NO_DEATH, ARENA_EDGE,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
   FRONT_ARC, FLANK_BONUS,
-} from './constants.js?v=r3729900262ac';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r3729900262ac';
+} from './constants.js?v=r3b20caaaa2ab';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r3b20caaaa2ab';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -443,10 +443,13 @@ export function updateTroopPhase(battle, dt, h) {
     // troops always defend the commander: any enemy near the hero is fair game
     const heroThreat = battle.nearestEnemy(battle.hero.x, battle.hero.y, 90);
     const stance = squadStanceNow;
-    // How far a HELD body reaches for anything at all: its own range if it shoots, one
-    // spear-line's worth of ground if it does not. Hoisted because the Break-the-position
-    // block below has to honour the same reach — see Plan 040 there.
-    const holdReach = t.d.ranged ? t.d.range : 140;
+    // How far a HELD body reaches for anything at all: its own range if it shoots,
+    // HOLD_REACH_MELEE (one spear-line's worth of ground) if it does not. Hoisted because
+    // the Break-the-position block below has to honour the same reach — see Plan 040
+    // there. The melee half is a named constant so the wolf-stand-band contract in
+    // stance-balance.spec.js can assert against the reach a held line actually covers
+    // instead of against UNIT_TYPES.spear.range, which is a different number entirely.
+    const holdReach = t.d.ranged ? t.d.range : HOLD_REACH_MELEE;
     if (stance === 'charge') {
       engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, 1e9, dt) : battle.nearestEnemy(t.x, t.y);
     } else if (stance === 'hold') {
