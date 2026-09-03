@@ -1,10 +1,10 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deployment panel, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, BALANCE, enemyStrength, playerStrength, weightText } from '../data.js?v=r3729900262ac';
-import { TAU, clamp, rrect } from '../engine.js?v=r3729900262ac';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=r3729900262ac';
-import { stanceIcon } from './render-units.js?v=r3729900262ac';
+import { HERO, BALANCE, enemyStrength, playerStrength, weightText } from '../data.js?v=r88a307371bf1';
+import { TAU, clamp, rrect } from '../engine.js?v=r88a307371bf1';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=r88a307371bf1';
+import { stanceIcon } from './render-units.js?v=r88a307371bf1';
 
 // Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
 // viewport shows about a third of the field, and squad balloons already collapse below
@@ -190,6 +190,37 @@ function drawOffscreenChevrons(battle, ctx, W, Hh) {
   ctx.globalAlpha = 1;
 }
 
+// What the objective panel says once the fight is DECIDED, or null while it is still live.
+// A terminal state must report the resolution, not the live requirement: an elimination win
+// in a Break fight leaves the guards untouched, and the panel used to sit over a victory
+// banner reading "2 guards standing" with both bars full (headless playtest finding).
+//
+// `battle.resolvedBy` (combat.js's resolveBattleResult) names the condition that fired. It
+// is deliberately treated as a hint, not a requirement: the hero-death damage path ends a
+// fight without passing through the resolver, so every branch below stays answerable from
+// `victory`/`retreated` and the guards' own state alone.
+function objectiveResolution(battle) {
+  const o = battle.objective;
+  if (!o || battle.state !== 'end') return null;
+  if (o.kind === 'hold') {
+    if (battle.victory) return { text: 'Ground held', won: true };
+    return { text: battle.retreated ? 'Ground lost — you withdrew' : 'Ground lost', won: false };
+  }
+  if (battle.victory) {
+    // Guards felled is the objective win; a win with guards still standing was won by
+    // wiping the garrison instead, which is the parallel elimination condition.
+    const guardsFelled = battle.resolvedBy === 'objective' ||
+      (battle.resolvedBy == null && battle.objectiveTargets.every(t => t.dead));
+    return guardsFelled
+      ? { text: 'Position broken', won: true }
+      : { text: 'Position taken — garrison destroyed', won: true };
+  }
+  return {
+    text: battle.retreated ? 'The position still stands — you withdrew' : 'The position still stands',
+    won: false,
+  };
+}
+
 // Milestone 025 Slice C: the compact objective panel — current progress for Hold
 // and Break fights, in one chip the eye already visits for the army count. Hidden
 // for classic elimination fights, which have nothing to report.
@@ -198,33 +229,46 @@ function drawObjectivePanel(battle, ctx, W) {
   const o = battle.objective;
   if (!o) return;
   const px = W - OBJ_PANEL_W - OBJ_PANEL_MARGIN, py = OBJ_PANEL_Y, pw = OBJ_PANEL_W;
+  const done = objectiveResolution(battle);
   ctx.fillStyle = P.ink;
   rrect(ctx, px, py, pw, OBJ_PANEL_H, 8); ctx.fill();
   ctx.fillStyle = P.cream;
   ctx.font = '800 13px Inter, system-ui, sans-serif';
   ctx.textAlign = 'left';
-  if (o.kind === 'hold') {
+  ctx.fillText(o.kind === 'hold' ? 'OBJECTIVE · HOLD THE GROUND' : 'OBJECTIVE · BREAK THE POSITION',
+    px + 14, py + 16);
+  ctx.font = '700 12px Inter, system-ui, sans-serif';
+  if (done) {
+    // The resolution replaces the live line AND the hold countdown — a decided fight has no
+    // seconds remaining to report, and a number counting down over a victory banner is the
+    // same lie in a smaller font.
+    ctx.fillStyle = done.won ? P.hp : P.enemy;
+    ctx.fillText(done.text, px + 14, py + 32);
+  } else if (o.kind === 'hold') {
     const left = Math.max(0, o.duration - o.progress);
-    ctx.fillText(`OBJECTIVE · HOLD THE GROUND`, px + 14, py + 16);
-    ctx.font = '700 12px Inter, system-ui, sans-serif';
     if (o.contested) ctx.fillStyle = P.enemy;
     else if (!o.held) ctx.fillStyle = '#9BA3BF';
     else ctx.fillStyle = P.hp;
     ctx.fillText(o.contested ? 'CONTESTED — clock paused' : o.held ? 'Holding — keep them off' : 'No squad inside!', px + 14, py + 32);
-    ctx.fillStyle = P.hpBack;
-    rrect(ctx, px + 14, py + 42, pw - 28, 8, 4); ctx.fill();
-    ctx.fillStyle = o.contested ? P.enemy : P.hp;
-    rrect(ctx, px + 14, py + 42, (pw - 28) * Math.min(1, o.progress / o.duration), 8, 4); ctx.fill();
     ctx.fillStyle = P.cream;
     ctx.font = '800 12px Inter, system-ui, sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.ceil(left)}s`, px + pw - 14, py + 32);
+    ctx.textAlign = 'left';
   } else {
     const alive = battle.objectiveTargets.filter(t => !t.dead).length;
-    ctx.fillText(`OBJECTIVE · BREAK THE POSITION`, px + 14, py + 16);
-    ctx.font = '700 12px Inter, system-ui, sans-serif';
     ctx.fillStyle = alive ? P.cream : P.hp;
     ctx.fillText(alive ? `${alive} guard${alive === 1 ? '' : 's'} standing` : 'The position is broken', px + 14, py + 32);
+  }
+  // The bar/pips stay, dimmed once the fight is decided: they are a record of where the
+  // objective stood at the end rather than a requirement the player still has to meet.
+  ctx.globalAlpha = done ? 0.45 : 1;
+  if (o.kind === 'hold') {
+    ctx.fillStyle = P.hpBack;
+    rrect(ctx, px + 14, py + 42, pw - 28, 8, 4); ctx.fill();
+    ctx.fillStyle = o.contested && !done ? P.enemy : P.hp;
+    rrect(ctx, px + 14, py + 42, (pw - 28) * Math.min(1, o.progress / o.duration), 8, 4); ctx.fill();
+  } else {
     // one pip per guard, filled by remaining health
     battle.objectiveTargets.forEach((t, i) => {
       const gx2 = px + 14 + i * ((pw - 28) / battle.objectiveTargets.length);
@@ -237,6 +281,7 @@ function drawObjectivePanel(battle, ctx, W) {
       }
     });
   }
+  ctx.globalAlpha = 1;
 }
 
 export function drawHud(battle, ctx) {
