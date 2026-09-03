@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r47adbb257074';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r3729900262ac';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -149,6 +149,11 @@ export const CHARGE_EXPOSURE = 1.35;
 export const CHARGE_RECOVER = 1.1;
 // A fight in which nobody has died for this long is not a battle, it is a grind.
 export const STALL_NO_DEATH = 14;
+// The arena margin every body is clamped inside. Named by Plan 040 because it is now read
+// by the steering as well as by the clamp: a heading that pushes into this boundary is
+// absorbed whole by the clamp, so a body freezes at full speed and never re-decides — see
+// slideAlongArenaEdge below and the measurement in critiques/orders-comparison.md.
+export const ARENA_EDGE = 30;
 // What each order costs or buys, per squad kind — shown on the squad's own HUD row so the
 // trade-off is legible during the fight. FOLLOW is deliberately absent: it is the neutral
 // order and has nothing to advertise.

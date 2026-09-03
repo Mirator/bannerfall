@@ -390,6 +390,80 @@ test('a break fight where the last guard and the last enemy fall in the same tic
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('a HELD line stays on its anchor while a CHARGE breaks the position', async ({ page }) => {
+  // Plan 040, audit finding 9. The Break-the-position block ran for every stance: a squad
+  // with no hostile in reach took the nearest standing guard as its target however far
+  // away it was, and the `d > wantR` branch then replaced the hold anchor with a formation
+  // goal on it. A braced spear line in a camp raid walked across the field — the one thing
+  // HOLD promises it will not do, and consistent with `holdLine` costing 62-63 s and 30 of
+  // 120 raids unresolved in critiques/progression-comparison.md.
+  //
+  // The guards are moved well outside every troop's reach (a held melee body reaches 140,
+  // an archer its 230) so the fixture isolates the rule rather than the geometry the arena
+  // happened to roll. Both halves are asserted, because the fix must not make the position
+  // unbreakable: HOLD stays home and touches nothing, CHARGE goes and breaks it.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(async setup => {
+    const { UNIT_TYPES } = await import('/src/data.js');
+    const g = window.__g;
+    const real = g.update.bind(g);
+    g.update = () => {};
+    const dt = 1 / 60;
+    try {
+      const run = (order) => {
+        const b = window.__bootObjectiveBattle(JSON.parse(JSON.stringify(setup)));
+        // No enemies at all: this test is about the OBJECTIVE, and a live hostile would
+        // legitimately give a held line something closer to do — and would take the CHARGE
+        // column's target away from the guard entirely, since `charge` picks the nearest
+        // ENEMY and the Break block only runs when nothing else was engaged.
+        //
+        // An empty field is an elimination victory on the first tick, so the fixture also
+        // parks the one terminal decision point. This is the narrowest possible override:
+        // `resolveBattleResult` is the only thing that ends a fight (this file's own header
+        // states that), so silencing `endBattle` leaves the whole ordered tick pipeline —
+        // troop phase, steering, objective phase — running exactly as it does in a real
+        // battle, which is the thing under test.
+        b.enemies.length = 0;
+        b.endBattle = () => {};
+        // Park every guard far from the line, and remember the anchors the order sets.
+        const far = [];
+        for (const o of b.objectiveTargets) {
+          o.x = b.W - 80; o.y = b.H - 80; o.hp = o.maxHp;
+          far.push(o);
+        }
+        b.issueCommand(order);
+        const anchors = b.troops.map(t => ({ x: t.holdX, y: t.holdY, sx: t.x, sy: t.y }));
+        for (let i = 0; i < 60 * 10; i++) real(dt);
+        const drift = b.troops.map((t, i) => Math.hypot(t.x - anchors[i].sx, t.y - anchors[i].sy));
+        return {
+          maxDrift: Math.round(Math.max(...drift)),
+          guardHp: far.map(o => Math.round(o.hp)),
+          guardMaxHp: far.map(o => Math.round(o.maxHp)),
+          state: b.state,
+        };
+      };
+      return { hold: run('hold'), charge: run('charge'), meleeReach: 140, bowReach: UNIT_TYPES.archer.range };
+    } finally { g.update = real; }
+  }, BREAK_DESC);
+
+  // A held line does not walk to a guard it cannot reach...
+  expect(out.hold.maxDrift,
+    `a held troop drifted ${out.hold.maxDrift}px from where it was anchored — the line is ` +
+    'walking to the objective again').toBeLessThanOrEqual(60);
+  // ...and therefore does not scratch it.
+  expect(out.hold.guardHp, 'a held line damaged a guard it should not have reached')
+    .toEqual(out.hold.guardMaxHp);
+  // But the position is still breakable by a squad that is ORDERED to break it: charge
+  // must both travel and do damage, or this fix made the objective unwinnable.
+  expect(out.charge.maxDrift,
+    'a charging line did not advance on the guard').toBeGreaterThan(out.hold.maxDrift);
+  expect(Math.min(...out.charge.guardHp),
+    'a charging line never damaged the guard it was sent at')
+    .toBeLessThan(Math.max(...out.charge.guardMaxHp));
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('losing the commander still loses a break fight', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await openBattleHarness(page);

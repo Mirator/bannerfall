@@ -6,18 +6,18 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r47adbb257074';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r47adbb257074';
-import { ACTIONS } from '../input-actions.js?v=r47adbb257074';
+import { HERO } from '../data.js?v=r3729900262ac';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r3729900262ac';
+import { ACTIONS } from '../input-actions.js?v=r3729900262ac';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
-  BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH,
+  BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, STALL_NO_DEATH, ARENA_EDGE,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
   FRONT_ARC, FLANK_BONUS,
-} from './constants.js?v=r47adbb257074';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r47adbb257074';
+} from './constants.js?v=r3729900262ac';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r3729900262ac';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -122,6 +122,28 @@ function bonusVersus(battle, attacker, targetType, steady) {
 // stopped resolving within its 90s budget until this hysteresis was added.
 // Deterministic (no RNG) and allocation-free: uses the existing `_obstacleGrid` broad phase
 // and its own reusable `queryItems` buffer, consumed synchronously.
+// Plan 040: a heading that pushes into the arena wall is not a heading. Both movement
+// tails clamp position to [ARENA_EDGE, W-ARENA_EDGE], so an outward component is absorbed
+// entirely and the body stands still at full commanded speed, re-deriving the same dead
+// heading every tick. Measured on a held-line camp raid: the last surviving brute sat at
+// (1278, 1110) — exactly `W - ARENA_EDGE` — for thirty-plus seconds with a speed of 71
+// while its target stood 536 px WEST of it, so the fight could not resolve inside the 95 s
+// window. Zeroing the outward component makes a body slide along the wall instead, which
+// is what anything walking into a fence does, and the remaining component is renormalised
+// so sliding happens at full speed rather than at a fraction of it.
+//
+// Writes into the caller's own scratch pair and returns whether it changed anything.
+function slideAlongArenaEdge(battle, x, y, dirX, dirY, out) {
+  let dx = dirX, dy = dirY;
+  if ((x <= ARENA_EDGE && dx < 0) || (x >= battle.W - ARENA_EDGE && dx > 0)) dx = 0;
+  if ((y <= ARENA_EDGE && dy < 0) || (y >= battle.H - ARENA_EDGE && dy > 0)) dy = 0;
+  if (dx === dirX && dy === dirY) return false;
+  const l = len(dx, dy);
+  out.x = l > 0 ? dx / l : 0;
+  out.y = l > 0 ? dy / l : 0;
+  return true;
+}
+
 function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist) {
   // A unit deflected for too long without a break gives up on steering for a short cooldown,
   // falling back to its raw heading (and `pushOutOf`) instead. This bounds the worst case:
@@ -421,11 +443,14 @@ export function updateTroopPhase(battle, dt, h) {
     // troops always defend the commander: any enemy near the hero is fair game
     const heroThreat = battle.nearestEnemy(battle.hero.x, battle.hero.y, 90);
     const stance = squadStanceNow;
+    // How far a HELD body reaches for anything at all: its own range if it shoots, one
+    // spear-line's worth of ground if it does not. Hoisted because the Break-the-position
+    // block below has to honour the same reach — see Plan 040 there.
+    const holdReach = t.d.ranged ? t.d.range : 140;
     if (stance === 'charge') {
       engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, 1e9, dt) : battle.nearestEnemy(t.x, t.y);
     } else if (stance === 'hold') {
-      const maxR = t.d.ranged ? t.d.range : 140;
-      engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, maxR, dt) : battle.nearestEnemy(t.x, t.y, maxR);
+      engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, holdReach, dt) : battle.nearestEnemy(t.x, t.y, holdReach);
       if (!engage && heroThreat && dist2(t.x, t.y, battle.hero.x, battle.hero.y) < 260 * 260) engage = heroThreat;
       if (!engage) goal = { x: t.holdX, y: t.holdY };
       } else { // follow
@@ -439,13 +464,25 @@ export function updateTroopPhase(battle, dt, h) {
       // goes to work on the nearest standing defensive guard — destroying the
       // position is a win even while defenders survive, so the guards must be
       // attackable by everyone.
+      // PLAN 040: "by everyone" never meant "from anywhere". This block ran for every
+      // stance, so a HELD line took the nearest guard as its target however far away it
+      // was, and the `d > wantR` branch below then replaced the hold anchor with a
+      // formation goal on it — a braced spear line walked across the field (measured at
+      // 1793 px of drift), which is the one thing HOLD promises it will not do. A held body
+      // may take a guard only inside the same reach its stance already uses for hostiles;
+      // outside it the hold anchor stands. `charge` and `follow` are untouched and still go
+      // to work on the nearest guard from anywhere, so the position stays attackable by
+      // anyone ORDERED to attack it, and elimination remains a parallel win for a line
+      // that never does.
       if (!engage && battle.objectiveTargets && battle.objectiveTargets.length) {
+        const objReach = stance === 'hold' ? holdReach : Infinity;
         let best = null, bd = Infinity;
         for (const o of battle.objectiveTargets) {
           if (o.dead) continue;
           const dd = dist2(t.x, t.y, o.x, o.y);
           if (dd < bd) { bd = dd; best = o; }
         }
+        if (best && bd > objReach * objReach) best = null;
         if (best) {
           // Reused stand-in (battle.js), not a fresh object per troop per tick: vx/vy/
           // isObjective are fixed at construction (a guard is a structure and does not
@@ -592,7 +629,7 @@ export function updateTroopPhase(battle, dt, h) {
     else { t.vx *= 0.9; t.vy *= 0.9; }
 
     t.x += t.vx * dt; t.y += t.vy * dt;
-    t.x = clamp(t.x, 30, battle.W - 30); t.y = clamp(t.y, 30, battle.H - 30);
+    t.x = clamp(t.x, ARENA_EDGE, battle.W - ARENA_EDGE); t.y = clamp(t.y, ARENA_EDGE, battle.H - ARENA_EDGE);
     if (len(t.vx, t.vy) > 30) { t.bob += dt * 10; if (battle.fxRng() < dt * 3) battle.particles.dust(t.x, t.y + 5, P.groundShade, 1, battle.fxRng); }
   }
 
@@ -804,6 +841,11 @@ export function updateEnemyPhase(battle, dt, h) {
           if (steerAroundObstacle(battle, e, dt, e.x, e.y, e.d.radius, gdx, gdy, gd)) {
             gdx = battle._steerScratch.x; gdy = battle._steerScratch.y;
           }
+          // After steering, never into the wall (Plan 040). Applied last, because a
+          // deflection is exactly what tends to point a body outward.
+          if (slideAlongArenaEdge(battle, e.x, e.y, gdx, gdy, battle._steerScratch)) {
+            gdx = battle._steerScratch.x; gdy = battle._steerScratch.y;
+          }
         }
         // Plan 029, the rush latch. Only this branch can set it — the kite branch above is
         // moving AWAY and standGround is not moving at all — and only when the heading
@@ -828,7 +870,7 @@ export function updateEnemyPhase(battle, dt, h) {
       }
     }
     e.x += e.vx * dt; e.y += e.vy * dt;
-    e.x = clamp(e.x, 30, battle.W - 30); e.y = clamp(e.y, 30, battle.H - 30);
+    e.x = clamp(e.x, ARENA_EDGE, battle.W - ARENA_EDGE); e.y = clamp(e.y, ARENA_EDGE, battle.H - ARENA_EDGE);
     if (len(e.vx, e.vy) > 25) e.bob += dt * 9;
   }
 

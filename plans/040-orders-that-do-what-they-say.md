@@ -1,6 +1,15 @@
 # 040 — Orders that do what they say: a line that holds, arrows that land, a squad you can send
 
-STATUS: IN PROGRESS. Slice 2 shipped 2026-09-02 (`WOLF_STALK_R` 250 -> 180). Its
+STATUS: IN PROGRESS. Slices 2 and 1 shipped 2026-09-02. Slice 1 fixed HOLD (a held troop
+drifted 1793 px before it, 8 px after) and restored the guard margin slice 2 narrowed
+(+3 -> +8), but its acceptance criterion 1 is NOT met: holdLine unresolved raids rose
+18 -> 25. Traced, the cause is not the break doctrine the plan predicted but a pre-existing
+enemy-convergence defect that slice 1 exposes — the last survivor has line of sight and
+full speed and still never arrives at a line that does not move. Three fixes were measured;
+two failed and one (slideAlongArenaEdge) moved a single raid and shipped on its own
+evidence. Full record in critiques/orders-comparison.md. Slices 3 and 4 remain.
+
+Slice 2 shipped 2026-09-02 (`WOLF_STALK_R` 250 -> 180). Its
 before/after is in `critiques/orders-comparison.md`, including one thing this plan
 asserted that did not reproduce: the first wolf death under HOLD lands at 11.4 s at BOTH
 radii, so the stall-clock test the slice asked for would have been vacuous and a
