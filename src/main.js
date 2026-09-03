@@ -1,17 +1,17 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r5c654e8cd0f8';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r5c654e8cd0f8';
-import { Sfx } from './audio.js?v=r5c654e8cd0f8';
-import { Battle } from './battle.js?v=r5c654e8cd0f8';
-import { World } from './world.js?v=r5c654e8cd0f8';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r5c654e8cd0f8';
-import { FIELD } from './battle/constants.js?v=r5c654e8cd0f8';
-import { ACTIONS } from './input-actions.js?v=r5c654e8cd0f8';
-import { createWebPlatform } from './platform/web-platform.js?v=r5c654e8cd0f8';
-import { SaveRepository } from './persistence/save-repository.js?v=r5c654e8cd0f8';
-import { buildSummaryModel } from './world-screens.js?v=r5c654e8cd0f8';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r5c654e8cd0f8';
-import { perkChoiceDue, perkMods } from './progression.js?v=r5c654e8cd0f8';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r9cc0b3c37159';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r9cc0b3c37159';
+import { Sfx } from './audio.js?v=r9cc0b3c37159';
+import { Battle } from './battle.js?v=r9cc0b3c37159';
+import { World } from './world.js?v=r9cc0b3c37159';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r9cc0b3c37159';
+import { FIELD } from './battle/constants.js?v=r9cc0b3c37159';
+import { ACTIONS } from './input-actions.js?v=r9cc0b3c37159';
+import { createWebPlatform } from './platform/web-platform.js?v=r9cc0b3c37159';
+import { SaveRepository } from './persistence/save-repository.js?v=r9cc0b3c37159';
+import { buildSummaryModel } from './world-screens.js?v=r9cc0b3c37159';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r9cc0b3c37159';
+import { perkChoiceDue, perkMods } from './progression.js?v=r9cc0b3c37159';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
