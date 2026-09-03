@@ -2,42 +2,42 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=r9cc0b3c37159';
-import { perkMods } from './progression.js?v=r9cc0b3c37159';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r9cc0b3c37159';
-import { SpatialGrid } from './battle/spatial-index.js?v=r9cc0b3c37159';
-import { ACTIONS } from './input-actions.js?v=r9cc0b3c37159';
+} from './data.js?v=r58dfe4489e7e';
+import { perkMods } from './progression.js?v=r58dfe4489e7e';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r58dfe4489e7e';
+import { SpatialGrid } from './battle/spatial-index.js?v=r58dfe4489e7e';
+import { ACTIONS } from './input-actions.js?v=r58dfe4489e7e';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
   DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
-} from './battle/constants.js?v=r9cc0b3c37159';
+} from './battle/constants.js?v=r58dfe4489e7e';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=r9cc0b3c37159';
-import { drawScene, drawProps } from './battle/render-scene.js?v=r9cc0b3c37159';
+} from './battle/terrain.js?v=r58dfe4489e7e';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r58dfe4489e7e';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=r9cc0b3c37159';
+} from './battle/separation.js?v=r58dfe4489e7e';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=r9cc0b3c37159';
+} from './battle/ai-phases.js?v=r58dfe4489e7e';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=r9cc0b3c37159';
+} from './battle/combat.js?v=r58dfe4489e7e';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=r9cc0b3c37159';
+} from './battle/objectives.js?v=r58dfe4489e7e';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
   placeEnemyDeployment as placeEnemyLine,
-} from './battle/enemy-command.js?v=r9cc0b3c37159';
+} from './battle/enemy-command.js?v=r58dfe4489e7e';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -774,8 +774,24 @@ export class Battle {
   }
 
   // Fit-to-action camera: frame hero + all living units, clamp inside the arena.
+  //
+  // The pre-fight states ('intro' and the paused 'deploy') frame the field DIFFERENTLY, and
+  // the reason is a defect the headless playtest recorded: the hero bias below is what makes
+  // the live fight readable, but during deployment it pushed the enemy formation off screen
+  // and left the player forming a line against nothing but an edge chevron. Both boxes are
+  // the same AABB — the difference is only where the view is centred, plus the deploy
+  // frontier joining the box so the ground the player may actually place men on is framed
+  // with him. Presentation only: nothing here is read back by a phase, and the drag in
+  // updateDeployPhase still goes through Camera.toWorld, which is unchanged.
   updateCamera(dt) {
     const cam = this.game.camera, h = this.hero;
+    // 'intro' qualifies only for a fight that is ABOUT to deploy: the banner is the first
+    // second of the same tableau, and letting the two states disagree would snap the view
+    // forward on the frame the horn sounds. An ambush (or a caught-fleeing `deploy: 0`
+    // fight) has no line to form and no frontier to show, so its intro keeps the hero bias
+    // below — being jumped is a fight about where YOU are.
+    const framingBothLines = this.state === 'deploy' ||
+      (this.state === 'intro' && this.deployEnabled);
     let minX = h.x, maxX = h.x, minY = h.y, maxY = h.y;
     const grow = (x, y) => {
       if (x < minX) minX = x; if (x > maxX) maxX = x;
@@ -783,6 +799,11 @@ export class Battle {
     };
     for (const t of this.troops) grow(t.x, t.y);
     for (const e of this.enemies) grow(e.x, e.y);
+    // The player's frontier — the far edge of clampToDeployZone, DEPLOY_NO_MANS short of
+    // the midline. Drawn during the phase, so it must be inside the view that frames it.
+    if (framingBothLines) {
+      grow(this.W / 2 - this.adx * DEPLOY_NO_MANS, this.H / 2 - this.ady * DEPLOY_NO_MANS);
+    }
     const pad = 170;
     const boxW = maxX - minX + pad * 2, boxH = maxY - minY + pad * 2;
     let z = Math.min(cam.w / boxW, cam.h / boxH);
@@ -794,6 +815,40 @@ export class Battle {
     // target: midpoint biased toward the hero
     const bx = (minX + maxX) / 2, by = (minY + maxY) / 2;
     let cx = h.x * 0.45 + bx * 0.55, cy = h.y * 0.45 + by * 0.55;
+    if (framingBothLines) {
+      // Centring on the box midpoint is what guarantees every body on both sides is inside
+      // the view, since the zoom above was fitted to that same box. The hero bias is exactly
+      // what broke that guarantee: he stands ENGAGE_GAP/2 behind the midpoint.
+      cx = bx; cy = by;
+      // …unless the bodies cannot fit even at the 0.80 floor. That is the ordinary case on a
+      // N/S approach: ENGAGE_GAP is 820 and a 720px-tall viewport shows 900 world px at the
+      // floor, which the two formations' depth alone overruns. Centring the whole box then
+      // spends the view on the enemy's REAR ranks and pushes the player's own line off the
+      // near edge, so bias along the approach axis instead — frame the span from the
+      // player's rearmost man to the enemy's FRONT edge, the two things the phase is about,
+      // and let the enemy's rear ranks be what falls outside. When even that span is longer
+      // than the view, its midpoint splits the shortfall evenly between the two rather than
+      // sacrificing one end whole.
+      // The comparison is against the UNPADDED extents on purpose: `pad` is breathing room,
+      // not a requirement, so a field that fits its bodies with the pad partly spent is
+      // still a fit. Using boxW/boxH here would put an exactly-fitting field one float
+      // rounding away from taking the fallback branch it does not need.
+      if (maxX - minX > cam.w / z || maxY - minY > cam.h / z) {
+        const scx = this.W / 2, scy = this.H / 2;
+        const sOf = (x, y) => (x - scx) * this.adx + (y - scy) * this.ady;
+        let ownRear = sOf(h.x, h.y), enemyFront = Infinity;
+        for (const t of this.troops) ownRear = Math.min(ownRear, sOf(t.x, t.y));
+        for (const e of this.enemies) enemyFront = Math.min(enemyFront, sOf(e.x, e.y));
+        if (Number.isFinite(enemyFront)) {
+          // Rebuild the target from the box's PERPENDICULAR component and this axis span, so
+          // the lateral framing the box already earned is kept untouched.
+          const perp = (bx - scx) * -this.ady + (by - scy) * this.adx;
+          const s = (ownRear + enemyFront) / 2;
+          cx = scx + this.adx * s - this.ady * perp;
+          cy = scy + this.ady * s + this.adx * perp;
+        }
+      }
+    }
     // clamp view inside arena (+ margin for the cliff band)
     const vw = cam.w / cam.zoom / 2, vh = cam.h / cam.zoom / 2, M = 110; // show coastline, not a band
     if (vw * 2 < this.W + M * 2) cx = clamp(cx, vw - M, this.W - vw + M); else cx = this.W / 2;
