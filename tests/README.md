@@ -122,6 +122,14 @@ warband has a recovery path. The reason is recorded in the test and in
 same harness module, so a number a plan quotes and a number a gate asserts come from one
 piece of code.
 
+One limit of the harness is worth knowing before reading any campaign-length number from
+it: a whole scripted campaign is **17 to 20 seconds of WORLD time**. The world clock only
+runs while the hero rides, and travel is teleport-plus-clock paying only straight-line
+distance. `stats.playT` is much larger because it also accrues during battles. Plan 039
+found `RAID.firstDelayT` (110 flowing seconds) is longer than an entire campaign's riding,
+which is why the regional layer cannot be exercised end to end by this harness and is
+covered by direct tests in `regional-campaign.spec.js` instead.
+
 `tests/e2e/facing-flank.spec.js` owns the Plan 032 mechanic itself: the sweep says what the
 rule did to a campaign, this spec says what the rule IS. Four two-body fixtures, each stepped
 exactly as far as it takes for one blow to land — a melee blow from outside the defender's

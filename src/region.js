@@ -16,7 +16,7 @@
 // presentation state, touches RNG, or mutates its inputs, so the whole regional
 // model is test-addressable in plain Node (tests/e2e/region.spec.js imports this
 // file directly).
-import { WORLD, UNIT_TYPES, BALANCE } from './data.js?v=rf03ab8f72f41';
+import { WORLD, UNIT_TYPES, BALANCE } from './data.js?v=r3ac1d341fd40';
 
 // ---------------------------------------------------------------------------
 // Regional configuration — one named region (Milestone 025 scope: exactly one).

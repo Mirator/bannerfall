@@ -43,6 +43,17 @@
 //                    parties before each objective and shops at the TOWN so it can buy
 //                    knights.
 //
+// A FIFTH POLICY WAS WRITTEN AND THEN REMOVED, which is worth recording because the
+// removal is the finding. Plan 039 added `rebuilder` — campRaider's route plus "while
+// `World.inDistress()`, rebuild instead of marching on" — to measure whether a wiped
+// campaign can climb back. Measured over 12 seeds it took ZERO recovery fights and
+// produced records indistinguishable from `campRaider` (identical on 7 seeds, and
+// differing by one second of campaign time on the rest). The reason is the answer: after
+// Plan 039's muster, the ordinary shopping stop every policy already makes is enough to
+// lift a warband out of distress before the next objective. Recovery does not need a
+// special player, so shipping a policy that duplicates another would have doubled the
+// sweep's cost for no signal. See critiques/campaign-arc-comparison.md.
+//
 // The spend rule for the last three is: rest and heal when the column is hurt, then fill
 // the column with the cheapest body this settlement quotes, then expand the column when
 // it is full and the expansion is affordable — repeated until nothing is affordable.
@@ -102,7 +113,7 @@ async function campaignBody(opts) {
     battles: 0, wins: 0, losses: 0, retreats: 0,
     goldEarned: 0, goldSpent: 0, finalGold: 0, finalWeight: 0,
     razed: 0, captures: 0, raidsLanded: 0, raidsDefended: 0,
-    claimsRefused: 0, floorFires: 0, unresolved: 0,
+    claimsRefused: 0, floorFires: 0, unresolved: 0, raidsDispatched: 0,
     strongholdStateAtStorm: null, strongholdPointsAtStorm: null,
     storm: null,
     fights: [],
@@ -132,6 +143,19 @@ async function campaignBody(opts) {
       if (scene.parties.map(p => p.comp.join('+')).join('|') !== before) rec.floorFires++;
     };
     occupiedNow = (scene.save.settlements || []).filter(s => s.occupied).map(s => s.id).join(',');
+    ridingNow = scene.parties.filter(p => p.raidKind === 'regional' && p.raid).length;
+  }
+
+  // How often Wolfsjaw actually rode out, as distinct from how often it ARRIVED
+  // (`raidsLanded`). Counted as a rise in the number in transit, so it is exact within one
+  // World; a raid that survives a battle is re-counted once when the World is rebuilt,
+  // which makes this an upper bound rather than an exact figure. It exists to tell "the
+  // hold never dispatched" apart from "the campaign ended before the raid arrived".
+  let ridingNow = 0;
+  function noteRaids() {
+    const riding = world.parties.filter(p => p.raidKind === 'regional' && p.raid).length;
+    if (riding > ridingNow) rec.raidsDispatched += riding - ridingNow;
+    ridingNow = riding;
   }
 
   function noteOccupation() {
@@ -156,6 +180,7 @@ async function campaignBody(opts) {
     if (game.sceneName === 'world' && world) {
       if (world.timeFlowing() && !world.isBlocking()) rec.flowT += dt;
       noteOccupation();
+      noteRaids();
     }
   }
 
@@ -476,19 +501,21 @@ async function campaignBody(opts) {
     rec.storm = f ? { ratio: f.ratio, won: f.won, durationT: f.durationT, lost: f.lost } : null;
   }
 
-  // The farmer's hunt: find the weakest live party the odds already call favoured,
-  // stand next to it, and let `tryClash` fire through the ordinary encounter seam.
-  function hunt(times) {
+  // The farmer's hunt: find the weakest live party inside `ratio`, stand next to it, and
+  // let `tryClash` fire through the ordinary encounter seam. Returns true if a fight
+  // actually happened, so a caller can stop rather than grind against an empty map.
+  function hunt(times, ratio = BALANCE.oddsFavored) {
+    let fought = false;
     for (let i = 0; i < times; i++) {
       const mine = world.myStrength();
       let best = null;
       for (const p of world.parties) {
         if (p.occupying) continue;
         const s = world.strength(p.comp);
-        if (s > mine * BALANCE.oddsFavored) continue;
+        if (s > mine * ratio) continue;
         if (!best || s < best.s) best = { p, s };
       }
-      if (!best) return;
+      if (!best) return fought;
       const p = best.p;
       // Stand inside clash range (dh < 46) and let the ordinary encounter seam fire. A
       // party sitting inside a settlement's 130 px sanctuary cannot be clashed at all;
@@ -503,10 +530,13 @@ async function campaignBody(opts) {
           checkStop();
           if (rec.battles > before) break;
         }
-        if (rec.battles === before) return; // it slipped the net — do not keep chasing
+        if (rec.battles === before) return fought; // it slipped the net — do not chase
+        fought = true;
       } finally { routeKind = null; }
     }
+    return fought;
   }
+
 
   // Greedy nearest-first over the settlements still worth claiming.
   function nextUnclaimed() {

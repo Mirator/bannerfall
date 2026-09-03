@@ -1,0 +1,4404 @@
+{
+  "label": "stage4",
+  "seeds": 40,
+  "held": 4,
+  "raids": 120,
+  "generated": "2026-09-03T06:27:58.987Z",
+  "policies": {
+    "idle": {
+      "runs": 120,
+      "winPct": 67.5,
+      "sePct": 4.3,
+      "avgLost": 3.83,
+      "avgSeconds": 46.6,
+      "avgHeroHp": 81,
+      "unresolved": 18
+    },
+    "chargeAll": {
+      "runs": 120,
+      "winPct": 75,
+      "sePct": 4,
+      "avgLost": 3.93,
+      "avgSeconds": 31.4,
+      "avgHeroHp": 93,
+      "unresolved": 5
+    },
+    "split": {
+      "runs": 120,
+      "winPct": 52.5,
+      "sePct": 4.6,
+      "avgLost": 4.7,
+      "avgSeconds": 41.8,
+      "avgHeroHp": 59,
+      "unresolved": 10
+    },
+    "holdLine": {
+      "runs": 120,
+      "winPct": 61.7,
+      "sePct": 4.4,
+      "avgLost": 3.88,
+      "avgSeconds": 44.7,
+      "avgHeroHp": 77,
+      "unresolved": 17
+    }
+  },
+  "raw": {
+    "idle": [
+      {
+        "seed": 1,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 1,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 45
+      },
+      {
+        "seed": 1,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.4,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 40,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 3,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 3,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 75
+      },
+      {
+        "seed": 3,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 29.1,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 70.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 4,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 58.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 5,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 88,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 55.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 6,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 6,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 68.3,
+        "lost": 6,
+        "heroHp": 42
+      },
+      {
+        "seed": 6,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 33.4,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 75.2,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 7,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 59.3,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 8,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 8,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 21
+      },
+      {
+        "seed": 8,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 23.3,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 53.6,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 42.6,
+        "lost": 6,
+        "heroHp": 24
+      },
+      {
+        "seed": 10,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.9,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 10,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 10,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 50.6,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 11,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.5,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 11,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 12
+      },
+      {
+        "seed": 11,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 54.8,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 12,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 12,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 54.1,
+        "lost": 5,
+        "heroHp": 96
+      },
+      {
+        "seed": 12,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 49.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 13,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 13,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 58.5,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 13,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 58,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.7,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 75.8,
+        "lost": 7,
+        "heroHp": 0
+      },
+      {
+        "seed": 15,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.1,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 67.5,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 57.4,
+        "lost": 7,
+        "heroHp": 24
+      },
+      {
+        "seed": 17,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 17,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 75
+      },
+      {
+        "seed": 17,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 34.5,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 18,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 18,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 77.3,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 18,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 54.8,
+        "lost": 6,
+        "heroHp": 24
+      },
+      {
+        "seed": 19,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 28.7,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 19,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 69
+      },
+      {
+        "seed": 19,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.5,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 23.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 12
+      },
+      {
+        "seed": 20,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 45.5,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 21,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 21,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 54,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 21,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.9,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 75.4,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 22,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 41.6,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 75.8,
+        "lost": 7,
+        "heroHp": 0
+      },
+      {
+        "seed": 23,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.6,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 12
+      },
+      {
+        "seed": 24,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 41.7,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 25,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 25,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 57
+      },
+      {
+        "seed": 25,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 26.4,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 26,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 23.7,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 8,
+        "heroHp": 21
+      },
+      {
+        "seed": 27,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.7,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 46.4,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 29,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 29,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 48.2,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 29,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 58.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 30,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 30,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 77.2,
+        "lost": 6,
+        "heroHp": 33
+      },
+      {
+        "seed": 30,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 23.4,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 63.5,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 31,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 57.3,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 32,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 32,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.7,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 32,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.7,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 33,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 33,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 76.9,
+        "lost": 8,
+        "heroHp": 3
+      },
+      {
+        "seed": 33,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.2,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 34,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 34,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.3,
+        "lost": 5,
+        "heroHp": 0
+      },
+      {
+        "seed": 34,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 49.5,
+        "lost": 6,
+        "heroHp": 24
+      },
+      {
+        "seed": 35,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 35,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 68.8,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 35,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.9,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 44.7,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 37,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.8,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 37,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 37,
+        "campId": "c3",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 38,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.8,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 38,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 70.9,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 38,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 29.4,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 39,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 51.6,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 40,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 40,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 68.7,
+        "lost": 6,
+        "heroHp": 30
+      },
+      {
+        "seed": 40,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 57,
+        "lost": 9,
+        "heroHp": 0
+      }
+    ],
+    "chargeAll": [
+      {
+        "seed": 1,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 1,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.8,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 1,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.4,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.6,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 30,
+        "lost": 5,
+        "heroHp": 30
+      },
+      {
+        "seed": 3,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 3,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 23.9,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 3,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 29.5,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 42.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 5,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 68.5,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 39.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 6,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.1,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 6,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 36.7,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 6,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.6,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 77.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 7,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 40,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 8,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 8,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.1,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 8,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 60.4,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 9,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.6,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 40.7,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 10,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.7,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 10,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.4,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 10,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 11,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.1,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 11,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.2,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 11,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 38.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 12,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 12,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.1,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 12,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 13,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 13,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 23.3,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 13,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.6,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.9,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 42.5,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 31.6,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.3,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 8,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 30.2,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 14.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.9,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 46.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 17,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 17,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.9,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 17,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 43.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 18,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 18,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 9,
+        "heroHp": 96
+      },
+      {
+        "seed": 18,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 42.7,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 19,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.1,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 19,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.2,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 19,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 29.7,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.6,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.1,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 21,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 21,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.9,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 21,
+        "campId": "c3",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 36.6,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 32,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.1,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 8,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 26.3,
+        "lost": 7,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.8,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 67.8,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 25,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 25,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 30.7,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 25,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 29.6,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.4,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 28.2,
+        "lost": 8,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.6,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 28.2,
+        "lost": 8,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.9,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.3,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 29,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 14.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 29,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.9,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 29,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 42.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 30,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 30,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.9,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 30,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.6,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 23.6,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 40.2,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 32,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 14.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 32,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 41.1,
+        "lost": 5,
+        "heroHp": 50
+      },
+      {
+        "seed": 32,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 26.3,
+        "lost": 8,
+        "heroHp": 120
+      },
+      {
+        "seed": 33,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 33,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 68,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 33,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 25.3,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 34,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 34,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.4,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 34,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 42.4,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 35,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 13.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 35,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 35,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 28.6,
+        "lost": 8,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 15.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.8,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 42.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 37,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 37,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.3,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 37,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 42.7,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 38,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.4,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 38,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 8,
+        "heroHp": 120
+      },
+      {
+        "seed": 38,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 29.3,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 37.4,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 38.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 40,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 40,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 78.1,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 40,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 39.5,
+        "lost": 9,
+        "heroHp": 0
+      }
+    ],
+    "split": [
+      {
+        "seed": 1,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 1,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 51
+      },
+      {
+        "seed": 1,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 39,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 2,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 21
+      },
+      {
+        "seed": 2,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 51.2,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 3,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 3,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 45.1,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 3,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 46.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 4,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 60
+      },
+      {
+        "seed": 4,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 5,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 35.9,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 47.4,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 6,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.1,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 6,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 49.4,
+        "lost": 7,
+        "heroHp": 26
+      },
+      {
+        "seed": 6,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 46.6,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 7,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.7,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 45.3,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 7,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 48.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 8,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.1,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 8,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 69.8,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 8,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 49.8,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 9,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 56,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 9,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51.7,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 10,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.2,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 10,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 58.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 10,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 39.9,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 11,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 11,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 66.5,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 11,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.7,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 12,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.5,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 12,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 49.5,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 12,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 45.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 13,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 13,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 41.7,
+        "lost": 5,
+        "heroHp": 102
+      },
+      {
+        "seed": 13,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.7,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.6,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 14,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 39.5,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 15,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 54.2,
+        "lost": 7,
+        "heroHp": 0
+      },
+      {
+        "seed": 15,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 53,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 16,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 41.7,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 40.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 17,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 17,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 33
+      },
+      {
+        "seed": 17,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 42,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 18,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 18,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 65.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 18,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.9,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 19,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 19,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 87
+      },
+      {
+        "seed": 19,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 31.6,
+        "lost": 5,
+        "heroHp": 102
+      },
+      {
+        "seed": 20,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 70.2,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 20,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51.2,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 21,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 21,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 42
+      },
+      {
+        "seed": 21,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 44.6,
+        "lost": 6,
+        "heroHp": 70
+      },
+      {
+        "seed": 22,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 59,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 22,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 43.7,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 23,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.4,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 54.2,
+        "lost": 7,
+        "heroHp": 0
+      },
+      {
+        "seed": 23,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 40.2,
+        "lost": 6,
+        "heroHp": 62
+      },
+      {
+        "seed": 24,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 81.3,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 24,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 43.2,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 25,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.5,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 25,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 53.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 25,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 39.5,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 26,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 58.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 26,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 30.7,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.5,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 61.1,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 27,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 58.3,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 28,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16.6,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 57.6,
+        "lost": 6,
+        "heroHp": 24
+      },
+      {
+        "seed": 28,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 46.5,
+        "lost": 7,
+        "heroHp": 0
+      },
+      {
+        "seed": 29,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 29,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 60
+      },
+      {
+        "seed": 29,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 30,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 30,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 75.9,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 30,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 28.4,
+        "lost": 5,
+        "heroHp": 84
+      },
+      {
+        "seed": 31,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 55.8,
+        "lost": 6,
+        "heroHp": 6
+      },
+      {
+        "seed": 31,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 44.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 32,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 16,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 32,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 37.2,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 32,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51.2,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 33,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 33,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 40,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 33,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 40.6,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 34,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.8,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 34,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 48.3,
+        "lost": 6,
+        "heroHp": 38
+      },
+      {
+        "seed": 34,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 45.4,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 35,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.6,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 35,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 35,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 28,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.5,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 12
+      },
+      {
+        "seed": 36,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 43.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 37,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 37,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 57.9,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 37,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 46.8,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 38,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.2,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 38,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 38,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 30.2,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.4,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 58.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 39,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 43.3,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 40,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 40,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 33.2,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 40,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 41.8,
+        "lost": 9,
+        "heroHp": 0
+      }
+    ],
+    "holdLine": [
+      {
+        "seed": 1,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 1,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 45
+      },
+      {
+        "seed": 1,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.3,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 2,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 75.6,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 2,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 50.3,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 3,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 3,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 38
+      },
+      {
+        "seed": 3,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 32,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 4,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 54
+      },
+      {
+        "seed": 4,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 47.5,
+        "lost": 7,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 5,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 57,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 5,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 52.2,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 6,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 6,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 86.2,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 6,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.5,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 7,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 60.2,
+        "lost": 6,
+        "heroHp": 24
+      },
+      {
+        "seed": 8,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 8,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 30.5,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 8,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 39.3,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 50.1,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 9,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51.2,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 10,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.9,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 10,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 10,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 55.5,
+        "lost": 7,
+        "heroHp": 24
+      },
+      {
+        "seed": 11,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 11,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 73.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 11,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 49,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 12,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.8,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 12,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 30
+      },
+      {
+        "seed": 12,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 53.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 13,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 13,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 7,
+        "heroHp": 75
+      },
+      {
+        "seed": 13,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.1,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 14,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 62.4,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 14,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 41.6,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 15,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 38
+      },
+      {
+        "seed": 15,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 26.9,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 31.8,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 16,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 45,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 17,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 17,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 24
+      },
+      {
+        "seed": 17,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 37.3,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 18,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 18,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 18,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 63.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 19,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 19,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 71.8,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 19,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 36,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 20,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 30
+      },
+      {
+        "seed": 20,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 55.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 21,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 21,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 33
+      },
+      {
+        "seed": 21,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.8,
+        "lost": 3,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.3,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 22,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 76,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 22,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 31.1,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 23,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 38
+      },
+      {
+        "seed": 23,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 36.8,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 24,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 24,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 44,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 25,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.7,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 25,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 51.4,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 25,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.3,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 26,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 26,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 24.2,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 27,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 81.5,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 27,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.1,
+        "lost": 2,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.6,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 49.5,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 28,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 43,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 29,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 29,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 68.7,
+        "lost": 7,
+        "heroHp": 21
+      },
+      {
+        "seed": 29,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 47.5,
+        "lost": 7,
+        "heroHp": 0
+      },
+      {
+        "seed": 30,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 30,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 83.2,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 30,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.3,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.4,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 31,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 61.8,
+        "lost": 7,
+        "heroHp": 69
+      },
+      {
+        "seed": 31,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 56.9,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 32,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 17.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 32,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 52.5,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 32,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 39.6,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 33,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.2,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 33,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 50.9,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 33,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 41,
+        "lost": 6,
+        "heroHp": 96
+      },
+      {
+        "seed": 34,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.9,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 34,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 43.7,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 34,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 54.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 35,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 21.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 35,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 35.1,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 35,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 42.1,
+        "lost": 6,
+        "heroHp": 72
+      },
+      {
+        "seed": 36,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 54.1,
+        "lost": 4,
+        "heroHp": 120
+      },
+      {
+        "seed": 36,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 56.6,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 37,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 22.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 37,
+        "campId": "c2",
+        "resolved": true,
+        "victory": true,
+        "seconds": 48.3,
+        "lost": 6,
+        "heroHp": 120
+      },
+      {
+        "seed": 37,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51.5,
+        "lost": 9,
+        "heroHp": 0
+      },
+      {
+        "seed": 38,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 18.1,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 38,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 86
+      },
+      {
+        "seed": 38,
+        "campId": "c3",
+        "resolved": true,
+        "victory": true,
+        "seconds": 30.2,
+        "lost": 5,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 19.2,
+        "lost": 1,
+        "heroHp": 120
+      },
+      {
+        "seed": 39,
+        "campId": "c2",
+        "resolved": false,
+        "victory": false,
+        "seconds": 93.9,
+        "lost": 6,
+        "heroHp": 48
+      },
+      {
+        "seed": 39,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 51.2,
+        "lost": 8,
+        "heroHp": 0
+      },
+      {
+        "seed": 40,
+        "campId": "c1",
+        "resolved": true,
+        "victory": true,
+        "seconds": 20.8,
+        "lost": 0,
+        "heroHp": 120
+      },
+      {
+        "seed": 40,
+        "campId": "c2",
+        "resolved": true,
+        "victory": false,
+        "seconds": 35.6,
+        "lost": 6,
+        "heroHp": 0
+      },
+      {
+        "seed": 40,
+        "campId": "c3",
+        "resolved": true,
+        "victory": false,
+        "seconds": 56.4,
+        "lost": 9,
+        "heroHp": 0
+      }
+    ]
+  },
+  "paired": {
+    "chargeAll": {
+      "policyWonIdleLost": 25,
+      "idleWonPolicyLost": 16,
+      "bothWon": 65,
+      "bothLost": 14,
+      "discordant": 41,
+      "marginPct": 7.5,
+      "seOfMarginPct": 5.3
+    },
+    "split": {
+      "policyWonIdleLost": 6,
+      "idleWonPolicyLost": 24,
+      "bothWon": 57,
+      "bothLost": 33,
+      "discordant": 30,
+      "marginPct": -15,
+      "seOfMarginPct": 4.6
+    },
+    "holdLine": {
+      "policyWonIdleLost": 8,
+      "idleWonPolicyLost": 15,
+      "bothWon": 66,
+      "bothLost": 31,
+      "discordant": 23,
+      "marginPct": -5.8,
+      "seOfMarginPct": 4
+    }
+  }
+}

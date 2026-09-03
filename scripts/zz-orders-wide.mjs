@@ -7,7 +7,14 @@
 // 0.0-point margin over 120. This runs the same fixture over three times as many seeds and
 // reports the margin with a binomial standard error, so the call can be made on evidence.
 //
-// Usage: node scripts/zz-orders-wide.mjs [--seeds 120] [--label wide]
+// Plan 039 added `--held N`: how many settlements the fixture owns before it raids, which
+// is its CAMPAIGN STAGE. Since Plan 038 every generated force is priced off
+// strongholdPoints(save) = held settlements + razed linked camps, and this fixture installs
+// the near-capped roster the stage curve calls stage 7 into a stage-0 save — by construction
+// the easiest fight the game can produce. `--held` is how the re-basing candidates were
+// measured; the numbers are in critiques/campaign-arc-comparison.md.
+//
+// Usage: node scripts/zz-orders-wide.mjs [--seeds 120] [--label wide] [--held 0]
 import { chromium } from '@playwright/test';
 import { writeFileSync } from 'node:fs';
 
@@ -15,6 +22,7 @@ const args = process.argv.slice(2);
 const argOf = (n, d) => (args.includes(n) ? args[args.indexOf(n) + 1] : d);
 const N = Number(argOf('--seeds', 120));
 const label = argOf('--label', 'wide');
+const HELD = Number(argOf('--held', 0));
 const DT = 1 / 60;
 const BASE = 'http://127.0.0.1:8474';
 
@@ -25,8 +33,8 @@ const POLICIES = {
   holdLine: { spear: 'hold', archer: 'hold', knight: 'charge' },
 };
 
-async function raidSweep(page, orders, seeds, campIds) {
-  return page.evaluate(async ({ orders, seeds, campIds, dt }) => {
+async function raidSweep(page, orders, seeds, campIds, held = 0) {
+  return page.evaluate(async ({ orders, seeds, campIds, dt, held }) => {
     const { WORLD } = await import('/src/data.js');
     const game = window.__g;
     const canvas = document.getElementById('game');
@@ -44,6 +52,11 @@ async function raidSweep(page, orders, seeds, campIds) {
           const world = game.scene;
           world.save.troops = mix.map(type => ({ type }));
           world.save.gold = 500;
+          // Plan 039: the fixture's stage. Camps stay un-razed (they are what this sweep
+          // raids), so held settlements are the only stage points available to it.
+          for (let i = 0; i < held && i < world.save.settlements.length; i++) {
+            world.save.settlements[i].owner = 'player';
+          }
           world.hero.x = camp.x; world.hero.y = camp.y; world.grace = 0;
           game.input.injectMouse(640, 360, false);
           // Battle entry mirrors tests/e2e/stance-balance.spec.js's raidSweep exactly, and
@@ -93,7 +106,7 @@ async function raidSweep(page, orders, seeds, campIds) {
       }
     } finally { game.update = real; }
     return rows;
-  }, { orders, seeds, campIds, dt: DT });
+  }, { orders, seeds, campIds, dt: DT, held });
 }
 
 const seeds = Array.from({ length: N }, (_, i) => i + 1);
@@ -102,11 +115,11 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 page.on('pageerror', e => console.error('PAGE ERROR', e.message));
 
-const out = { label, seeds: N, raids: N * camps.length, generated: new Date().toISOString(), policies: {}, raw: {} };
+const out = { label, seeds: N, held: HELD, raids: N * camps.length, generated: new Date().toISOString(), policies: {}, raw: {} };
 for (const [name, orders] of Object.entries(POLICIES)) {
   await page.goto(BASE + '/');
   const t0 = Date.now();
-  const rows = await raidSweep(page, orders, seeds, camps);
+  const rows = await raidSweep(page, orders, seeds, camps, HELD);
   const wins = rows.filter(r => r.victory).length;
   const p = wins / rows.length;
   out.raw[name] = rows;

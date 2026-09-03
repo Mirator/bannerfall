@@ -8,7 +8,7 @@ const EXPECTED_QA_NAMES = [
   'hero_swing_and_dash_damage_enemies',
   'battle_retreat_hold_disengages',
   'defeat_penalties_via_world_battle',
-  'defeat_volunteer_rally_floor_tops_up_to_two',
+  'defeat_volunteer_rally_musters_the_column_back',
   'victory_loot_and_survivors_via_world_battle',
   'command_system_and_hold_positions',
   'squad_selection_and_independent_squad_orders',

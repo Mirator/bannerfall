@@ -122,9 +122,15 @@ async function runSplit(page, fixtureName, orders) {
 // fixtures above these use real garrison rolls (bigger, with brutes) in the camp arena,
 // reached through the production `E` raid input. Camp coordinates come from the live
 // `WORLD.camps` table, never hardcoded.
-async function raidSweep(page, orders, seeds, campIds) {
+// `held` is how many settlements the fixture owns before it raids (Plan 039). It is the
+// fixture's CAMPAIGN STAGE: since Plan 038 every generated force is priced off
+// `strongholdPoints(save)` = held settlements + razed linked camps, and this fixture used
+// to sit at stage 0 while installing the near-capped roster the stage curve calls stage 7.
+// That made it, by construction, the easiest fight the game can produce — measured idle 94
+// and chargeAll 100, a saturated column with no room left for a regression to show in.
+async function raidSweep(page, orders, seeds, campIds, held = 0) {
   await page.goto('/');
-  return page.evaluate(async ({ orders, seeds, campIds, dt }) => {
+  return page.evaluate(async ({ orders, seeds, campIds, dt, held }) => {
     const { WORLD } = await import('/src/data.js');
     const game = window.__g;
     // Outcomes depend on canvas size (the fit-to-action camera feeds hero aim, which feeds
@@ -144,6 +150,11 @@ async function raidSweep(page, orders, seeds, campIds) {
           const world = game.scene;
           world.save.troops = mix.map(type => ({ type }));
           world.save.gold = 500;
+          // Stage, as ownership: the camps must stay un-razed (they are what this sweep
+          // raids), so held settlements are the only points available to it.
+          for (let i = 0; i < held && i < world.save.settlements.length; i++) {
+            world.save.settlements[i].owner = 'player';
+          }
           world.hero.x = camp.x; world.hero.y = camp.y; world.grace = 0;
           game.input.injectMouse(640, 360, false);
           game.input.injectKey('KeyE', true); real(dt); game.input.injectKey('KeyE', false);
@@ -194,7 +205,7 @@ async function raidSweep(page, orders, seeds, campIds) {
       avgLost: Math.round(10 * totals.lost / totals.runs) / 10,
       avgHeroHp: Math.round(totals.heroHp / totals.runs),
     };
-  }, { orders, seeds, campIds, dt: DT });
+  }, { orders, seeds, campIds, dt: DT, held });
 }
 
 test.describe('stance balance', () => {
@@ -341,12 +352,31 @@ test.describe('stance balance', () => {
     // commanding"), and the assertion below now GUARDS the property: a change that makes
     // the idle default the best policy again fails this sweep, exactly as weakening any
     // other guard would.
+    // PLAN 039 RE-BASED THE FIXTURE, and this is the one change to it that was not a
+    // change to what it asserts. Plan 038 priced every generated force off campaign STAGE,
+    // and this fixture installs the near-capped roster the stage curve calls stage 7 into a
+    // stage-0 save — by construction the easiest fight the game can produce. It saturated:
+    // idle went 49 -> 94 and chargeAll 60 -> 100, pinning a column at the ceiling where no
+    // regression could ever show. Measured over the same 40 seeds x 3 camps at three
+    // candidate stages (`node scripts/zz-orders-wide.mjs --seeds 40 --held N`):
+    //
+    //     held  idle   chargeAll  split  holdLine
+    //        0  94.2       100.0   91.7      94.2   <- saturated, chargeAll at the ceiling
+    //        2  86.7        92.5   73.3      80.0
+    //        4  67.5        75.0   52.5      61.7   <- chosen
+    //
+    // Four held settlements is the highest stage this fixture can reach (the camps must
+    // stay un-razed — they are what it raids), it puts all four policies in a measurable
+    // band with nothing at 0 or 100, and the guard's margin WIDENS from 5.8 to 7.5 points.
+    // The stage was chosen on headroom, and the grid is recorded here whichever way it
+    // fell; the assertion below is untouched.
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked
     const camps = ['c1', 'c2', 'c3'];
-    const idle = await raidSweep(page, null, seeds, camps);
-    const chargeAll = await raidSweep(page, { spear: 'charge', archer: 'charge', knight: 'charge' }, seeds, camps);
-    const split = await raidSweep(page, { spear: 'charge', archer: 'hold', knight: 'charge' }, seeds, camps);
+    const HELD = 4;
+    const idle = await raidSweep(page, null, seeds, camps, HELD);
+    const chargeAll = await raidSweep(page, { spear: 'charge', archer: 'charge', knight: 'charge' }, seeds, camps, HELD);
+    const split = await raidSweep(page, { spear: 'charge', archer: 'hold', knight: 'charge' }, seeds, camps, HELD);
     console.log('camp-raid policy sweep:');
     console.log(JSON.stringify({ idle, chargeAll, split }, null, 2));
 

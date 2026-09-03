@@ -43,10 +43,15 @@ tooling (Playwright); nothing from `node_modules` ships or runs.
   linked camp makes the surviving bands fall back on the hold and man its walls,
   bounded by the same stage-priced target its garrison is rolled against; the
   bands it has no room for stay out on the March.
+- Losing is recoverable: a defeat musters the column back to a playable size at the
+  settlement that takes you in, and while the warband is at or below its starting
+  weight the beatable-fight guarantee tightens to one it can actually win (Plan 039).
 - Regional pressure: Wolfsjaw dispatches one raid at a time at held ground
-  (grace after captures and after successful defenses); a raid landing near
-  the hero opens a Hold-the-ground defense battle, otherwise it occupies the
-  settlement until driven out.
+  (grace after captures and after successful defenses), and at neutral ground when
+  the player holds none, never taking the last unclaimed settlement; a raid landing
+  near the hero opens a Hold-the-ground defense battle, otherwise it occupies the
+  settlement until driven out. The cadence is a campaign clock that survives a battle
+  and re-arms only on a reload (Plan 039).
 - Economy: gold from loot paid per enemy body TYPE, army cap expansion, the
   banner, and paid claims. Encounters are sized off how far the campaign has
   come rather than off the warband (Plan 038: `World.encounterBase()`), so
