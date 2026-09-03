@@ -1404,3 +1404,43 @@ and slices 1 and 3 both touch what a held line does.
 
 Gates: `npm test` 198 passed / 1 failed (the pre-existing Windows-only `battle-break.png`
 drift), `npm run test:balance` 4 passed, `npm run release:cache` + `npm run test:release`.
+
+## Plan 040 slice 1 — HOLD holds in a Break-the-position fight (2026-09-02)
+
+The Break-the-position block ran for every stance, so a held squad with no hostile in reach
+took the nearest standing guard as its target however far away it was and then walked to
+it. Measured directly: without the fix a held troop drifts 1793 px from where it was
+anchored; with it, 8 px. A held body may now take a guard only inside the reach its stance
+already uses for hostiles; charge and follow are untouched, so the position stays breakable
+by anyone ordered to break it, and the new test asserts both halves.
+
+The `@sweep` margin slice 2 narrowed is restored: idle 73 -> 68, chargeAll 76, split 51 ->
+53, margin +3 -> +8. An un-ordered line no longer wanders onto the objective and completes
+it by accident.
+
+**Acceptance criterion 1 is NOT met and the failure is recorded rather than tuned around.**
+holdLine unresolved raids rose 18 -> 25 (win 61.7% -> 54.2%). The plan predicted this
+symptom and blamed the enemy commander's `break` doctrine; traced, that is wrong. In an
+unresolved raid the garrison is down to ONE body, the guards are untouched, bloodlust is
+armed, and the survivor is on follow with line of sight at full commanded speed - and never
+arrives. The doctrine presses correctly; a body cannot converge on a line that does not
+move, and before this slice the held line walked across the field so the geometry never
+stayed still long enough for it to matter.
+
+Three fixes were tried and measured. Making bloodlust outrank obstacle steering made it
+WORSE (25 -> 27; bodies wedge on obstacles instead). A rout-to-victory stall breaker was
+rejected without trying it, because converting unresolved raids into wins would take idle
+from 68% to about 87% against chargeAll's 78% and flip the guard the plan forbids tuning
+around - any stall breaker that resolves a grind in the player's favour has that property.
+`slideAlongArenaEdge` shipped on its own evidence rather than the aggregate: traced, the
+last surviving brute stood at (1278, 1110), exactly W - ARENA_EDGE, for thirty-plus seconds
+at speed 71 while its target sat 536 px west, because a heading into the wall is absorbed
+whole by the position clamp. It moved one raid of 120, which is honestly all it was worth.
+
+The remaining stalls are a pre-existing enemy-convergence defect this slice exposes rather
+than causes, and fixing it is its own plan - most likely the sticky tangent hysteresis in
+`steerAroundObstacle` against a goal that never moves, which is exactly the case its own
+comment says the hysteresis was added for.
+
+Gates: `npm test` 199 passed / 1 failed (the pre-existing Windows-only `battle-break.png`
+drift), `npm run test:balance` 4 passed, `release:cache` + `test:release`.
