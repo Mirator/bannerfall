@@ -1,18 +1,18 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=r3729900262ac';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r3729900262ac';
+import { PAL, WORLD } from '../data.js?v=ra31d8294e766';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=ra31d8294e766';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
   drawSpecPanel, drawPerkPanel, drawSitePanel,
-} from '../world-screens.js?v=r3729900262ac';
+} from '../world-screens.js?v=ra31d8294e766';
 import {
   settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
   strongholdStateId, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r3729900262ac';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=r3729900262ac';
-import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r3729900262ac';
+} from '../region.js?v=ra31d8294e766';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=ra31d8294e766';
+import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=ra31d8294e766';
 
 const P = PAL.world;
 
@@ -299,6 +299,23 @@ export function drawFreezeCue(world, ctx, cam) {
   ctx.fillStyle = world._freezeVig;
   ctx.fillRect(0, 0, cam.w, cam.h);
   ctx.restore();
+  // One line for the ONE stall the wash cannot explain by itself: the rider is walled in and
+  // still pushing (`heroWallT`, published by World.updateHeroMovement — read only, like
+  // `staleT`). Everywhere else the wash means "you stopped", which needs no words. Costs
+  // nothing when the hero is merely parked, since it draws only in the blocked-with-input
+  // state, so the world baselines are unaffected.
+  if (world.heroWallT > 0) {
+    ctx.save();
+    ctx.globalAlpha = k * Math.min(1, world.heroWallT);
+    ctx.font = '800 14px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle'; // declared, see drawSettlement
+    ctx.fillStyle = 'rgba(21,22,46,0.86)';
+    ctx.fillText(world.heroWallRiver
+      ? 'The river bars the way — cross at a bridge or ford'
+      : 'Broken ground bars the way — ride around it', cam.w / 2, cam.h * 0.24);
+    ctx.restore();
+  }
 }
 
 export function drawBridge(world, ctx, bx, by) {

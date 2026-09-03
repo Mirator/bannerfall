@@ -1,27 +1,27 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=r3729900262ac';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r3729900262ac';
-import { SAVE_VERSION } from './save.js?v=r3729900262ac';
+} from './data.js?v=ra31d8294e766';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=ra31d8294e766';
+import { SAVE_VERSION } from './save.js?v=ra31d8294e766';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
   strongholdPoints,
-} from './region.js?v=r3729900262ac';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r3729900262ac';
+} from './region.js?v=ra31d8294e766';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=ra31d8294e766';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=r3729900262ac';
-import { drawScene } from './world/render-scene.js?v=r3729900262ac';
+} from './progression.js?v=ra31d8294e766';
+import { drawScene } from './world/render-scene.js?v=ra31d8294e766';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r3729900262ac';
+} from './world/battle-transition.js?v=ra31d8294e766';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -31,16 +31,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=r3729900262ac';
+} from './world/settlement-interactions.js?v=ra31d8294e766';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=r3729900262ac';
+} from './world/site-menu.js?v=ra31d8294e766';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r3729900262ac';
-import { WORLD_ART } from './world/visual-style.js?v=r3729900262ac';
+} from './world/terrain.js?v=ra31d8294e766';
+import { WORLD_ART } from './world/visual-style.js?v=ra31d8294e766';
 
 const P = PAL.world;
 
@@ -408,12 +408,71 @@ export class World {
   // move with axis-separated sliding so terrain deflects instead of gluing you in place.
   // CRITICAL: an entity already standing in an invalid spot (spawned or teleported there)
   // is never trapped — from inside a blocked region, all movement is allowed until you exit.
+  // Returns whether terrain REFUSED the requested step, so the caller can publish that as
+  // simulation state (updateHeroMovement turns it into `heroWallT`, which gives the Plan 023
+  // freeze cue its "why"). All geometry is read through blockedAt, so this stays on the one
+  // terrain source built by buildTerrainGeometry.
   moveBlocked(e, nx, ny) {
-    if (this.blockedAt(e.x, e.y)) { e.x = nx; e.y = ny; return; }
-    if (!this.blockedAt(nx, ny)) { e.x = nx; e.y = ny; return; }
-    if (!this.blockedAt(nx, e.y)) { e.x = nx; e.vy = 0; return; }
-    if (!this.blockedAt(e.x, ny)) { e.y = ny; e.vx = 0; return; }
+    if (this.blockedAt(e.x, e.y)) { e.x = nx; e.y = ny; return false; }
+    if (!this.blockedAt(nx, ny)) { e.x = nx; e.y = ny; return false; }
+    // ONE rule at every exit below that costs the rider speed: a deflection may take speed,
+    // but it must not leave him under the speed that MEANS moving. BALANCE.worldWakeSpeed is
+    // this game's own definition of that (Plan 023 hangs the campaign clock on it), so
+    // dropping under it here does not just slow the hero, it PAUSES the world — which is how
+    // a held direction key bought 57 of 60 stalled seconds on seed 1234 and 42 of 45 on seed
+    // 782. Nothing is invented: a rider already slower than the floor keeps his own speed,
+    // and the floor is never above the speed he arrived with.
+    const arrived = Math.hypot(e.vx, e.vy);
+    const floor = Math.min(arrived, BALANCE.worldWakeSpeed * 1.5);
+    const keepMoving = () => {
+      const now = Math.hypot(e.vx, e.vy);
+      if (now > 1e-6 && now < floor) { e.vx *= floor / now; e.vy *= floor / now; }
+    };
+    // The axis-separated fallbacks are accepted only when they actually TRAVEL. With
+    // single-axis input the off-axis candidate IS the current position, so it "succeeded"
+    // while moving zero pixels — the stall's proximate cause.
+    if (nx !== e.x && !this.blockedAt(nx, e.y)) { e.x = nx; e.vy = 0; keepMoving(); return true; }
+    if (ny !== e.y && !this.blockedAt(e.x, ny)) { e.y = ny; e.vx = 0; keepMoving(); return true; }
+    // Wall slide: the bank crosses the heading at an angle no axis split can resolve.
+    // Deflect ALONG the collider rather than damping to a stop, because a damped hero drops
+    // under BALANCE.worldWakeSpeed and freezes the whole campaign — the stall the player
+    // reads as a dead game. The tangent is found by rotating the requested heading away in
+    // fixed steps and taking the smallest deviation this same blockedAt geometry allows: on
+    // a smooth bank that IS the tangent, and at a corner it is the way out. Signs alternate
+    // so the choice is deterministic; the retained tangential velocity then keeps the next
+    // tick pointing the same way, so the hero does not dither between the two banks.
+    const dx = nx - e.x, dy = ny - e.y, step = Math.hypot(dx, dy);
+    if (step > 1e-6) {
+      const ux = dx / step, uy = dy / step;
+      // Turning the corner costs 30% of the arriving speed, under the same floor: a plain
+      // multiplicative damp cannot hold the threshold on its own, because held input only
+      // contributes ACCEL*dt per tick, so 0.7x per tick settles near 21px/s. Measured with a
+      // bare 0.55x and no floor: the hero travelled on every one of 600 ticks and the clock
+      // still froze on 245 of them.
+      const slideSpeed = Math.max(arrived * 0.7, floor);
+      const glide = step * (arrived > 1e-6 ? slideSpeed / arrived : 0);
+      // Probe farther than one frame of travel so a slide cannot inch into a pocket the
+      // next tick has to escape from again.
+      const probe = Math.max(glide, 12);
+      for (let i = 0; i < 8; i++) {
+        const turn = (0.42 * (1 + (i >> 1))) * (i & 1 ? -1 : 1); // ±24°, ±48°, ±72°, ±96°
+        const c = Math.cos(turn), s = Math.sin(turn);
+        const cx = ux * c - uy * s, cy = ux * s + uy * c;
+        if (this.blockedAt(e.x + cx * probe, e.y + cy * probe)) continue;
+        const tx = clamp(e.x + cx * glide, 60, this.W - 60);
+        const ty = clamp(e.y + cy * glide, 60, this.H - 60);
+        if (this.blockedAt(tx, ty)) continue;
+        // hero.vx/vy stay a REAL velocity — Plan 036 resolves heroClosingSpeed from them,
+        // and Plan 023 reads its length as the realized speed — so publish the deflected
+        // heading at exactly the magnitude the displacement above implies.
+        e.x = tx; e.y = ty; e.vx = cx * slideSpeed; e.vy = cy * slideSpeed;
+        return true;
+      }
+    }
+    // Genuinely walled in on every heading (an inside corner of the bank). Damping here is
+    // correct — there is nowhere to go — and the freeze cue now says so in words.
     e.vx *= 0.2; e.vy *= 0.2;
+    return true;
   }
 
   // Weighted tier draw (Plan 020, design decision 1): replaces the deleted flat
@@ -676,9 +735,21 @@ export class World {
       // it can never affect the freeze decision, bob, dust or the gallop SFX.
       if (len(h.vx, h.vy) < 8) { h.vx = 0; h.vy = 0; }
     }
-    this.moveBlocked(h,
-      clamp(h.x + h.vx * dt, 60, this.W - 60),
-      clamp(h.y + h.vy * dt, 60, this.H - 60));
+    const tx = clamp(h.x + h.vx * dt, 60, this.W - 60);
+    const ty = clamp(h.y + h.vy * dt, 60, this.H - 60);
+    const walled = this.moveBlocked(h, tx, ty);
+    // Plan 023's wash says "held" and nothing more, and the map's one wordless stall was a
+    // held key against a river bank. `heroWallT` (0..1, ~0.25s to full) publishes "the rider
+    // is pushing into terrain THIS tick" so drawFreezeCue can name the reason. It is
+    // simulation state, READ and never written by presentation, and deliberately absent from
+    // state() for the same reason `staleT` is: it accumulates per tick, which would make
+    // state() sensitive to elapsed frames. Defaulted with `||` rather than in the
+    // constructor so the field stays next to the one phase that owns it.
+    this.heroWallT = walled && ax.any ? Math.min(1, (this.heroWallT || 0) + dt / 0.25) : 0;
+    // Which barrier, read from the INTENDED target rather than from h.vx/vy — a slide has
+    // already turned those along the bank by now. Rivers have a crossing (a bridge); solid
+    // ground does not, so the two cannot share one line.
+    this.heroWallRiver = this.heroWallT > 0 && this.riverBlockedAt(tx, ty);
     if (sp > BALANCE.worldWakeSpeed) {
       h.facing = angLerp(h.facing, Math.atan2(h.vy, h.vx), 1 - Math.exp(-8 * dt));
       h.bob += dt * 10;
