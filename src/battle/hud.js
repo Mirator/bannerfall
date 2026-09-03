@@ -1,10 +1,10 @@
 // The in-battle HUD: squad rows with their stance trade-offs, the deployment panel, the
 // retreat prompt and the end banner. Presentation only, and the largest single drawing
 // job in the scene, which is why it gets its own module.
-import { HERO, BALANCE, enemyStrength, playerStrength, weightText } from '../data.js?v=rc8cb77fab13e';
-import { TAU, clamp, rrect } from '../engine.js?v=rc8cb77fab13e';
-import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=rc8cb77fab13e';
-import { stanceIcon } from './render-units.js?v=rc8cb77fab13e';
+import { HERO, BALANCE, enemyStrength, playerStrength, weightText } from '../data.js?v=r5c654e8cd0f8';
+import { TAU, clamp, rrect } from '../engine.js?v=r5c654e8cd0f8';
+import { SQUAD_LABELS, STANCE_NOTES } from './constants.js?v=r5c654e8cd0f8';
+import { stanceIcon } from './render-units.js?v=r5c654e8cd0f8';
 
 // Plan 024 Phase 7 — "reading a field you cannot see". At the 0.80 zoom floor a 1280x720
 // viewport shows about a third of the field, and squad balloons already collapse below
