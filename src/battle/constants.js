@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r3ac1d341fd40';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r47adbb257074';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -226,7 +226,24 @@ export const CMD_FORM_MAX = 6;
 // A stalking wolf holds this far from its target and refuses to close. It commits on its
 // own — no order needed — against a target under WOLF_COMMIT_HP of its health, or one
 // this much further from the warband's centroid than the warband's own mean spread.
-export const WOLF_STALK_R = 250;
+//
+// PLAN 040 MOVED THIS FROM 250 TO 180, and the arithmetic is the whole argument. A
+// stalking wolf backs off under `0.9 R` and stands its ground out to `1.25 R`
+// (updateEnemyPhase in ai-phases.js), so the band it occupies is [0.9R, 1.25R]. At 250
+// that band is 225-312 px and an archer's range is 230 (UNIT_TYPES.archer): most of the
+// pack sat outside the only weapon the player owns that could answer it. Nothing the
+// warband fields except the knight (175) and the hero (315) can catch a body moving at
+// 158, so a HOLD line against a pack did nothing at all until the no-death stall clock
+// (STALL_NO_DEATH, 14 s) forced `bloodlust` — fourteen seconds of standing still followed
+// by a scripted "THEY CLOSE IN!". Measured on the `wolves` fixture, HOLD resolved at 14.8 s,
+// which is that clock and not a fight.
+//
+// For the WHOLE stand band to sit inside archer range: 1.25 R <= 230, so R <= 184. At 180
+// a stalker backs off under 162 and stands between 162 and 225 — still outside a braced
+// spearman's 140 reach, and now inside the bow's 230. That is the trade the audit asked
+// for: a pack stays something melee cannot solve, and HOLD (which is also what arms steady
+// aim) becomes its answer.
+export const WOLF_STALK_R = 180;
 export const WOLF_COMMIT_HP = 0.5;
 // Hit and run. A stalking wolf that lands a bite breaks off for this long before coming
 // back in, instead of standing in the scrum until a spearman kills it. This is what makes

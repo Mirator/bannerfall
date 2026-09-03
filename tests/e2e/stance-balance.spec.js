@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors } from './test-helpers.js';
+import { WOLF_STALK_R } from '../../src/battle/constants.js';
+import { UNIT_TYPES } from '../../src/data.js';
 
 // Plan 019 balance harness.
 //
@@ -90,11 +92,20 @@ async function runStance(page, fixtureName, stance, orders = null) {
       if (orders) for (const [squad, order] of Object.entries(orders)) b.issueCommand(order, squad);
       else b.issueCommand(stance);
       let t = 0;
-      while (b.state !== 'end' && t < timeoutS) { realUpdate(dt); t += dt; }
+      // Plan 040: when the FIRST enemy body falls, not just when the fight ends. A stance
+      // that produces nothing for fourteen seconds and then wins on the no-death stall
+      // clock reads identically to one that fought, if all you record is the total.
+      const startEnemies = b.enemies.length;
+      let firstKillT = null;
+      while (b.state !== 'end' && t < timeoutS) {
+        realUpdate(dt); t += dt;
+        if (firstKillT === null && b.enemies.length < startEnemies) firstKillT = Math.round(t * 10) / 10;
+      }
       return {
         stance: stance || Object.values(orders).join('/'),
         resolved: b.state === 'end',
         seconds: Math.round(t * 10) / 10,
+        firstKillT,
         victory: !!b.victory,
         lost: b.startTroops - b.troops.length,
         heroHp: Math.round(b.hero.hp),
@@ -432,7 +443,35 @@ test.describe('stance balance', () => {
       `outcome varied with cursor position: ${results.cursors.join(' | ')}`).toBe(1);
   });
 
-  test('each single-behavior fixture keeps its intended right answer', async ({ page }) => {
+  test('the wolf stand band lies inside the bow line reach', () => {
+  // Plan 040, finding 15, asserted as the ARITHMETIC it is rather than as an outcome.
+  //
+  // A stalking wolf backs off under `0.9 R` and stands its ground out to `1.25 R`
+  // (updateEnemyPhase in ai-phases.js), so a pack occupies the band [0.9R, 1.25R] around
+  // its target. At WOLF_STALK_R 250 that band was 225-312 px against an archer's range of
+  // 230: most of a pack stood outside the only weapon the warband owns that can reach it,
+  // because nothing it fields except the knight (175) and the hero (315) can catch a body
+  // moving at 158. The whole band must sit inside archer range, which is R <= 184; the
+  // shipped 180 leaves a stalker standing between 162 and 225.
+  //
+  // This is a CONTRACT BETWEEN TWO TABLES and nothing else guarded it. Raising
+  // WOLF_STALK_R, or lowering the archer's range, silently makes a pack unanswerable
+  // again — which is the state this plan found the game in. Both bounds are read from the
+  // shipped constants, so retuning either is allowed and decoupling them is not.
+  const stand = { near: WOLF_STALK_R * 0.9, far: WOLF_STALK_R * 1.25 };
+  expect(stand.far,
+    `a stalking wolf stands out to ${stand.far}px, past the archer's ${UNIT_TYPES.archer.range}px ` +
+    'reach — a held bow line cannot answer a pack and nothing else the warband owns can catch one')
+    .toBeLessThanOrEqual(UNIT_TYPES.archer.range);
+  // And it must stay OUT of melee reach, or the pack stops being a skirmisher problem and
+  // becomes a slow bandit that walks into the spears.
+  expect(stand.near,
+    `a stalking wolf closes to ${stand.near}px, inside a braced spearman's reach — the pack ` +
+    'is no longer something melee cannot solve')
+    .toBeGreaterThan(UNIT_TYPES.spear.range);
+});
+
+test('each single-behavior fixture keeps its intended right answer', async ({ page }) => {
     // Regression guards, already true at the Plan 019 baseline: these two directional
     // properties are what makes HOLD and CHARGE meaningfully different, so the stance
     // trade-off work must not invert them.

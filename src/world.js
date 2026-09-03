@@ -1,27 +1,27 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=r3ac1d341fd40';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r3ac1d341fd40';
-import { SAVE_VERSION } from './save.js?v=r3ac1d341fd40';
+} from './data.js?v=r47adbb257074';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r47adbb257074';
+import { SAVE_VERSION } from './save.js?v=r47adbb257074';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
   strongholdPoints,
-} from './region.js?v=r3ac1d341fd40';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r3ac1d341fd40';
+} from './region.js?v=r47adbb257074';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r47adbb257074';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=r3ac1d341fd40';
-import { drawScene } from './world/render-scene.js?v=r3ac1d341fd40';
+} from './progression.js?v=r47adbb257074';
+import { drawScene } from './world/render-scene.js?v=r47adbb257074';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r3ac1d341fd40';
+} from './world/battle-transition.js?v=r47adbb257074';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -31,16 +31,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=r3ac1d341fd40';
+} from './world/settlement-interactions.js?v=r47adbb257074';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=r3ac1d341fd40';
+} from './world/site-menu.js?v=r47adbb257074';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r3ac1d341fd40';
-import { WORLD_ART } from './world/visual-style.js?v=r3ac1d341fd40';
+} from './world/terrain.js?v=r47adbb257074';
+import { WORLD_ART } from './world/visual-style.js?v=r47adbb257074';
 
 const P = PAL.world;
 
