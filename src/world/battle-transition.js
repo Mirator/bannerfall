@@ -12,15 +12,15 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r3729900262ac';
-import { dist2, clamp } from '../engine.js?v=r3729900262ac';
-import { ACTIONS } from '../input-actions.js?v=r3729900262ac';
-import { buildBriefModel, veteranLine } from '../world-screens.js?v=r3729900262ac';
-import { sampleBattlefield } from './battlefield-brief.js?v=r3729900262ac';
-import { FIELD } from '../battle/constants.js?v=r3729900262ac';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r3729900262ac';
-import { awardVeterancy, perkMods } from '../progression.js?v=r3729900262ac';
-import { performSiteAction } from './site-menu.js?v=r3729900262ac';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=rc5d65ad8e17b';
+import { dist2, clamp } from '../engine.js?v=rc5d65ad8e17b';
+import { ACTIONS } from '../input-actions.js?v=rc5d65ad8e17b';
+import { buildBriefModel, veteranLine } from '../world-screens.js?v=rc5d65ad8e17b';
+import { sampleBattlefield } from './battlefield-brief.js?v=rc5d65ad8e17b';
+import { FIELD } from '../battle/constants.js?v=rc5d65ad8e17b';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=rc5d65ad8e17b';
+import { awardVeterancy, perkMods } from '../progression.js?v=rc5d65ad8e17b';
+import { performSiteAction } from './site-menu.js?v=rc5d65ad8e17b';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -140,6 +140,16 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
       }
       // Plan 031: what the fight cost, reported by the screen whose job is to report it.
       let goldLost = 0;
+      // The roster that WALKED OUT, snapshotted before any branch below can grow it.
+      // `save.troops = result.survivors` used to alias the result array, so Plan 039's
+      // muster pushed its volunteers into the very list the aftermath then counted
+      // survivors from — a total wipe reported "YOUR LOSSES: none". Every branch below
+      // therefore assigns a COPY, and the aftermath reads this snapshot, never save.troops.
+      const survivorTypes = (result.survivors || []).map(t => t.type);
+      // Why the fight ended, in the terms the panel needs. result.heroHp is
+      // Math.max(1, hero.hp), so 1 is the fallen lord; save.heroHp below is post-regen
+      // and cannot answer this. A defeat with the column intact is the lord going down.
+      const heroFell = !result.victory && !result.retreated && result.heroHp <= 1;
       if (result.victory) {
         save.gold += result.loot;
         // Plan 029: veterancy is battles WON and walked out of. Awarded here and only
@@ -156,13 +166,19 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
         save.toast = null;
         onWinExtra && onWinExtra(); // camp raids set their own toast (razed count, remnants)
         if (!save.toast) {
+          // Where to go next, and it has to still be true. This fired "raid the tents" on
+          // every victory without a toast of its own — after the last camp had been razed
+          // as well, which pointed the player at nothing that exists.
+          const next = world.liveCamps().length > 0
+            ? 'The camps are the objective: raid the tents.'
+            : 'Every camp is ash — Wolfsjaw Hold is all that is left to storm.';
           save.toast = result.lost > 0
-            ? `Victory — ${result.lost} men lost. The camps are the objective: raid the tents.`
-            : 'Victory, no losses! Raid the camps to stop the raids.';
+            ? `Victory — ${result.lost} men lost. ${next}`
+            : `Victory, no losses! ${next}`;
         }
       } else if (result.retreated) {
         // disengage: keep the survivors you actually rode out with, no gold loss
-        save.troops = result.survivors;
+        save.troops = (result.survivors || []).map(t => ({ ...t }));
         save.heroHp = Math.max(20, result.heroHp);
         save.toast = 'You disengage and ride clear';
         // The enemy party you fled from stays at the encounter, minus its actual dead.
@@ -175,7 +191,7 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
         const goldBeforeDefeat = save.gold;
         save.gold = Math.max(25, Math.round(save.gold * (1 - BALANCE.defeatGoldLoss)));
         goldLost = goldBeforeDefeat - save.gold;
-        save.troops = result.survivors || [];
+        save.troops = (result.survivors || []).map(t => ({ ...t }));
         save.heroHp = Math.round(save.heroMaxHp * 0.5);
         let nearest = WORLD.settlements[0], bd = Infinity;
         for (const s of WORLD.settlements) {
@@ -199,6 +215,15 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
         } else {
           save.toast = `Your men carry you to ${nearest.name} — the survivors regroup`;
         }
+        // Plan 039's second promise, said out loud. The muster was announced ("N
+        // volunteers rally") but the half that decides whether the next fight is
+        // survivable never was: while the warband is at or under its starting fighting
+        // weight, enforceBeatableFloor guarantees a party inside distress.partyRatio
+        // rather than beatablePartyRatio. Read from inDistress() AFTER the muster, so the
+        // line only appears when the guarantee it names is actually in force.
+        if (world.inDistress()) {
+          save.toast += '. Beaten this low, a fight you can win is kept on the map';
+        }
         // Defeat also leaves surviving roaming enemies in the world. This must run
         // after the teleport so restoration cannot accidentally use the new hero position.
         restoreRoamingParty();
@@ -216,8 +241,9 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
           retreated: result.retreated,
           loot: result.loot || 0,
           preTroopTypes,
-          survivorTypes: (result.survivors || []).map(t => t.type),
-          deadTypes: (result.deadTypes || []).slice(),
+          survivorTypes, // snapshotted above, before the muster could grow the column
+          heroFell,
+          deadTypes: (result.deadTypes || []).slice(), // ENEMY dead, from deadEnemyTypes
           enemyCompSnapshot,
           heroHp: save.heroHp, // POST-regen — result.heroHp would contradict the HUD
           heroMaxHp: save.heroMaxHp,
