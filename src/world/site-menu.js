@@ -7,15 +7,15 @@
 // seam a row calls). It owns no drawing — world-screens.js draws the model — and it owns no
 // rules: every row commits through the method that already held the rule, so a row's price
 // tag and its charge cannot disagree.
-import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=rd43c5efe0f57';
-import { bannerCost, bannerLabel } from '../progression.js?v=rd43c5efe0f57';
-import { ACTIONS } from '../input-actions.js?v=rd43c5efe0f57';
+import { PAL, UNIT_TYPES, oddsWord, ODDS_WORDS, armySlots } from '../data.js?v=rd77bf905fb0b';
+import { bannerCost, bannerLabel } from '../progression.js?v=rd77bf905fb0b';
+import { ACTIONS } from '../input-actions.js?v=rd77bf905fb0b';
 import {
   OWNERSHIP, SPECIALIZATIONS, REGION,
   encounterObjective, strongholdModifiers, strongholdAdvantageLines, settlementRecord,
   STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=rd43c5efe0f57';
-import { restAndHeal, expandArmy } from './settlement-interactions.js?v=rd43c5efe0f57';
+} from '../region.js?v=rd77bf905fb0b';
+import { restAndHeal, expandArmy } from './settlement-interactions.js?v=rd77bf905fb0b';
 
 const P = PAL.world;
 const specName = id => (SPECIALIZATIONS[id] || {}).name || id;

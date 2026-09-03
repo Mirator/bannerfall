@@ -380,6 +380,101 @@ test('the aftermath reports per-side casualties, loot, and post-regen hero HP', 
   expect(runtimeErrors).toEqual([]);
 });
 
+// ------------------------------------------------- audit 2026-09-03: what the aftermath says
+// The `world_aftermath` scenario covers the three plain endings. These three cases need the
+// fight to end in a specific STATE that only exists inside the battle (the column wiped, the
+// lord down) or on a specific MAP (every camp razed), so they drive the same production path
+// the scenario does — brief, confirm, a real Battle, a real endBattle, the real onEnd — and
+// read the aftermath model the next World built from it.
+async function fightTo(page, mode, opts = {}) {
+  return page.evaluate(({ mode, opts }) => {
+    window.game.scenario('world_brief', { kind: 'party', seed: 424242 });
+    const g = window.__g, world = g.scene;
+    if (opts.razeCamps) for (const c of world.save.camps) { if (c.id !== 'strong') c.razed = true; }
+    const preTroops = world.save.troops.map(t => t.type);
+    g.input.injectAction('confirm', true); g.update(1 / 60); g.input.injectAction('confirm', false);
+    if (g.sceneName !== 'battle') throw new Error('fixture setup: confirming the brief did not start a battle');
+    const battle = g.scene;
+    // The two states the panel had no words for. Both are reached by putting the fight in
+    // that state and then ending it, never by hand-building a result object.
+    if (mode === 'wipe') battle.troops.length = 0;
+    if (mode === 'heroFell') battle.hero.hp = 0;
+    battle.endBattle(mode === 'victory');
+    for (let i = 0; i < 400 && g.sceneName === 'battle'; i++) g.update(1 / 60);
+    const after = g.scene;
+    return {
+      scene: g.sceneName,
+      screen: after.screen,
+      preTroops,
+      troops: after.save.troops.map(t => t.type),
+      liveCamps: after.liveCamps().length,
+    };
+  }, { mode, opts });
+}
+
+// The muster used to be counted as survival: `save.troops = result.survivors` ALIASED the
+// result array, so Plan 039's volunteers were pushed into the very list the aftermath then
+// read survivor types from. A warband of four wiped to the last man reported "YOUR LOSSES:
+// none" (audit 2026-09-03, finding 1). Both facts are asserted here, because either alone
+// can be satisfied by a fix that breaks the other: the panel must report four dead AND the
+// save must still hold the four the muster rallied.
+test('a wipe reports every man lost while the muster still refills the column', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const result = await fightTo(page, 'wipe');
+  expect(result.scene).toBe('world');
+  expect(result.screen.kind).toBe('aftermath');
+  expect(result.screen.victory).toBe(false);
+  expect(result.preTroops.length).toBe(BALANCE.startTroops);
+  const lost = result.screen.playerLosses.reduce((n, row) => n + row.count, 0);
+  expect(lost).toBe(result.preTroops.length);
+  // …and the recovery still happened: the column is back at the playable floor.
+  expect(result.troops.length).toBe(BALANCE.distress.musterTo);
+  expect(result.screen.reason).toBe('Your warband was cut down');
+  // The enemy side of the ledger is unaffected by the same array (deadTypes is the enemy's
+  // dead, from battle.deadEnemyTypes) — pinned so a fix on one side cannot silently rewrite
+  // the other.
+  expect(Array.isArray(result.screen.enemyLosses)).toBe(true);
+  expect(runtimeErrors).toEqual([]);
+});
+
+// A lord cut down while his braced spears watched rendered as DEFEAT, losses none, and no
+// reason at all (finding 13). The headline reason names which of the two happened.
+test('the aftermath says why a defeat happened: the lord fell, or the warband was cut down', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const fell = await fightTo(page, 'heroFell');
+  expect(fell.screen.kind).toBe('aftermath');
+  expect(fell.screen.victory).toBe(false);
+  expect(fell.screen.reason).toBe('Your lord fell');
+  // The exact case the audit recorded: the men are all still standing, so the losses list
+  // is genuinely empty and the reason line is the only thing that explains the DEFEAT.
+  expect(fell.screen.playerLosses).toEqual([]);
+  const wiped = await fightTo(page, 'wipe');
+  expect(wiped.screen.reason).toBe('Your warband was cut down');
+  expect(runtimeErrors).toEqual([]);
+});
+
+// "The camps are the objective: raid the tents" fired on every victory without a toast of
+// its own, including after the last camp had been razed — pointing the player at nothing
+// that exists (finding 17).
+test('the raid-the-camps prompt is gone once no camp is left, and points at Wolfsjaw instead', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const live = await fightTo(page, 'victory');
+  expect(live.liveCamps).toBeGreaterThan(0);
+  expect(live.screen.consequence).toContain('raid the tents');
+
+  const razed = await fightTo(page, 'victory', { razeCamps: true });
+  expect(razed.liveCamps).toBe(0);
+  expect(razed.screen.kind).toBe('aftermath');
+  expect(razed.screen.victory).toBe(true);
+  expect(razed.screen.consequence).not.toContain('raid the tents');
+  expect(razed.screen.consequence).not.toMatch(/Raid the camps/i);
+  expect(razed.screen.consequence).toContain('Wolfsjaw');
+  expect(runtimeErrors).toEqual([]);
+});
+
 // ---------------------------------------------------------------- Plan 029: the perk choice
 // The perk screen rides on the same world-scene modal machinery Plan 021 built for the
 // brief and Milestone 025 reused for the specialization choice. These tests assert the
