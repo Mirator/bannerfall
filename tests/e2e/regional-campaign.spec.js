@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { WORLD, BALANCE, lootFor, enemyStrength } from '../../src/data.js';
+import { WORLD, BALANCE, lootFor, enemyStrength, heaviestLightBody } from '../../src/data.js';
 import { RAID, REGION, SPECIALIZATIONS } from '../../src/region.js';
 import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 
@@ -1019,5 +1019,232 @@ test('the final stronghold victory ends the campaign with the regional summary c
   expect(m.finalGold).toBe(180 + winnings);
   expect(m.specs).toEqual(['Ashford: Barracks', 'Coldwell: Watchtower']);
   expect(summary.runCleared).toBe(true); // the campaign is over; Enter starts fresh
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+// ---------------------------------------------------------------------------------------
+// Campaign-rule defects from the 2026-09-03 gameplay audit. Each of the four below is a
+// rule the codebase STATED somewhere and did not actually enforce.
+// ---------------------------------------------------------------------------------------
+
+// The heaviest single body in the game, and therefore the tolerance every clamp assertion
+// needs: `rollComposition` adds WHOLE bodies and can only stop once the target is crossed.
+const ONE_BODY = Math.max(...['bandit', 'raider', 'brute', 'wolf'].map(t => enemyStrength([t])));
+
+test('the floor guarantee never leaves a LONE BRUTE above the beatable cap', async ({ page }) => {
+  // `trimToBeatable` pops bodies off the end and stops at one, because an empty party is
+  // not an encounter. The body it stopped at was never checked: `rollComposition`'s brute
+  // gate reads the TARGET and nothing else, so a comp whose first draw is a brute is one
+  // body of weight 3.07 — and the floor handed the campaign that party while promising it
+  // was beatable. Two spearmen put the warband inside `BALANCE.distress` (weight 2.53
+  // against `distress.atWeight` 4.56), which is where the window opens: the weak band's
+  // top targets 3.24, enough for the brute gate, against a cap of 0.9 x 2.53.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const out = await page.evaluate(({ ratio }) => {
+    const w = window.__g.scene;
+    w.save.troops = [{ type: 'spear' }, { type: 'spear' }];
+    const mine = w.myStrength();
+    const beatable = mine * ratio;
+    // 1) The seam, on the exact input popping cannot fix.
+    const substituted = w.trimToBeatable(['brute'], beatable);
+    // 2) The trim is documented as unable to perturb the campaign stream, so the
+    //    substitution must not roll for its replacement body. This is the world's FIRST
+    //    simRng draw; the comparison run below re-derives it from the same seed.
+    const nextDraw = w.simRng();
+    // 3) The hole was REACHABLE from the production roller, not only from the fixture above.
+    let loneBrutes = 0;
+    for (let i = 0; i < 400; i++) {
+      const comp = w.rollComp(3.1);
+      if (comp.length === 1 && comp[0] === 'brute') loneBrutes++;
+    }
+    // 4) And the property end to end, through the real floor guarantee: whatever it rolls,
+    //    something on the map is inside the player's reach when it returns.
+    const overCap = [];
+    const huge = () => ({
+      camp: 'c1', x: 2600, y: 400, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: Array.from({ length: 30 }, () => 'brute'),
+      home: { x: 2600, y: 400 }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+      occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+      _navGoalVisibility: new Float64Array(w.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+    });
+    for (let i = 0; i < 400; i++) {
+      w.parties.length = 0;
+      w.parties.push(huge());
+      w.enforceBeatableFloor();
+      if (!w.parties.some(p => w.strength(p.comp) <= beatable)) {
+        const added = w.parties[w.parties.length - 1];
+        overCap.push(added.comp.join('+') + ' @ ' + w.strength(added.comp).toFixed(2));
+      }
+    }
+    return { mine, beatable, substituted, nextDraw, loneBrutes, overCap };
+  }, { ratio: BALANCE.distress.partyRatio });
+
+  // The fixture really is the distressed case the audit describes.
+  expect(out.mine).toBeLessThanOrEqual(BALANCE.distress.atWeight);
+  expect(enemyStrength(['brute'])).toBeGreaterThan(out.beatable);
+  // The lone brute is REPLACED, not popped away, and by the heaviest light body that fits —
+  // a party the player can still lose to, not a token wolf.
+  expect(out.substituted).toEqual([heaviestLightBody(out.beatable)]);
+  expect(enemyStrength(out.substituted)).toBeLessThanOrEqual(out.beatable);
+  // Non-vacuity: the production roller does produce the pathological comp at this target.
+  expect(out.loneBrutes, 'the lone-brute comp was never rolled — this fixture proves nothing')
+    .toBeGreaterThan(0);
+  expect(out.overCap.slice(0, 5), 'the floor returned with nothing inside the beatable cap')
+    .toEqual([]);
+
+  // A fresh world on the same seed hands out the same first draw: the trim consumed none.
+  // The scheduler is still parked (openWorld replaced Game.update), so nothing ticks here.
+  const untouched = await page.evaluate((seed) => {
+    window.game.scenario('world', { seed });
+    return window.__g.scene.simRng();
+  }, SEED);
+  expect(out.nextDraw).toBe(untouched);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('a garrison roll respects the encounter weight clamp, like every other generated force', async ({ page }) => {
+  // `BALANCE.encounterWeightClamp` is a body-count safety bound as much as a balance one
+  // (Plan 028), and `spawnParty`, the regional dispatch and the stronghold wave all apply
+  // it. `rollGarrison` was the one generator that did not, so a maximum-stage campaign
+  // targeted about 26 at Wolfsjaw against a clamp of 22 — outside the bound every other
+  // assertion in the suite holds the generators to.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const out = await page.evaluate(({ camps, cw }) => {
+    const w = window.__g.scene;
+    // Top of the stage curve: all four settlements held and all three linked camps razed
+    // (7 points), plus a warband big enough to drive the correction to its ceiling.
+    for (const s of w.save.settlements) s.owner = 'player';
+    for (const id of ['c1', 'c2', 'c3']) w.save.camps.find(c => c.id === id).razed = true;
+    w.save.troops = Array.from({ length: 36 }, () => ({ type: 'spear' }));
+    const base = w.encounterBase();
+    return {
+      base,
+      rolls: camps.map(c => {
+        const garrison = w.rollGarrison(c);
+        return {
+          id: c.id,
+          raw: Math.max(c.size * cw, base * (c.tier || 1)),
+          weight: w.strength(garrison),
+          bodies: garrison.length,
+        };
+      }),
+    };
+  }, {
+    // The whole camp record, not a summary: `rollGarrison` seeds its frozen roll on the
+    // camp's coordinates and reads `stronghold` for the brute cap.
+    camps: WORLD.camps.map(c => ({ id: c.id, x: c.x, y: c.y, size: c.size, tier: c.tier, stronghold: !!c.stronghold })),
+    cw: BALANCE.campWeightPerSize,
+  });
+
+  const cl = BALANCE.encounterWeightClamp;
+  // Non-vacuity: at least one camp's unclamped target really does leave the clamp here.
+  expect(out.rolls.some(r => r.raw > cl.max),
+    `no camp target exceeded ${cl.max} at base ${out.base.toFixed(2)} — the fixture proves nothing`)
+    .toBe(true);
+  for (const r of out.rolls) {
+    expect(r.bodies, `${r.id} rolled an empty garrison`).toBeGreaterThan(0);
+    // One-body tolerance in both directions: the roller adds whole bodies and can only
+    // stop once the target is crossed.
+    expect(r.weight, `${r.id} weighed ${r.weight.toFixed(2)}, outside the clamp (raw target ${r.raw.toFixed(2)})`)
+      .toBeLessThanOrEqual(cl.max + ONE_BODY);
+    expect(r.weight, `${r.id} weighed ${r.weight.toFixed(2)}, below the clamp`)
+      .toBeGreaterThanOrEqual(cl.min - ONE_BODY);
+  }
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('the floor guarantee prices its rewrite off the campaign STAGE, not off the warband', async ({ page }) => {
+  // TWO QUESTIONS, TWO NUMBERS (Plan 038). Every generator target reads `encounterBase()`;
+  // only "what can this player beat" reads `myStrength()`. The floor's last-resort branch —
+  // the one that rewrites an existing band when there is no room to add one — still
+  // multiplied its band by `mine`, so for a large warband it wrote a fight priced off the
+  // player's own weight, which is the exact coupling that slice removed. The trim it feeds
+  // still reads the `mine`-based cap, because that is the other question.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const out = await page.evaluate(() => {
+    const w = window.__g.scene;
+    // No live camp: the ADD branch is unavailable, so the rewrite branch is what runs.
+    for (const id of ['c1', 'c2', 'c3']) w.save.camps.find(c => c.id === id).razed = true;
+    w.save.troops = Array.from({ length: 20 }, () => ({ type: 'spear' }));
+    w.parties.length = 0;
+    w.parties.push({
+      camp: 'strong', x: 2600, y: 400, vx: 0, vy: 0, facing: 0, bob: 0,
+      comp: Array.from({ length: 30 }, () => 'brute'),
+      home: { x: 2600, y: 400 }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+      occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+      _navGoalVisibility: new Float64Array(w.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+    });
+    const mine = w.myStrength(), base = w.encounterBase();
+    w.enforceBeatableFloor();
+    return { mine, base, parties: w.parties.length, weight: w.strength(w.parties[0].comp) };
+  });
+
+  const even = BALANCE.partyTiers.even;
+  expect(out.parties, 'the rewrite branch must not add a party').toBe(1);
+  // A warband this far past the stage curve makes the two prices unmistakably different:
+  // the stage band tops out near 14 while the warband band starts above 21.
+  expect(out.mine * even.min).toBeGreaterThan(out.base * even.max + ONE_BODY);
+  expect(out.weight, `the rewrite weighed ${out.weight.toFixed(2)}, outside the stage band`)
+    .toBeLessThanOrEqual(out.base * even.max + ONE_BODY);
+  expect(out.weight, 'the rewrite is still priced off the warband').toBeLessThan(out.mine * even.min);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('razing the last camp leaves the March alive: the hold fields it, and the bands it took in count', async ({ page }) => {
+  // Two halves of ONE counting rule, and each half was a defect.
+  //
+  //   1. `partyCap()` returned 0 with no live camp left and `updatePartySpawns` had no
+  //      source, so razing the third camp stopped every spawn — and with it every fight
+  //      and all the loot a fight pays — at the point the campaign asks the player to go
+  //      and storm Wolfsjaw. The cap floors at 2 and the hold is the source.
+  //   2. `campVictoryExtra` re-homes surviving bands to the hold on that same raze, and
+  //      `campParties()` excludes hold-homed bands, so nothing bounded them at all and the
+  //      live count could sit above the cap indefinitely. They are counted here, against
+  //      the hold's side of the same cap.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const out = await page.evaluate(({ x, y, holdId }) => {
+    const w = window.__g.scene;
+    for (const id of ['c1', 'c2', 'c3']) w.save.camps.find(c => c.id === id).razed = true;
+    w.parties.length = 0;
+    // Ashford's sanctuary keeps a spawned band from clashing and ending the observation;
+    // keepAwake runs the map with the hero stopped (Plan 023 freezes it otherwise).
+    w.hero.x = x; w.hero.y = y;
+    w.raidCdT = 1e9; // isolate: no regional dispatch may ride during the fixture
+    window.game.keepAwake(true);
+    const cap = w.partyCap();
+    window.__tick(45);  // the 30s arm, plus room
+    const afterFirst = w.parties.map(p => p.camp);
+    window.__tick(200); // five more spawn windows
+    const filled = { cap, camps: w.parties.map(p => p.camp), count: w.parties.length };
+
+    // The other half: the hold already holds cap-many re-homed bands, exactly as the last
+    // raze leaves it. The spawn timer must see no room.
+    w.parties.length = 0;
+    for (let i = 0; i < cap; i++) {
+      w.parties.push({
+        camp: holdId, x: 2600 + i * 30, y: 400, vx: 0, vy: 0, facing: 0, bob: 0,
+        comp: ['bandit'],
+        home: { x: 2600, y: 400 }, wander: null, wanderT: 999, waryT: 0, clashT: 0,
+        occupying: null, raid: null, navT: 0, navGoal: null, navFor: null,
+        _navGoalVisibility: new Float64Array(w.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
+      });
+    }
+    window.__tick(200);
+    return { afterFirst, filled, atCap: w.parties.length, scene: window.__g.sceneName };
+  }, { x: S('ashford').x, y: S('ashford').y, holdId: REGION.strongholdId });
+
+  expect(out.scene).toBe('world');
+  // The map is not dead: the cap floors at 2 and the hold is the spawn source.
+  expect(out.filled.cap).toBe(2);
+  expect(out.afterFirst, 'nothing spawned once the last camp fell').toEqual([REGION.strongholdId]);
+  expect(out.filled.camps).toEqual([REGION.strongholdId, REGION.strongholdId]);
+  // ...and it stops at the cap rather than filling the March forever.
+  expect(out.filled.count).toBe(out.filled.cap);
+  // Re-homed bands COUNT: at the cap, the timer adds nothing.
+  expect(out.atCap, 'the re-homed remnants were not counted against the cap').toBe(out.filled.cap);
   assertNoRuntimeErrors(runtimeErrors);
 });
