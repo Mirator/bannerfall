@@ -1,20 +1,68 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r3729900262ac';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3729900262ac';
-import { Sfx } from './audio.js?v=r3729900262ac';
-import { Battle } from './battle.js?v=r3729900262ac';
-import { World } from './world.js?v=r3729900262ac';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r3729900262ac';
-import { FIELD } from './battle/constants.js?v=r3729900262ac';
-import { ACTIONS } from './input-actions.js?v=r3729900262ac';
-import { createWebPlatform } from './platform/web-platform.js?v=r3729900262ac';
-import { SaveRepository } from './persistence/save-repository.js?v=r3729900262ac';
-import { buildSummaryModel } from './world-screens.js?v=r3729900262ac';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r3729900262ac';
-import { perkChoiceDue, perkMods } from './progression.js?v=r3729900262ac';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r86e441c703d5';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r86e441c703d5';
+import { Sfx } from './audio.js?v=r86e441c703d5';
+import { Battle } from './battle.js?v=r86e441c703d5';
+import { World } from './world.js?v=r86e441c703d5';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=r86e441c703d5';
+import { FIELD } from './battle/constants.js?v=r86e441c703d5';
+import { ACTIONS } from './input-actions.js?v=r86e441c703d5';
+import { createWebPlatform } from './platform/web-platform.js?v=r86e441c703d5';
+import { SaveRepository } from './persistence/save-repository.js?v=r86e441c703d5';
+import { buildSummaryModel } from './world-screens.js?v=r86e441c703d5';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r86e441c703d5';
+import { perkChoiceDue, perkMods } from './progression.js?v=r86e441c703d5';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+
+// ---------------------------------------------------------------- device pixel ratio
+// The canvas element is CSS-sized (index.html pins #game to 100vw/100vh); its BACKING
+// STORE is that size multiplied by the display's device pixel ratio. Without this the
+// backing store was CSS-pixel sized and the compositor upscaled it, so every 1.5-2.6px
+// stroke and 11-13px HUD label was blurred on a scaled or Retina display.
+//
+// Only the backing store changes. `view` is the LOGICAL size in CSS pixels, and it is what
+// layout must read: camera.w/h, every HUD rect and hit region, Camera.toWorld() and the
+// pointer all stay in CSS pixels, so nothing in the simulation or the layout code can see
+// the ratio at all. canvas.width/height are device pixels and mean nothing to layout.
+//
+// Capped at 2: past 2x the extra fill costs real frame time for a difference no player can
+// see, and a 3x phone would otherwise ask the fixed-timestep loop to paint nine times the
+// pixels of a 1x display.
+const MAX_DPR = 2;
+const view = { w: window.innerWidth || 1280, h: window.innerHeight || 720 };
+let viewScale = 1;
+
+function currentViewScale() {
+  const ratio = window.devicePixelRatio;
+  return Math.min(Number.isFinite(ratio) && ratio > 0 ? ratio : 1, MAX_DPR);
+}
+
+// The device scale is composed into the context's own setTransform rather than applied once
+// per frame or per resize, because it could not survive either: the draw paths reset the
+// transform mid-frame in five modules (`ctx.setTransform(1,0,0,1,0,0)` here, in
+// world-screens.js and in both render-scene.js files) and Camera.apply() installs its own
+// zoom matrix outright. Composing it means an identity reset still means "one unit is one
+// CSS pixel" for every caller, present and future, without a single draw site knowing the
+// ratio exists. At ratio 1 every argument passes through unmultiplied, so frames are
+// identical to the pre-DPR ones — which is what keeps the visual baselines (captured at
+// deviceScaleFactor 1) byte-for-byte valid. Call counts are unchanged, so the structural
+// Canvas budgets in test:perf are untouched.
+const deviceSetTransform = ctx.setTransform.bind(ctx);
+ctx.setTransform = function (a, b, c, d, e, f) {
+  if (a && typeof a === 'object') {
+    // setTransform(DOMMatrix) form. Nothing in src/ uses it today; handled so a future
+    // caller cannot silently drop the device scale.
+    const m = a;
+    a = m.a; b = m.b; c = m.c; d = m.d; e = m.e; f = m.f;
+  } else if (a === undefined) {
+    a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+  }
+  const s = viewScale;
+  deviceSetTransform(a * s, b * s, c * s, d * s, e * s, f * s);
+};
+ctx.resetTransform = function () { ctx.setTransform(1, 0, 0, 1, 0, 0); };
 
 // Solid haze tone for distant scenery — blending colors and filling opaque avoids the
 // seams that globalAlpha leaves where a mountain's overlapping facets double-composite.
@@ -36,10 +84,21 @@ function mixColor(a, b, t) {
 }
 
 function resize() {
-  canvas.width = window.innerWidth || 1280;
-  canvas.height = window.innerHeight || 720;
+  view.w = window.innerWidth || 1280;
+  view.h = window.innerHeight || 720;
+  viewScale = currentViewScale();
+  const backingW = Math.max(1, Math.round(view.w * viewScale));
+  const backingH = Math.max(1, Math.round(view.h * viewScale));
+  // Assigning width/height clears the surface and resets the transform to the native
+  // identity, so only write them when they actually changed and reinstate the device
+  // scale afterwards either way (a ratio change alone can leave the size untouched).
+  if (canvas.width !== backingW || canvas.height !== backingH) {
+    canvas.width = backingW;
+    canvas.height = backingH;
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (game) {
-    game.camera.w = canvas.width; game.camera.h = canvas.height; game.invalidate();
+    game.camera.w = view.w; game.camera.h = view.h; game.invalidate();
     // Plan 023: camera follow (which owns the map-edge clamp) is frozen while world time
     // is stale, so a resize during a freeze would leave cam.x/y unclamped against the new
     // viewport and show a void strip at the map edge until the player moved again.
@@ -50,12 +109,33 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+// A device-pixel-ratio change on its own — the window dragged to a display with a
+// different scale factor — does not always fire a resize event, so the ratio is watched
+// directly. The media query can only be written against the ratio in force when it is
+// built, so it is re-armed after every change.
+let dprQuery = null;
+function onDevicePixelRatioChange() {
+  resize();
+  watchDevicePixelRatio();
+}
+function watchDevicePixelRatio() {
+  if (typeof window.matchMedia !== 'function') return;
+  const next = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  if (typeof next.addEventListener !== 'function') return;
+  if (dprQuery && typeof dprQuery.removeEventListener === 'function') {
+    dprQuery.removeEventListener('change', onDevicePixelRatioChange);
+  }
+  dprQuery = next;
+  dprQuery.addEventListener('change', onDevicePixelRatioChange);
+}
+watchDevicePixelRatio();
+
 class Game {
   constructor({ platform, saves }) {
     this.platform = platform;
     this.saves = saves;
-    this.input = new Input(canvas, platform);
-    this.camera = new Camera(canvas.width, canvas.height);
+    this.input = new Input(canvas, platform, view);
+    this.camera = new Camera(view.w, view.h);
     this.sfx = new Sfx(saves);
     this.shakeRng = makeRng(deriveSeed(99, RNG_DOMAINS.CAMERA_SHAKE));
     this.scene = null;
@@ -345,17 +425,17 @@ class Game {
     if (this.sfx.muted && this.muteToastT > 0) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = 'rgba(30,42,74,0.85)';
-      rrect(ctx, canvas.width - 96, canvas.height - 40, 82, 26, 6); ctx.fill();
+      rrect(ctx, view.w - 96, view.h - 40, 82, 26, 6); ctx.fill();
       ctx.fillStyle = PAL.world.cream;
       ctx.font = '700 12px Inter, system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🔇 muted', canvas.width - 55, canvas.height - 27);
+      ctx.fillText('🔇 muted', view.w - 55, view.h - 27);
     }
     this.renderDirty = false;
   }
 
   drawPause() {
-    const W = canvas.width, H = canvas.height;
+    const W = view.w, H = view.h;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = 'rgba(21,22,46,0.72)';
     ctx.fillRect(0, 0, W, H);
@@ -689,7 +769,7 @@ class Game {
   }
 
   drawMenu() {
-    const W = canvas.width, H = canvas.height;
+    const W = view.w, H = view.h;
     const P = PAL.world;
     const layout = this.menuLayout(W, H);
     this.drawMenuScenery(W, H, P, layout.compact);
@@ -781,7 +861,7 @@ class Game {
   }
 
   drawVictory() {
-    const W = canvas.width, H = canvas.height;
+    const W = view.w, H = view.h;
     const P = PAL.world;
     ctx.fillStyle = P.ink;
     ctx.fillRect(0, 0, W, H);
