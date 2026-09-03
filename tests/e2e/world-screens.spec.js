@@ -342,6 +342,27 @@ test('aftermath blocks world input and freezes grace, then decays only after dis
   expect(runtimeErrors).toEqual([]);
 });
 
+test('ESCAPE over a pre-battle brief neither pauses the game nor answers the brief', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await boot(page);
+  const result = await page.evaluate(() => {
+    window.game.scenario('world_brief', { kind: 'party', seed: 424242 });
+    const g = window.__g;
+    const opened = g.scene.screen && g.scene.screen.kind;
+    g.input.injectKey('Escape', true); g.update(1 / 60); g.input.injectKey('Escape', false);
+    const after = { kind: g.scene.screen && g.scene.screen.kind, paused: g.paused, scene: g.sceneName };
+    // The brief still answers its own keys: CONFIRM starts the fight it describes.
+    g.input.injectAction('confirm', true); g.update(1 / 60); g.input.injectAction('confirm', false);
+    return { opened, after, scene: g.sceneName };
+  });
+  expect(result.opened).toBe('brief');
+  // Withdrawing is X and acknowledging is CONFIRM; Escape is neither, so it does nothing
+  // here. What it must NOT do is draw the pause scrim over the panel being answered.
+  expect(result.after).toEqual({ kind: 'brief', paused: false, scene: 'world' });
+  expect(result.scene).toBe('battle');
+  expect(runtimeErrors).toEqual([]);
+});
+
 test('a won stronghold raid reaches the victory ending instead of an aftermath screen', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
   await boot(page);
