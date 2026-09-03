@@ -1,13 +1,13 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r58dfe4489e7e';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r58dfe4489e7e';
-import { stableSortPrefix } from './spatial-index.js?v=r58dfe4489e7e';
-import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=r58dfe4489e7e';
-import { CROSSING_OPEN_HALF } from './terrain.js?v=r58dfe4489e7e';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r58dfe4489e7e';
-import { drawHud } from './hud.js?v=r58dfe4489e7e';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=rab0e43c27c5c';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=rab0e43c27c5c';
+import { stableSortPrefix } from './spatial-index.js?v=rab0e43c27c5c';
+import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=rab0e43c27c5c';
+import { CROSSING_OPEN_HALF } from './terrain.js?v=rab0e43c27c5c';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=rab0e43c27c5c';
+import { drawHud } from './hud.js?v=rab0e43c27c5c';
 
 // ------------------------------------------------------------- drawing
 

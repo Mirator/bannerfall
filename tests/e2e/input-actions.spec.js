@@ -41,14 +41,41 @@ test('named combat commands, pause, mute, and abandon actions preserve keyboard 
     const namedPaused = window.__g.paused;
     window.game.action('mute', true); window.__g.update(1 / 60); window.game.action('mute', false);
     const muted = window.__g.sfx.muted;
+    // Plan 041: one R only ARMS the abandon — it is a two-press confirmation now, because
+    // the single press deleted the only save the game keeps.
     window.game.action('abandonRun', true); window.__g.update(1 / 60); window.game.action('abandonRun', false);
-    return { keyboardCommand, namedCommand, keyboardPaused, namedPaused, muted, scene: window.__g.sceneName };
+    const sceneAfterOneR = window.__g.sceneName;
+    window.game.action('abandonRun', true); window.__g.update(1 / 60); window.game.action('abandonRun', false);
+    return {
+      keyboardCommand, namedCommand, keyboardPaused, namedPaused, muted,
+      sceneAfterOneR, scene: window.__g.sceneName,
+    };
   });
   expect(commands.keyboardCommand).toBe('charge');
   expect(commands.namedCommand).toBe(commands.keyboardCommand);
   expect(commands.namedPaused).toBe(commands.keyboardPaused);
   expect(commands.muted).toBe(true);
+  expect(commands.sceneAfterOneR).toBe('world');
   expect(commands.scene).toBe('menu');
+});
+
+test('ESCAPE over an open site menu closes it instead of stacking a pause on top', async ({ page }) => {
+  await boot(page);
+  const result = await page.evaluate(() => {
+    window.game.scenario('world_site', { kind: 'village', seed: 4403 });
+    const g = window.__g;
+    const opened = { screen: !!g.scene.screen, paused: g.paused };
+    // The real key, through the real binding: Escape is bound to PAUSE and to MENU_BACK,
+    // and the pause toggle used to consume it before any scene ticked.
+    g.input.injectKey('Escape', true); g.update(1 / 60); g.input.injectKey('Escape', false);
+    const closed = { screen: !!g.scene.screen, paused: g.paused, scene: g.sceneName };
+    // With nothing open, the same key is the ordinary pause again.
+    g.input.injectKey('Escape', true); g.update(1 / 60); g.input.injectKey('Escape', false);
+    return { opened, closed, pausedAfter: g.paused };
+  });
+  expect(result.opened).toEqual({ screen: true, paused: false });
+  expect(result.closed).toEqual({ screen: false, paused: false, scene: 'world' });
+  expect(result.pausedAfter).toBe(true);
 });
 
 test('named WITHDRAW action and its keyboard binding (KeyX) cancel a pre-battle brief identically', async ({ page }) => {

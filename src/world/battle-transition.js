@@ -12,15 +12,15 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r58dfe4489e7e';
-import { dist2, clamp } from '../engine.js?v=r58dfe4489e7e';
-import { ACTIONS } from '../input-actions.js?v=r58dfe4489e7e';
-import { buildBriefModel, veteranLine } from '../world-screens.js?v=r58dfe4489e7e';
-import { sampleBattlefield } from './battlefield-brief.js?v=r58dfe4489e7e';
-import { FIELD } from '../battle/constants.js?v=r58dfe4489e7e';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r58dfe4489e7e';
-import { awardVeterancy, perkMods } from '../progression.js?v=r58dfe4489e7e';
-import { performSiteAction } from './site-menu.js?v=r58dfe4489e7e';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=rab0e43c27c5c';
+import { dist2, clamp } from '../engine.js?v=rab0e43c27c5c';
+import { ACTIONS } from '../input-actions.js?v=rab0e43c27c5c';
+import { buildBriefModel, veteranLine } from '../world-screens.js?v=rab0e43c27c5c';
+import { sampleBattlefield } from './battlefield-brief.js?v=rab0e43c27c5c';
+import { FIELD } from '../battle/constants.js?v=rab0e43c27c5c';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=rab0e43c27c5c';
+import { awardVeterancy, perkMods } from '../progression.js?v=rab0e43c27c5c';
+import { performSiteAction } from './site-menu.js?v=rab0e43c27c5c';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -416,7 +416,18 @@ function resolveChoiceInput(world, inp, btn, key, options) {
     return options[world.screen.index].id;
   }
   // Dismissing is never destructive on any of these three, so it needs no arm.
-  if (inp.pressedAction(ACTIONS.WITHDRAW)) { world.game.sfx.uiMove(); return 'dismiss'; }
+  //
+  // Plan 041: MENU_BACK (Escape) dismisses as well as X. Escape never used to reach a
+  // scene at all — main.js's pause toggle consumed it first — so the site menu, a panel
+  // with a LEAVE button and nothing destructive about closing it, answered the one key
+  // every other screen in the game backs out with by stacking a pause scrim over itself.
+  // The brief and the aftermath are deliberately NOT given this: withdrawing from a fight
+  // and acknowledging its result are answers, not exits, and X stays the only key for the
+  // first. Escape simply does nothing on those two now.
+  if (inp.pressedAction(ACTIONS.WITHDRAW) || inp.pressedAction(ACTIONS.MENU_BACK)) {
+    world.game.sfx.uiMove();
+    return 'dismiss';
+  }
   return null;
 }
 
@@ -490,7 +501,8 @@ export function updateWorldScreens(world, inp, dt = 0) {
     const rows = world.screen.rows;
     if (!rows.length) {
       // An occupied settlement offers no rows: the only way out is out.
-      if (inp.pressedAction(ACTIONS.WITHDRAW) || inp.pressedAction(ACTIONS.CONFIRM)) {
+      if (inp.pressedAction(ACTIONS.WITHDRAW) || inp.pressedAction(ACTIONS.MENU_BACK) ||
+          inp.pressedAction(ACTIONS.CONFIRM)) {
         world.screen = null;
         world.game.invalidate();
       }
