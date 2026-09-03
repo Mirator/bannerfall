@@ -24,3 +24,5 @@ tests/e2e/zz-*.spec.js
 scripts/zz-*.json
 scripts/zz-enemy-command-probe.mjs
 scripts/zz-power-fit.mjs
+# new scratch probes are ignored by default; the cited ones already tracked stay tracked
+scripts/zz-*.mjs

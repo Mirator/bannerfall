@@ -54,6 +54,7 @@ conditions, and update its status row when done.
 | 038 | Measure the campaign arc, then make gold buy something | P0 | L | 020, 025, 028, 029, 035 | DONE - four slices plus one out-of-scope fix; the dominant strategy inverted; criterion 3 at 9/12 and held open with `test.fail`, see plan |
 | 039 | A beaten warband can come back, and the hold actually rides out | P0 | M | 020, 025, 035, 038 | DONE - criterion 3 went 9/12 -> 11/12; the raid cadence is fixed but cannot be exercised by the harness, see plan |
 | 040 | Orders that do what they say: a line that holds, arrows that land, a squad you can send | P0 | L | 019, 027, 029, 032, 033, 038 | IN PROGRESS - slice 2 (wolf stalk radius) shipped, see critiques/orders-comparison.md |
+| 041 | Ten verified defects from the second gameplay audit, fixed in parallel | P0 | M | 038, 039, 040 | DONE - nine worktree branches merged; wipe-losses report, wolf-test constant, scratch-file hygiene, floor guarantee, stronghold chip, stale copy, river wall-slide, DPR, pause shell, break HUD + deploy camera, see plan |
 
 Status values: `READY` | `IN PROGRESS` | `DONE` | `BLOCKED` (with one-line
 reason) | `REJECTED` (with one-line rationale).
