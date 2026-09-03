@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors } from './test-helpers.js';
-import { WOLF_STALK_R } from '../../src/battle/constants.js';
+import { WOLF_STALK_R, HOLD_REACH_MELEE } from '../../src/battle/constants.js';
 import { UNIT_TYPES } from '../../src/data.js';
 
 // Plan 019 balance harness.
@@ -458,6 +458,12 @@ test.describe('stance balance', () => {
   // WOLF_STALK_R, or lowering the archer's range, silently makes a pack unanswerable
   // again — which is the state this plan found the game in. Both bounds are read from the
   // shipped constants, so retuning either is allowed and decoupling them is not.
+  //
+  // The lower bound used to read UNIT_TYPES.spear.range (30), which is the gap a spearman
+  // closes to swing and NOT the ground a braced line covers. That left ~130px of slack:
+  // the assertion passed with WOLF_STALK_R nearly reverted to 250, which is the whole
+  // defect it exists to catch. The reach a held melee body actually reaches for anything
+  // at all is HOLD_REACH_MELEE (ai-phases.js `holdReach`), so that is the bound.
   const stand = { near: WOLF_STALK_R * 0.9, far: WOLF_STALK_R * 1.25 };
   expect(stand.far,
     `a stalking wolf stands out to ${stand.far}px, past the archer's ${UNIT_TYPES.archer.range}px ` +
@@ -466,9 +472,9 @@ test.describe('stance balance', () => {
   // And it must stay OUT of melee reach, or the pack stops being a skirmisher problem and
   // becomes a slow bandit that walks into the spears.
   expect(stand.near,
-    `a stalking wolf closes to ${stand.near}px, inside a braced spearman's reach — the pack ` +
-    'is no longer something melee cannot solve')
-    .toBeGreaterThan(UNIT_TYPES.spear.range);
+    `a stalking wolf closes to ${stand.near}px, inside a held line's ${HOLD_REACH_MELEE}px ` +
+    'reach — the pack is no longer something melee cannot solve')
+    .toBeGreaterThan(HOLD_REACH_MELEE);
 });
 
 test('each single-behavior fixture keeps its intended right answer', async ({ page }) => {
