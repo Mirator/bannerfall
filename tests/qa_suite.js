@@ -1013,11 +1013,13 @@ function runQaSuiteImpl() {
     // Plan 039: counted WITHOUT stronghold dispatches, which is what this record's name
     // has always claimed to measure. `partyCap()` is 2 + 2 per LIVE CAMP — it bounds what
     // the camps field through the spawn timer. A regional raid comes from Wolfsjaw, is
-    // bounded separately at one at a time, and must still be able to ride out after every
-    // camp has fallen (when partyCap() is 0) or the whole regional layer dies with the
-    // camps. That exemption was always there; before Plan 039 the raid simply never fired
-    // for a player holding nothing, so this fixture never saw one. Both bounds are
-    // asserted below rather than one being dropped.
+    // bounded separately at one at a time, and must still be able to ride out however full
+    // the March is, or the whole regional layer dies with the camps. That exemption was
+    // always there; before Plan 039 the raid simply never fired for a player holding
+    // nothing, so this fixture never saw one. Both bounds are asserted below rather than
+    // one being dropped. The hold's own bands are bounded too — the same cap, counted
+    // through `World.holdParties()`, which floors at 2 once no camp is left to field
+    // anything; see the last-camp record in tests/e2e/regional-campaign.spec.js.
     // Identified by WHERE THE BAND IS FROM, not by its current errand: a raider that has
     // arrived and taken a settlement clears `raidKind`, so filtering on that would count
     // it as a camp spawn the moment it stopped travelling. `partyCap()` is 2 + 2 per LIVE

@@ -1,27 +1,28 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=rab0e43c27c5c';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rab0e43c27c5c';
-import { SAVE_VERSION } from './save.js?v=rab0e43c27c5c';
+  heaviestLightBody,
+} from './data.js?v=r51c70b464559';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r51c70b464559';
+import { SAVE_VERSION } from './save.js?v=r51c70b464559';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
   strongholdPoints,
-} from './region.js?v=rab0e43c27c5c';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=rab0e43c27c5c';
+} from './region.js?v=r51c70b464559';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r51c70b464559';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=rab0e43c27c5c';
-import { drawScene } from './world/render-scene.js?v=rab0e43c27c5c';
+} from './progression.js?v=r51c70b464559';
+import { drawScene } from './world/render-scene.js?v=r51c70b464559';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rab0e43c27c5c';
+} from './world/battle-transition.js?v=r51c70b464559';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -31,16 +32,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=rab0e43c27c5c';
+} from './world/settlement-interactions.js?v=r51c70b464559';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=rab0e43c27c5c';
+} from './world/site-menu.js?v=r51c70b464559';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rab0e43c27c5c';
-import { WORLD_ART } from './world/visual-style.js?v=rab0e43c27c5c';
+} from './world/terrain.js?v=r51c70b464559';
+import { WORLD_ART } from './world/visual-style.js?v=r51c70b464559';
 
 const P = PAL.world;
 
@@ -592,7 +593,13 @@ export class World {
     let weakest = this.parties[0];
     for (const p of this.parties) if (this.strength(p.comp) < this.strength(weakest.comp)) weakest = p;
     const cl = BALANCE.encounterWeightClamp;
-    weakest.comp = this.trimToBeatable(this.rollComp(clamp(mine * evenBand(), cl.min, cl.max)), beatable);
+    // TWO QUESTIONS, TWO NUMBERS (Plan 038). This branch still priced its rewrite off
+    // `mine`, which is the one thing a generator target may not read — `spawnParty` above
+    // it, and every other generated force, multiplies the band by `encounterBase()`. The
+    // trim below keeps reading the `mine`-based `beatable`, because that is the OTHER
+    // question ("what can this player beat") and it is the one the floor exists to answer.
+    weakest.comp = this.trimToBeatable(
+      this.rollComp(clamp(this.encounterBase() * evenBand(), cl.min, cl.max)), beatable);
   }
 
   // Plan 028: the floor's promise has to be STRUCTURAL, not probabilistic. rollComposition
@@ -601,8 +608,20 @@ export class World {
   // the map — which is the exact deadlock the floor exists to prevent. Trimming bodies off
   // the end makes it exact, and it consumes no `simRng` draws, so adding it cannot perturb
   // the campaign stream. Never trims below one body: an empty party is not an encounter.
+  //
+  // The LAST body is the case popping alone cannot reach, and it was a HOLE IN THE FLOOR.
+  // `rollComposition` gates a brute on the TARGET and on nothing else, so a comp whose very
+  // first draw is a brute is one body of weight 3.07 — and against a starting warband's
+  // beatable cap of about 1.33 the loop above stops at exactly that body and returns a
+  // party the campaign promised would be beatable. The one remaining body is therefore
+  // REPLACED rather than popped, with the heaviest light body that fits under the cap
+  // (`heaviestLightBody` in data.js; a bandit when nothing in the game does, which is
+  // honestly above the cap rather than silently empty). The substitution is a table lookup,
+  // so it draws no `simRng` either and the no-perturbation rule above still holds for the
+  // whole function.
   trimToBeatable(comp, beatable) {
     while (comp.length > 1 && this.strength(comp) > beatable) comp.pop();
+    if (comp.length === 1 && this.strength(comp) > beatable) comp[0] = heaviestLightBody(beatable);
     return comp;
   }
 
@@ -611,17 +630,40 @@ export class World {
   liveCamps() {
     return WORLD.camps.filter(c => !c.stronghold && !this.save.camps.find(s => s.id === c.id).razed);
   }
-  // The parties `partyCap()` actually bounds: the ones LIVE CAMPS field. A band dispatched
-  // from Wolfsjaw is not one of them (Plan 039) — it is bounded separately, at one riding
-  // at a time, and it has to be able to ride out after every camp has fallen, which is
-  // exactly when this cap is 0. Counting it here would have let one raid suppress a camp
+  // The parties `partyCap()` bounds on the CAMPS' side: the ones live camps field, keyed on
+  // where the band is FROM (`p.camp`) and never on its current errand — a regional raider
+  // that has arrived and taken a settlement clears `raidKind`, so filtering on that would
+  // count it as a camp spawn the moment it stopped travelling. A band homed at Wolfsjaw is
+  // not one of these (Plan 039); it is counted against the same cap on the hold's own side,
+  // through `holdParties()` below. Counting it here would have let one raid suppress a camp
   // spawn forever, and after three razes would have made the two rules contradict.
   campParties() {
     return this.parties.filter(p => p.camp !== REGION.strongholdId);
   }
+  // The hold's OWN bands, and the other half of one coherent counting rule. Two things end
+  // up homed at Wolfsjaw and neither is a camp party: the regional dispatch, and the
+  // survivors `campVictoryExtra` re-homes on the last raze (settlement-interactions.js sets
+  // `p.camp = 'strong'` for every band whose camp just fell). Excluding both from
+  // `campParties()` and bounding neither is what let the LIVE count exceed the cap.
+  //
+  // THE RULE: `partyCap()` bounds each home separately — camp-homed bands through
+  // `campParties()`, hold-homed bands through this — and the one-regional-raid-at-a-time
+  // check in `updateRegionalPressure` rides on top of it, unchanged, because a raid must
+  // still be able to ride out however full the March is. Re-homed remnants are therefore
+  // COUNTED, against the hold's cap rather than the camps'. Only the last raze re-homes
+  // anybody, and that is exactly when no camp is left to field a band, so the two counts
+  // never compete for the same ceiling.
+  holdParties() {
+    return this.parties.filter(p => p.camp === REGION.strongholdId);
+  }
+  // Floored at 2 with no live camp left rather than 0. At 0 the March went DEAD the moment
+  // the third camp fell: `updatePartySpawns` had no source and no room, so nothing spawned,
+  // nothing could be fought and no loot came in — at the exact point the campaign asks the
+  // player to go and storm the hold. The hold fields those two itself (see
+  // `updatePartySpawns`), which is also where the remnants it re-homed are counted.
   partyCap() {
     const alive = this.liveCamps();
-    return alive.length ? 2 + alive.length * 2 : 0;
+    return alive.length ? 2 + alive.length * 2 : 2;
   }
 
   // Measured fighting weight (Plan 028): sqrt(damage x hit points), one spearman = 1.0.
@@ -639,15 +681,34 @@ export class World {
     const mine = this.myStrength();
     const base = this.encounterBase();
     // Plan 038: the frozen roll is quantised on the STAGE base rather than on `mine`, so
-    // what a camp holds is a function of how far the campaign has come. That also closes
-    // the audit's finding 12 as a side effect - scouting every camp on the opening ride
-    // used to freeze all three at starter weight for the rest of the run.
+    // what a camp holds is a function of how far the campaign has come rather than of a
+    // fractionally different warband — scouting the same camp twice cannot re-roll it.
+    //
+    // That is ALL the quantisation buys, and the comment that used to stand here claimed
+    // more: it said this closed the audit's finding 12 (every camp scouted on the opening
+    // ride is frozen at opening weight for the rest of the run). It does not. THE FREEZE
+    // REMAINS, and deliberately so: `st.garrison` is written exactly once, on first sight
+    // (`updateSettlementInteractions` in world/settlement-interactions.js), and is never
+    // re-rolled, so a later stage never reaches a camp the player has already scouted. The
+    // house rule is the reason — what you scouted is what you fight, and a garrison that
+    // grew between the scouting and the assault would make the badge the player read a lie.
+    // The stage quantisation only decides what a camp holds when it is FIRST sighted.
     const garrisonSeed = (camp.x * 31 + camp.y * 7 + Math.round(base) * 13 + (this.save.runSeed ?? 0)) >>> 0;
     const R = makeRng(deriveSeed(garrisonSeed, RNG_DOMAINS.WORLD_GARRISON));
     const caps = BALANCE.garrisonBruteCaps;
     // HARD rides inside encounterBase() now, so it touches every generated force rather
     // than only this one.
-    const target = Math.max(camp.size * BALANCE.campWeightPerSize, base * (camp.tier || 1));
+    // `encounterWeightClamp` applies here for the same reason it applies in spawnParty: it
+    // is a body-count safety bound as much as a balance one (Plan 028), and a garrison was
+    // the one generated force still exempt from it — a maximum-stage stronghold targets
+    // about 26 (33 on HARD) against a clamp of 22. It bounds the TARGET, so
+    // `rollComposition` can still cross it by one body, which is what every clamp
+    // assertion in the suite tolerates.
+    // Note the remnant ceiling in world/settlement-interactions.js reads the UNCLAMPED
+    // expression, so at the top of the curve it is the looser of the two bounds.
+    const cl = BALANCE.encounterWeightClamp;
+    const target = clamp(
+      Math.max(camp.size * BALANCE.campWeightPerSize, base * (camp.tier || 1)), cl.min, cl.max);
     const bruteCap = camp.stronghold ? caps.strongholdCap
       : mine >= caps.twoAt ? 2 : mine >= caps.oneAt ? 1 : 0;
     return rollComposition(target, R, BALANCE.compRolls.garrison, bruteCap);
@@ -769,9 +830,19 @@ export class World {
   // zero or many times per tick. Returns whether world time flows this tick.
   updateWorldClock(dt) {
     const flowing = this.timeFlowing();
+    // The toast timer is PRESENTATION, and it decays on every tick this phase runs —
+    // frozen or not. It used to ride inside the `flowing` branch with the simulation
+    // clocks, so a message raised on the last riding tick (a scout report, a refusal, the
+    // "camp razed" line) stayed on screen forever the moment the horse stopped: the player
+    // read a stale sentence with no way to dismiss it. Nothing about the freeze depends on
+    // it — `msgT` is read only by the two renderers and by the site menu's notice line, it
+    // feeds no simulation decision, and draining it consumes no RNG, so the frozen-tick
+    // promises (no `simRng`/`fxRng` draw, no party movement, no timer that gates a fight)
+    // are untouched. A modal still holds the toast, because a modal returns before this
+    // phase runs at all and the site menu deliberately shows the message under its scrim.
+    if (this.msgT > 0) this.msgT -= dt;
     if (flowing) {
       this.time += dt;
-      if (this.msgT > 0) this.msgT -= dt;
       this.staleT = Math.max(0, this.staleT - dt / BALANCE.worldFreezeFadeOutT);
     } else {
       this.staleT = Math.min(1, this.staleT + dt / BALANCE.worldFreezeFadeInT);
@@ -1412,12 +1483,25 @@ export class World {
     if (this.spawnT <= 0) {
       this.spawnT = 40;
       const alive = this.liveCamps();
-      if (alive.length && this.campParties().length < this.partyCap()) {
+      // Once every linked camp has fallen the HOLD ITSELF fields the March. Before this the
+      // timer had no source and, with `partyCap()` at 0, no room either: razing the third
+      // camp stopped every spawn, and with it every fight and all the loot a fight pays —
+      // at the exact point the campaign asks the player to go and storm Wolfsjaw. The
+      // count follows the source, which is the whole of the counting rule stated above
+      // `holdParties()`: camp-homed bands are bounded by the camps' cap, hold-homed bands
+      // (the re-homed remnants included) by the hold's.
+      const fielded = alive.length ? this.campParties() : this.holdParties();
+      if (fielded.length < this.partyCap()) {
         // Plan 020: the old fair-band guarantee (forcing almost every spawn into a
         // narrow 0.7-1.2x band) is gone. Every spawn draws from the weighted tiers in
         // spawnParty()/rollPartyBand(); enforceBeatableFloor() is the only remaining
         // safety net, and it only intervenes when nothing beatable exists at all.
-        const c = alive[(this.simRng() * alive.length) | 0];
+        //
+        // The camp draw stays INSIDE the guard and is skipped entirely when the hold is the
+        // source, so the `simRng` stream a campaign with live camps sees is byte-identical
+        // to what it saw before this branch existed.
+        const c = alive.length ? alive[(this.simRng() * alive.length) | 0]
+          : WORLD.camps.find(k => k.id === REGION.strongholdId);
         this.spawnParty(c);
         this.particles.ring(c.x, c.y, 40, P.ink, 0.5, 3);
         this.persistParties();

@@ -19,7 +19,7 @@
 //  3. NO 404s. Every name in SFX/MUSIC below must exist on disk. A missing file is a
 //     console error in Chromium, which is likewise a test failure — `audio.spec.js`
 //     asserts the whole manifest decodes.
-import { makeRng, deriveSeed, RNG_DOMAINS } from './engine.js?v=rab0e43c27c5c';
+import { makeRng, deriveSeed, RNG_DOMAINS } from './engine.js?v=r51c70b464559';
 
 // Resolved against this module, not against the document: the game is also served from a
 // project-Pages subpath, where a document-relative 'assets/...' would be right only by
