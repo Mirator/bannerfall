@@ -1,27 +1,27 @@
 // Campaign world — the Bannerlord bar: settlements, roaming parties, army snowball.
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
-} from './data.js?v=rf03ab8f72f41';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rf03ab8f72f41';
-import { SAVE_VERSION } from './save.js?v=rf03ab8f72f41';
+} from './data.js?v=r3ac1d341fd40';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r3ac1d341fd40';
+import { SAVE_VERSION } from './save.js?v=r3ac1d341fd40';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
   strongholdPoints,
-} from './region.js?v=rf03ab8f72f41';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=rf03ab8f72f41';
+} from './region.js?v=r3ac1d341fd40';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r3ac1d341fd40';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=rf03ab8f72f41';
-import { drawScene } from './world/render-scene.js?v=rf03ab8f72f41';
+} from './progression.js?v=r3ac1d341fd40';
+import { drawScene } from './world/render-scene.js?v=r3ac1d341fd40';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rf03ab8f72f41';
+} from './world/battle-transition.js?v=r3ac1d341fd40';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -31,16 +31,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=rf03ab8f72f41';
+} from './world/settlement-interactions.js?v=r3ac1d341fd40';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=rf03ab8f72f41';
+} from './world/site-menu.js?v=r3ac1d341fd40';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rf03ab8f72f41';
-import { WORLD_ART } from './world/visual-style.js?v=rf03ab8f72f41';
+} from './world/terrain.js?v=r3ac1d341fd40';
+import { WORLD_ART } from './world/visual-style.js?v=r3ac1d341fd40';
 
 const P = PAL.world;
 
@@ -135,11 +135,21 @@ export class World {
     this.pendingSpecChoice = (!this.save.won && game.pendingSpecChoice) || null;
     game.pendingSpecChoice = null;
 
-    // Milestone 025 Slice D: regional pressure is armed fresh on every World —
-    // including a reload — so a reloaded campaign can never open with an unavoidable
-    // raid already seconds away (the conservative-defaults rule). The timer only ever
-    // decays on live ticks, preserving the standing-still freeze invariant.
-    this.raidCdT = RAID.firstDelayT;
+    // Milestone 025 Slice D: regional pressure is armed fresh on a fresh campaign and on
+    // a RELOAD, so a reloaded campaign can never open with an unavoidable raid already
+    // seconds away (the conservative-defaults rule). The timer only ever decays on live
+    // ticks, preserving the standing-still freeze invariant.
+    //
+    // PLAN 039: it is no longer armed fresh after a BATTLE, and that distinction is the
+    // whole reason the regional layer had never fired. A World is rebuilt on every return
+    // from a fight, so the 110-second first delay restarted after every battle: a player
+    // who fought at all was never raided, and `raidsLanded` measured ZERO across 60
+    // scripted campaigns even after the target filter was widened. The clock rides across
+    // the battle on `game.pendingRaidCdT`, the same Game-level handoff `pendingAftermath`
+    // and `pendingSpecChoice` already use, so it costs no save field and no schema bump —
+    // and a genuine reload still re-arms, because that path carries nothing.
+    this.raidCdT = (save && game.pendingRaidCdT != null) ? game.pendingRaidCdT : RAID.firstDelayT;
+    game.pendingRaidCdT = null;
 
     this.hero = { x: this.save.x, y: this.save.y, vx: 0, vy: 0, facing: 0, bob: 0 };
     this.grace = save ? BALANCE.battleGrace : 0;   // ambush immunity after a battle
@@ -487,19 +497,31 @@ export class World {
   // reach, downgrade the weakest live party to an even-tier fight. This only ever
   // fires as an emergency correction; it is not a routine crutch like the deleted
   // fair-band guarantee, which forced nearly every spawn into a narrow band.
+  // Plan 039: is this campaign on the floor? Derived from the warband alone — no
+  // persisted counter, nothing to migrate — and read by the floor guarantee below and by
+  // nothing else. See the BALANCE.distress block in data.js for why it is a weight and
+  // not a losing streak.
+  inDistress() {
+    return this.myStrength() <= BALANCE.distress.atWeight;
+  }
+
   enforceBeatableFloor() {
     if (this.parties.length === 0) return;
     const mine = this.myStrength();
-    const beatable = mine * BALANCE.beatablePartyRatio;
+    // Plan 039: a beaten warband gets the tighter of the two promises. Everything below
+    // is unchanged — same single simRng draw for the band, same preference for adding a
+    // party over rewriting a scouted one, same exact trim.
+    const distressed = this.inDistress();
+    const beatable = mine * (distressed ? BALANCE.distress.partyRatio : BALANCE.beatablePartyRatio);
     if (this.parties.some(p => this.strength(p.comp) <= beatable)) return;
-    const { even } = BALANCE.partyTiers;
-    const evenBand = () => even.min + this.simRng() * (even.max - even.min);
+    const tier = distressed ? BALANCE.partyTiers.weak : BALANCE.partyTiers.even;
+    const evenBand = () => tier.min + this.simRng() * (tier.max - tier.min);
     // Prefer ADDING a beatable target over rewriting one the player may already have
     // read off a badge. `rollGarrison` sets the house rule that what you scouted is what
     // you fight, and silently weakening a party the player scouted breaks the same trust:
     // a lone 14-strength band used to become a 4 while the player watched.
     const alive = this.liveCamps();
-    if (alive.length && this.parties.length < this.partyCap()) {
+    if (alive.length && this.campParties().length < this.partyCap()) {
       const camp = alive[(this.simRng() * alive.length) | 0];
       this.spawnParty(camp, evenBand());
       this.trimToBeatable(this.parties[this.parties.length - 1].comp, beatable);
@@ -529,6 +551,14 @@ export class World {
   // Shared by the spawn timer and the floor guarantee so the cap formula exists once.
   liveCamps() {
     return WORLD.camps.filter(c => !c.stronghold && !this.save.camps.find(s => s.id === c.id).razed);
+  }
+  // The parties `partyCap()` actually bounds: the ones LIVE CAMPS field. A band dispatched
+  // from Wolfsjaw is not one of them (Plan 039) — it is bounded separately, at one riding
+  // at a time, and it has to be able to ride out after every camp has fallen, which is
+  // exactly when this cap is 0. Counting it here would have let one raid suppress a camp
+  // spawn forever, and after three razes would have made the two rules contradict.
+  campParties() {
+    return this.parties.filter(p => p.camp !== REGION.strongholdId);
   }
   partyCap() {
     const alive = this.liveCamps();
@@ -1218,11 +1248,32 @@ export class World {
     this.raidCdT -= dt;
     if (this.raidCdT > 0) return;
     this.raidCdT = RAID.intervalT;
-    const targets = WORLD.settlements.filter(s => {
+    // Plan 039: WOLFSJAW RIDES AT THE MARCH, NOT ONLY AT WHAT THE PLAYER HOLDS. This
+    // filter used to require `owner === PLAYER`, so a player who claimed nothing was never
+    // raided at all — and `campRaider` and `farmer` claim nothing by construction. Measured
+    // across 96 scripted campaigns in both of Plan 038's columns, `raidsLanded` was ZERO:
+    // the raid cadence, the defense battle, `graceAfterDefenseT` and the whole
+    // occupation-and-retake loop had never fired in a measured run.
+    //
+    // Held ground is still what the hold goes for first — punishing expansion is the
+    // mechanic's point. Only when there is none does it ride at neutral ground instead,
+    // which is not a new behaviour on the map: a broken-off party already seizes neutral
+    // settlements, and an occupied one cannot be claimed until it is driven out. That is
+    // the cost, and it is a fight the player can answer.
+    const unclaimed = s => !this.parties.some(p => p.raid === s.id || p.occupying === s.id);
+    const held = WORLD.settlements.filter(s => {
       const rec = settlementRecord(this.save, s.id);
-      return rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied &&
-        !this.parties.some(p => p.raid === s.id || p.occupying === s.id);
+      return rec && rec.owner === OWNERSHIP.PLAYER && !rec.occupied && unclaimed(s);
     });
+    // The break-off floor rule, verbatim (see World.isSettlementClaimed): a seizure only
+    // ever happens when at least one settlement stays fully unclaimed afterwards, so no
+    // sequence of raids can lock the player out of every settlement at once.
+    const neutral = WORLD.settlements.filter(s => {
+      const rec = settlementRecord(this.save, s.id);
+      return rec && rec.owner !== OWNERSHIP.PLAYER && !rec.occupied && unclaimed(s);
+    });
+    const seizing = held.length === 0;
+    const targets = seizing ? (neutral.length > 1 ? neutral : []) : held;
     if (!targets.length) return;
     // Only one regional raid may be active at a time.
     if (this.parties.some(p => p.raidKind === 'regional' && p.raid)) return;
@@ -1251,7 +1302,9 @@ export class World {
       _navGoalVisibility: new Float64Array(this.navNodes.length), _navGoalX: NaN, _navGoalY: NaN,
     });
     this.particles.ring(hold.x, hold.y, 46, P.enemy, 0.6, 4);
-    this.say(`Wolfsjaw rides out — raiders march on ${target.name}!`, 3.6);
+    this.say(seizing
+      ? `Wolfsjaw rides out — raiders move to seize ${target.name}!`
+      : `Wolfsjaw rides out — raiders march on ${target.name}!`, 3.6);
     this.persistParties();
   }
 
@@ -1288,7 +1341,7 @@ export class World {
     if (this.spawnT <= 0) {
       this.spawnT = 40;
       const alive = this.liveCamps();
-      if (alive.length && this.parties.length < this.partyCap()) {
+      if (alive.length && this.campParties().length < this.partyCap()) {
         // Plan 020: the old fair-band guarantee (forcing almost every spawn into a
         // narrow 0.7-1.2x band) is gone. Every spawn draws from the weighted tiers in
         // spawnParty()/rollPartyBand(); enforceBeatableFloor() is the only remaining

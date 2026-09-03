@@ -797,6 +797,97 @@ test('razing the last camp reinforces Wolfsjaw within its stage-priced ceiling, 
   assertNoRuntimeErrors(runtimeErrors);
 });
 
+test('the hold rides at the March even when the player holds nothing, and never seizes the last settlement', async ({ page }) => {
+  // Plan 039. Two defects kept the entire regional layer from ever firing, and both are
+  // asserted here because each alone was enough to make it dead code:
+  //
+  //   1. `updateRegionalPressure` only ever targeted PLAYER-HELD settlements, so a player
+  //      who claimed nothing was exempt. Two of the campaign harness's four policies claim
+  //      nothing by construction.
+  //   2. `raidCdT` was armed in the World constructor, and a World is rebuilt on every
+  //      return from a battle — so the 110-second first delay restarted after every fight.
+  //      A player who fought at all was never raided either.
+  //
+  // Measured across 60 scripted campaigns before the fix: `raidsLanded` was zero for every
+  // policy. This drives the world with no claims and no battles at all, which is the case
+  // that used to produce nothing.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const out = await page.evaluate(({ firstDelayT }) => {
+    const w = window.__g.scene;
+    w.parties.length = 0;          // isolate: only the hold's own dispatch may appear
+    w.hero.x = 700; w.hero.y = 1800; // far from every settlement, so nothing becomes a defense
+    window.game.keepAwake(true);
+    const seen = { dispatchedAt: null, target: null, seizedAt: null };
+    for (let i = 0; i < 60 * (firstDelayT + 120); i++) {
+      window.__tick(1 / 60);
+      if (window.__g.sceneName !== 'world') break;
+      const riding = w.parties.find(p => p.raidKind === 'regional' && p.raid);
+      if (riding && seen.dispatchedAt == null) {
+        seen.dispatchedAt = Math.round(w.time);
+        seen.target = riding.raid;
+      }
+      const occupied = w.save.settlements.filter(s => s.occupied);
+      if (occupied.length && seen.seizedAt == null) seen.seizedAt = Math.round(w.time);
+    }
+    seen.owned = w.save.settlements.filter(s => s.owner === 'player').length;
+    seen.occupied = w.save.settlements.filter(s => s.occupied).map(s => s.id);
+    seen.unclaimed = w.save.settlements.filter(s =>
+      !s.occupied && !w.parties.some(p => p.raid === s.id || p.occupying === s.id)).length;
+    seen.riding = w.parties.filter(p => p.raidKind === 'regional' && p.raid).length;
+    return seen;
+  }, { firstDelayT: RAID.firstDelayT });
+
+  expect(out.owned, 'the fixture must hold nothing — that is the case that used to be exempt').toBe(0);
+  expect(out.dispatchedAt, 'the hold never rode out at all').not.toBeNull();
+  // It rides on the documented cadence, not immediately: a fresh campaign still gets its
+  // quiet opening (the conservative-defaults rule the constructor comment states).
+  expect(out.dispatchedAt).toBeGreaterThanOrEqual(RAID.firstDelayT);
+  expect(WORLD.settlements.some(s => s.id === out.target)).toBe(true);
+  expect(out.seizedAt, 'the raid rode out but never arrived').not.toBeNull();
+  expect(out.occupied.length).toBeGreaterThan(0);
+  // The break-off floor rule, reused verbatim: a seizure never takes the last unclaimed
+  // settlement, so the player always has somewhere to go.
+  expect(out.unclaimed, 'the hold seized every settlement').toBeGreaterThanOrEqual(1);
+  // And only one rides at a time.
+  expect(out.riding).toBeLessThanOrEqual(1);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('the raid cadence is a campaign clock, not a per-battle one', async ({ page }) => {
+  // The second half of the defect above, isolated. A World is rebuilt on every return from
+  // a battle; before Plan 039 that re-armed `raidCdT` to RAID.firstDelayT, so a campaign
+  // that fought regularly reset the stronghold's patience every time and the raid never
+  // came. The clock now rides across the fight on `game.pendingRaidCdT` — the same
+  // Game-level handoff `pendingAftermath` and `pendingSpecChoice` use, so it costs no save
+  // field. A genuine RELOAD still re-arms, which is the behaviour the constructor's
+  // conservative-defaults comment asks for and which this pins from both sides.
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const out = await page.evaluate(() => {
+    const g = window.__g;
+    window.game.keepAwake(true);
+    const before = g.scene.raidCdT;
+    for (let i = 0; i < 60 * 30; i++) window.__tick(1 / 60);   // 30 flowing seconds
+    const spent = g.scene.raidCdT;
+    // A battle, driven through the production seam, and back to a fresh World.
+    g.scene.startBattle(['bandit'], 'RAID CLOCK', null);
+    g.scene.endBattle(true);
+    window.__tick(3);
+    const afterBattle = g.scene.raidCdT;
+    // A reload is a different thing: a World built with no save carries nothing over.
+    g.startWorld(null);
+    const afterReload = g.scene.raidCdT;
+    return { before, spent, afterBattle, afterReload, scene: g.sceneName };
+  });
+  expect(out.scene).toBe('world');
+  expect(out.spent).toBeLessThan(out.before - 25);           // the clock really ran down
+  expect(out.afterBattle, 'a battle re-armed the stronghold\'s patience')
+    .toBeCloseTo(out.spent, 1);
+  expect(out.afterReload, 'a reload must still open quiet').toBe(RAID.firstDelayT);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
 test('stronghold power states materially change the final battle', async ({ page }) => {
   const runtimeErrors = collectRuntimeErrors(page);
 

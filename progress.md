@@ -1310,3 +1310,61 @@ Gates: `npm test` 193 passed / 1 failed — the pre-existing Windows-only
 `battle-break.png` rasterization drift already on record from Plans 035 and 036,
 reconfirmed by measuring the untouched tree first. `npm run test:balance`,
 `npm run test:qa`, `npm run test:perf`, `npm run release:cache` + `npm run test:release`.
+
+## Plan 039 — a beaten warband can come back, and the hold rides out (2026-09-02)
+
+Plan 038's three named follow-ups, executed with the harness it built. Full numbers in
+`critiques/campaign-recovery-and-pressure.md`.
+
+- **Losing is recoverable.** `BALANCE.distress` is the campaign's second promise, read
+  through the one derived predicate `World.inDistress()` (the warband at or below its own
+  starting fighting weight — no persisted counter, no migration). While there the floor
+  guarantees a fight inside `distress.partyRatio` 0.90 instead of the 1.30 the data table
+  records as a 27.9% win, and a defeat musters the column back to the starting four rather
+  than two. Measured over 12 seeds: Plan 038's acceptance criterion 3 went **9/12 -> 11/12**,
+  `farmer`'s losses 68 -> 43 and its battle win rate 37% -> 60%, `campRaider`'s storm ratio
+  1.27 -> 0.98. Seed 12 is the demonstration - its post-wipe fights were 1.89/2.35/1.19 and
+  it reached the hold at weight 2.5; they are now 1.05/0.79/0.63 and it reaches it at 12.6.
+- **The hold actually rides out**, after two defects either of which alone made the whole
+  regional layer dead code. `updateRegionalPressure` only ever targeted player-HELD
+  settlements, so a player who claimed nothing was exempt; and `raidCdT` was armed in the
+  World constructor, which is rebuilt on every return from a battle, so the 110-second first
+  delay restarted after every fight and a player who fought was never raided either. Held
+  ground is still targeted first, neutral ground only when there is none, never the last
+  unclaimed one; the clock rides across the fight on `game.pendingRaidCdT` (no save field)
+  and re-arms only on a genuine reload. Both have their own regression test.
+- **The saturated `@sweep` fixture is re-based.** It installed the roster the stage curve
+  calls stage 7 into a stage-0 save, which after Plan 038 is the easiest fight the game can
+  produce: idle 94.2, chargeAll 100.0, a column pinned at the ceiling. Measured at three
+  candidate stages over the same 40 seeds x 3 camps, four held settlements puts every policy
+  in a measurable band (67.5 / 75.0 / 52.5 / 61.7) and WIDENS the guard's margin from 5.8 to
+  7.5 points. Chosen on headroom; the assertion is untouched and the whole grid is recorded.
+
+Two things did not go as the plan assumed, and both are recorded rather than papered over.
+
+A fifth harness policy, `rebuilder`, was written to measure whether a wiped campaign can
+climb back — and then DELETED, because the measurement was the answer: it took zero recovery
+fights and produced records indistinguishable from `campRaider`. After the muster, the
+ordinary shopping stop every policy already makes lifts a warband out of distress before the
+next objective, so recovery needs no special player and shipping the duplicate would have
+doubled the sweep's cost for no signal.
+
+And this plan's own criterion 3 - `raidsLanded` > 0 across the campaign sweep - is NOT met.
+A whole scripted campaign is 17 to 20 seconds of WORLD time (the clock runs only while the
+hero rides, and `stats.playT` looked large because it also accrues during battles), while
+`RAID.firstDelayT` is 110 of those seconds. The cadence cannot fire inside a measured run
+however the target filter behaves. The constants were deliberately not re-scaled to fit
+that: the harness under-counts real riding by an unknown factor, so tuning a campaign-length
+constant against it would be fitting to a known-biased instrument. The two underlying
+defects are fixed and proven by direct tests; re-scaling the cadence needs a travel model
+that reflects real riding, which is a harness change and the next plan's.
+
+Also: `World.partyCap()` now bounds what LIVE CAMPS field (`World.campParties()`) rather
+than every party on the map. It had to - a stronghold dispatch would otherwise suppress a
+camp spawn forever, and after three razes the cap is 0, which would make "the hold may ride
+out" and "the cap bounds every party" contradict each other.
+
+Gates: `npm test` 197 passed / 1 failed - the pre-existing Windows-only `battle-break.png`
+rasterization drift on record since Plan 035, which CI's font environment passes.
+`npm run test:balance`, `npm run test:qa`, `npm run test:perf`, `npm run release:cache` +
+`npm run test:release`.

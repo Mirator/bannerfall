@@ -132,9 +132,25 @@ test.describe('campaign arc', () => {
   });
 
   test('a warband that fought and spent storms Wolfsjaw at better odds than one that did not', { tag: '@sweep' }, async ({ page }) => {
-    // EXPECTED FAILURE on 3 of 12 seeds — Plan 038 acceptance criterion 3. Do not delete
-    // this annotation to tidy the suite and do not weaken the assertion; remove it when a
-    // warband that loses its early fights can still rebuild.
+    // EXPECTED FAILURE on 1 of 12 seeds — Plan 038 acceptance criterion 3. Do not delete
+    // this annotation to tidy the suite and do not weaken the assertion.
+    //
+    // PLAN 039 TOOK IT FROM 3 FAILING SEEDS TO 1, by making a wipe recoverable: a defeat
+    // musters the column back to the starting four instead of two, and while the warband
+    // is at or below its own starting weight the floor guarantees a fight inside
+    // `BALANCE.distress.partyRatio` rather than the 27.9%-win 1.30. Seed 12 is the
+    // demonstration — its post-wipe fights were 1.89, 2.35 and 1.19 and it reached the hold
+    // at fighting weight 2.5; they are now 1.05, 0.79 and 0.63, it wins them, and it
+    // reaches the hold at 12.6. Across the sweep `farmer`, the policy that loses most,
+    // dropped from 68 losses to 43 and its battle win rate went 37% -> 60%.
+    //
+    // Seed 1 is what is left, and it is not the death spiral: `campRaider` reaches the hold
+    // at weight 6.6 having razed two camps, which is a warband that recovered — it simply
+    // did not recover FAR enough to beat `claimRush`'s fixed 6.6-weight, stage-1 storm on
+    // that particular map. One seed of twelve, on a policy that attempts each camp once and
+    // never comes back to the one it lost, is a property of the scripted player as much as
+    // of the game (see the harness header). Remove this annotation when it measures 12/12,
+    // not before.
     //
     // THE PROPERTY THIS GUARDS IS NOW MOSTLY TRUE, and the record matters because it was
     // not. Measured over 12 seeds before and after (`critiques/campaign-arc-comparison.md`):

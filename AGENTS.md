@@ -654,6 +654,34 @@ March. Two rules there are load-bearing: the ceiling bounds what may be ADDED an
 never trims a garrison the player already scouted, and the walk over the bands
 consumes no RNG. See `critiques/campaign-arc-comparison.md`.
 
+Recovery from a wipe (Plan 039): `BALANCE.distress` is the campaign's SECOND promise,
+and `World.inDistress()` is the one predicate that reads it — a warband at or below
+its own starting fighting weight. While there, `enforceBeatableFloor` guarantees a
+fight inside `distress.partyRatio` instead of `beatablePartyRatio` (which the data
+table records as a 27.9% win, right for a healthy warband and a death sentence for a
+beaten one), and a defeat musters the column back to `distress.musterTo`. Distress is
+DERIVED from the warband, never persisted: there is no consecutive-defeat counter and
+no migration, and adding one would be the wrong rule anyway — the game should help a
+warband that is on the floor, not one that happened to lose twice while strong.
+
+Regional pressure (Plan 039) has two rules that were each, alone, enough to make the
+whole layer dead code, and both are now pinned by tests:
+
+- The hold rides at held ground FIRST and at neutral ground when there is none, so a
+  player who claims nothing is not exempt. A seizure reuses the break-off floor rule:
+  it never takes the last unclaimed settlement.
+- `raidCdT` is a CAMPAIGN clock. A World is rebuilt on every return from a battle, and
+  arming the timer in the constructor restarted the 110-second first delay after every
+  fight — so a player who fought was never raided. It rides across on
+  `game.pendingRaidCdT` (the `pendingAftermath` handoff, so no save field), stashed
+  AFTER `onWinExtra` runs because a capture grants its grace by writing `raidCdT`. A
+  genuine reload still re-arms, which is the conservative-defaults rule.
+
+`World.partyCap()` bounds what LIVE CAMPS field, counted through `World.campParties()`,
+not every party on the map. A stronghold dispatch is outside it — bounded separately at
+one riding at a time — because after three razes the cap is 0 and the hold must still
+be able to ride out.
+
 Claiming neutral ground (Plan 038): a claim is a PURCHASE, priced by settlement
 kind in `BALANCE.claimCost` and charged in `World.claimSettlement`, which refuses
 when the purse is short. It buys no raid grace — `winSettlement` extends

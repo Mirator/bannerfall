@@ -96,6 +96,7 @@ function runQaSuiteImpl() {
   const HEAL_COST = BALANCE.healCost;
   const DEFEAT_GOLD_LOSS = BALANCE.defeatGoldLoss;
   const LOOT_BASE = BALANCE.lootBase;
+  const MUSTER_TO = BALANCE.distress.musterTo;
   const ARMY_CAP_BASE = BALANCE.armyCapBase;
   const BATTLE_GRACE = BALANCE.battleGrace;
   const HERO_START = WORLD.heroStart;
@@ -349,7 +350,7 @@ function runQaSuiteImpl() {
   //     (world.js's rally-floor branch is otherwise never exercised — a no-combat
   //     forced defeat always keeps every troop, so the floor never binds)
   // ======================================================================
-  record('defeat_volunteer_rally_floor_tops_up_to_two', () => {
+  record('defeat_volunteer_rally_musters_the_column_back', () => {
     g.scenario('world');
     const save = G.scene.save;
     save.gold = 100;
@@ -362,8 +363,14 @@ function runQaSuiteImpl() {
     g.step(3);
     assert(g.scene() === 'world', 'did not return to world after forced defeat, scene=' + g.scene());
     const w = g.state().world;
-    assert(w.troops === 2, 'expected the volunteer-rally floor to top 1 survivor up to 2, got ' + w.troops);
-    return 'volunteer-rally floor confirmed: 1 actual survivor topped up to ' + w.troops;
+    // Plan 039: the muster brings the column back to BALANCE.distress.musterTo, read from
+    // the table rather than restated, because the number is what the death spiral turned
+    // on. Two survivors and a 25-gold purse could not take even the fight the floor
+    // guarantee promised them; the starting four is a position the campaign already
+    // considers playable.
+    assert(w.troops === MUSTER_TO,
+      'expected the volunteer-rally muster to top 1 survivor up to ' + MUSTER_TO + ', got ' + w.troops);
+    return 'volunteer-rally muster confirmed: 1 actual survivor topped up to ' + w.troops;
   });
 
   // ======================================================================
@@ -1001,21 +1008,46 @@ function runQaSuiteImpl() {
     assert(w.parties.length === start + 2,
       'expected the second spawn by 75s (30 + 40), got ' + w.parties.length);
 
-    // and it fills to the cap and then stops
+    // and it fills to the cap and then stops.
+    //
+    // Plan 039: counted WITHOUT stronghold dispatches, which is what this record's name
+    // has always claimed to measure. `partyCap()` is 2 + 2 per LIVE CAMP — it bounds what
+    // the camps field through the spawn timer. A regional raid comes from Wolfsjaw, is
+    // bounded separately at one at a time, and must still be able to ride out after every
+    // camp has fallen (when partyCap() is 0) or the whole regional layer dies with the
+    // camps. That exemption was always there; before Plan 039 the raid simply never fired
+    // for a player holding nothing, so this fixture never saw one. Both bounds are
+    // asserted below rather than one being dropped.
+    // Identified by WHERE THE BAND IS FROM, not by its current errand: a raider that has
+    // arrived and taken a settlement clears `raidKind`, so filtering on that would count
+    // it as a camp spawn the moment it stopped travelling. `partyCap()` is 2 + 2 per LIVE
+    // camp, and the hold is not one, so `p.camp` is the honest discriminator.
+    const HOLD_ID = WORLD.camps.find(c => c.stronghold).id;
+    const roaming = () => w.parties.filter(p => p.camp !== HOLD_ID).length;
+    const dispatched = () => w.parties.filter(p => p.camp === HOLD_ID).length;
+    const inTransit = () => w.parties.filter(p => p.raidKind === 'regional' && p.raid).length;
     let guard = 0;
-    while (w.parties.length < cap && g.scene() === 'world' && guard++ < 20) run(40);
+    while (roaming() < cap && g.scene() === 'world' && guard++ < 20) run(40);
     assert(g.scene() === 'world', 'left the world scene while filling to the cap, scene=' + g.scene());
-    assert(w.parties.length === cap, 'the map never filled to its cap of ' + cap + ', stalled at ' + w.parties.length);
+    assert(roaming() === cap, 'the map never filled to its cap of ' + cap + ', stalled at ' + roaming());
     run(120); // three more spawn windows with no room left
-    assert(w.parties.length === cap,
-      'the spawn timer pushed past the cap of ' + cap + ' to ' + w.parties.length);
+    assert(roaming() === cap,
+      'the spawn timer pushed past the cap of ' + cap + ' to ' + roaming());
+    assert(inTransit() <= 1,
+      'more than one stronghold raid was riding at once: ' + inTransit());
+    // Plan 039 reuses the break-off floor rule for a seizure: the hold never takes the
+    // LAST unclaimed settlement, so the player always has somewhere to go.
+    const unclaimed = w.save.settlements.filter(st =>
+      !st.occupied && !w.parties.some(p => p.raid === st.id || p.occupying === st.id));
+    assert(unclaimed.length >= 1,
+      'the stronghold seized every settlement — nothing was left unclaimed');
 
     // a spawn persists the roster: the snapshot the campaign saves must agree with the map
     const snapshot = w.syncLiveStateToSave();
     assert((snapshot.parties || []).length === w.parties.length,
       'the persisted snapshot holds ' + (snapshot.parties || []).length + ' parties but the map holds ' + w.parties.length);
     return 'spawned on the 30s arm, held the 40s cadence, filled to the cap of ' + cap +
-      ' and stopped there, with the roster persisted';
+      ' and stopped there (plus ' + dispatched() + ' stronghold dispatch), roster persisted';
   });
 
   // ======================================================================
@@ -1137,7 +1169,33 @@ function runQaSuiteImpl() {
     const stillFree = scene.save.settlements.filter(s => !s.occupied &&
       !scene.parties.some(p => p.raid === s.id || p.occupying === s.id));
     assert(stillFree.length >= 1, 'expected at least one settlement to remain fully unclaimed, got ' + stillFree.length);
-    return 'worst case driven: the beatable floor produced a winnable party, and ' +
+
+    // 3. Plan 039: THE SECOND PROMISE. The floor above guarantees a fight at
+    // `beatablePartyRatio` (1.30), which the data table itself records as a 27.9% win for
+    // a charging player — the right number for a healthy warband, and a death sentence for
+    // one that has just been wiped. A campaign at or below its own starting weight gets a
+    // tighter promise instead. Driven from the same worst case: wipe the column down, then
+    // confirm the floor offers something inside the distress band rather than the even one.
+    scene.save.troops = [{ type: 'spear' }];
+    const wiped = scene.myStrength();
+    assert(scene.inDistress(),
+      'a one-man column must count as distress, weight ' + wiped.toFixed(2) +
+      ' against ' + BALANCE.distress.atWeight.toFixed(2));
+    for (const p of scene.parties) p.comp = overwhelming();
+    scene.enforceBeatableFloor();
+    const relief = wiped * BALANCE.distress.partyRatio;
+    assert(scene.parties.some(p => scene.strength(p.comp) <= relief),
+      'the distress floor left a beaten warband nothing inside ' + BALANCE.distress.partyRatio +
+      'x of its weight (' + relief.toFixed(2) + '); weakest was ' +
+      Math.min(...scene.parties.map(p => scene.strength(p.comp))).toFixed(2));
+    // And the relief really is tighter than the standing promise, or it is not relief.
+    assert(BALANCE.distress.partyRatio < BALANCE.beatablePartyRatio,
+      'the distress ratio must be tighter than beatablePartyRatio');
+    assert(!scene.inDistress.call({ ...scene, save: { ...scene.save, troops: Array.from({ length: 9 }, () => ({ type: 'knight' })) },
+      myStrength: () => 99 }), 'a healthy warband must not read as distressed');
+
+    return 'worst case driven: the beatable floor produced a winnable party, the distress ' +
+      'floor produced one inside ' + BALANCE.distress.partyRatio + 'x for a wiped column, and ' +
       stillFree.map(s => s.id).join(',') + ' stayed unclaimed and reachable';
   });
 

@@ -523,6 +523,34 @@ export const BALANCE = {
   // so this moved with it; a fight at the floor measures 27.9% for a charging player, which
   // is the hardest fight the campaign promises always to have on offer, not the easiest.
   beatablePartyRatio: 1.30,
+  // Plan 039: THE SECOND PROMISE, for a warband that has been beaten off the map.
+  //
+  // `beatablePartyRatio` is the right number for a healthy warband and it does not move
+  // here. But a fight at 1.30 is a measured 27.9% win for a player who charges, and after
+  // a wipe that is the only thing the campaign offers: defeat floors gold at 25 and used
+  // to muster the column back to TWO spearmen, so the move on the table was a fight lost
+  // seven times in ten, which cuts the purse again. Measured across 48 campaigns, three of
+  // `campRaider`'s twelve seeds ended exactly there — 25 gold, fighting weight 2.5 to 6.6
+  // — and they are precisely the seeds that fail Plan 038's acceptance criterion 3.
+  // Audit finding 4, the "death spiral by design".
+  //
+  // Distress is DERIVED from the warband, never persisted: no consecutive-defeat counter,
+  // no save field, no migration. A campaign is in distress exactly when its warband is no
+  // better off than the day it started, which is what `atWeight` reads. A fresh campaign
+  // therefore counts as being in distress, and that is correct rather than a boundary
+  // accident — the guarantee only ever fires when nothing beatable is on the map at all,
+  // and a starting warband deserves the same winnable fight a beaten one does.
+  distress: {
+    atWeight: STAGE_BASE,   // the fresh warband's own fighting weight, computed above
+    // What the floor guarantees INSTEAD while there. The top of the `weak` band, which
+    // Plan 035 measured at 93.6% for a charging player: a fight a beaten warband can
+    // actually win, rather than one it might.
+    partyRatio: 0.90,
+    // The column a defeat musters back up to at the settlement that took you in, when
+    // below it and not on HARD. Two spearmen is not a warband; the starting four is the
+    // position the campaign already considers playable.
+    musterTo: FRESH_TROOPS,
+  },
   // Hard bounds on any generated encounter's fighting weight, replacing Plan 020's [2, 24]
   // strength-point clamp. The floor stops a wiped-out warband from being offered a fight
   // with nothing in it; the ceiling stops a maxed knight army from summoning a party the

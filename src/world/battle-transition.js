@@ -12,15 +12,15 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=rf03ab8f72f41';
-import { dist2, clamp } from '../engine.js?v=rf03ab8f72f41';
-import { ACTIONS } from '../input-actions.js?v=rf03ab8f72f41';
-import { buildBriefModel, veteranLine } from '../world-screens.js?v=rf03ab8f72f41';
-import { sampleBattlefield } from './battlefield-brief.js?v=rf03ab8f72f41';
-import { FIELD } from '../battle/constants.js?v=rf03ab8f72f41';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=rf03ab8f72f41';
-import { awardVeterancy, perkMods } from '../progression.js?v=rf03ab8f72f41';
-import { performSiteAction } from './site-menu.js?v=rf03ab8f72f41';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r3ac1d341fd40';
+import { dist2, clamp } from '../engine.js?v=r3ac1d341fd40';
+import { ACTIONS } from '../input-actions.js?v=r3ac1d341fd40';
+import { buildBriefModel, veteranLine } from '../world-screens.js?v=r3ac1d341fd40';
+import { sampleBattlefield } from './battlefield-brief.js?v=r3ac1d341fd40';
+import { FIELD } from '../battle/constants.js?v=r3ac1d341fd40';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r3ac1d341fd40';
+import { awardVeterancy, perkMods } from '../progression.js?v=r3ac1d341fd40';
+import { performSiteAction } from './site-menu.js?v=r3ac1d341fd40';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -183,9 +183,15 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
           if (d < bd) { bd = d; nearest = s; }
         }
         save.x = nearest.x; save.y = nearest.y + 80;
-        if (save.troops.length < 2 && !save.hard) {
-          while (save.troops.length < 2) save.troops.push({ type: 'spear' });
-          save.toast = `Carried to ${nearest.name} — village volunteers rally to your banner`;
+        // Plan 039: the muster brings the column back to a position the campaign already
+        // considers playable (BALANCE.distress.musterTo, the starting four) rather than to
+        // two men. Two spearmen plus a 25-gold purse is not a warband that can take even
+        // the fight the floor guarantee promises it — that was the death spiral, measured.
+        const musterTo = BALANCE.distress.musterTo;
+        if (save.troops.length < musterTo && !save.hard) {
+          const rallied = musterTo - save.troops.length;
+          while (save.troops.length < musterTo) save.troops.push({ type: 'spear' });
+          save.toast = `Carried to ${nearest.name} — ${rallied} village volunteer${rallied === 1 ? '' : 's'} rally to your banner`;
         } else if (save.troops.length === 0 && save.hard) {
           // hard mode: no volunteers — only your squire stays
           save.troops.push({ type: 'spear' });
@@ -222,6 +228,17 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
           consequence,
         };
       }
+      // Plan 039: the raid cadence is a CAMPAIGN clock, not a per-World one. Hand it
+      // across to the World about to be built, so returning from a fight does not re-arm
+      // the stronghold's first delay — see the constructor in world.js for why that reset
+      // made the whole regional layer dead code for any player who fought.
+      //
+      // Stashed HERE and not at battle entry, which is where it was written first and
+      // wrong: `onWinExtra` runs a few lines above, on this same soon-to-be-discarded
+      // World, and a capture grants `RAID.graceAfterCaptureT` by writing `world.raidCdT`.
+      // A snapshot taken at entry would carry the pre-battle value across and silently
+      // throw that grace away.
+      world.game.pendingRaidCdT = world.raidCdT;
       world.game.startWorld(save);
     },
   });
