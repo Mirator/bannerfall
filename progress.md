@@ -1500,3 +1500,14 @@ playtest on a second port): all nine fixes confirmed in play, and the "Refresh" 
 chiefly a chargeAll field fight that never resolves on four of four seeds (most likely the
 terrain stall Plan 035 recorded at world 1600,900; not yet bisected), and a defeat baseline
 that shows a reason line real play cannot produce.
+
+## Plan 042 — September 4 P1/P2 audit corrections
+
+User request: Fix all P1 and P2 findings in subagents, make a plan, implement, open a PR, and merge.
+
+- [x] Plan committed; isolated campaign, platform/harness, and battle executors dispatched.
+- [x] Pre-change baseline: 234 browser tests, 15 tooling checks, and release-cache verification passed on 9c5270d.
+- [ ] Review and integrate all nine fixes; preserve the P3 backlog.
+- [ ] Run combined full, visual/performance, and balance gates; inspect changed UX.
+- [ ] Open PR, wait for passing CI, merge, and verify origin/main.
+

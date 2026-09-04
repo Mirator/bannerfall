@@ -546,6 +546,12 @@ Two v5 rules that are easy to get wrong:
   slot cost then binds every future recruit. A CURRENT save whose cap does not cover its own
   column is malformed, not old, and is refused.
 Preserve `bf_save`/`bf_save_test` isolation.
+Plan 042 repairs the narrow negative cooldown residue that released saves could
+contain: `waryT` and `clashT` in the inclusive range `[-1/60, 0)` normalize to zero
+during save migration/canonicalization. The bound records the historical fixed
+tick and must not grow with future scheduler changes. More-negative values,
+nonfinite values, wrong types, and unrelated malformed fields remain rejected.
+Runtime countdowns saturate at zero so new saves do not need this recovery.
 Run `npx playwright test tests/e2e/save-schema.spec.js` and
 `npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
 the required `npm test` gate.
