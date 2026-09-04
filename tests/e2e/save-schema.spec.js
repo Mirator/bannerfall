@@ -3,6 +3,7 @@ import {
   collectRuntimeErrors, assertNoRuntimeErrors, openPlayerGame as openPlayerGameWith,
 } from './test-helpers.js';
 import { WORLD } from '../../src/data.js';
+import { migrateSave, parseSave } from '../../src/save.js';
 
 // This suite owns its own clear key so it cannot wipe the other persistence suite's slot.
 const openPlayerGame = (page, runtimeErrors) => openPlayerGameWith(page, runtimeErrors, 'qa-clear-save');
@@ -701,3 +702,51 @@ test('invalid nested shapes and numeric ranges are rejected', async ({ page }) =
 });
 
 const UNIT_MAX_HP = 101;
+
+// Plan 042: only the residue released 60Hz countdowns could write is repaired.
+test('expired negative party timers recover on reload without widening other validation', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openPlayerGame(page, runtimeErrors);
+  await startRawWorld(page, 1142);
+  const base = await currentSave(page);
+  base.parties = [{ camp: 'c1', x: 700, y: 1200, home: { x: 700, y: 1200 },
+    comp: ['bandit'], waryT: -0.01666666666652956, clashT: -0.016666666666650353 }];
+  const expected = structuredClone(base);
+  expected.parties[0].waryT = 0;
+  expected.parties[0].clashT = 0;
+  expect(parseSave(JSON.stringify(base))).toEqual(expected);
+  expect(parseSave(JSON.stringify(expected))).toEqual(expected);
+  // v4 had the same writer: its existing migration receives the same narrow repair.
+  const legacy = structuredClone(base);
+  legacy.version = 4; delete legacy.perks; delete legacy.banner;
+  expect(migrateSave(legacy)).toEqual(expected);
+  for (const key of ['waryT', 'clashT']) {
+    for (const value of [-1 / 60, -Number.EPSILON, 0, 2]) {
+      const candidate = structuredClone(expected);
+      candidate.parties[0][key] = value;
+      expect(migrateSave(candidate).parties[0][key]).toBe(Math.max(0, value));
+    }
+    for (const value of [-1 / 60 - 1e-8, -1, NaN, Infinity, -Infinity, '-0.01', null]) {
+      const candidate = structuredClone(expected);
+      candidate.parties[0][key] = value;
+      expect(migrateSave(candidate), `${key}=${String(value)}`).toBeNull();
+    }
+  }
+  const unrelated = structuredClone(base);
+  unrelated.gold = -0.01;
+  expect(migrateSave(unrelated)).toBeNull();
+  await reloadWithRealSave(page, base);
+  expect(await page.evaluate(() => window.__g.loadRun())).toEqual(expected);
+  await page.keyboard.press('c');
+  await page.waitForFunction(() => window.__g.sceneName === 'world');
+  const written = await page.evaluate(async () => {
+    window.__g.persistRun();
+    await window.__g.saves.flush();
+    return JSON.parse(localStorage.getItem('bf_save'));
+  });
+  expect(written.parties).toEqual(expected.parties);
+  await page.reload();
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  expect(await page.evaluate(() => window.__g.loadRun().parties)).toEqual(expected.parties);
+  assertNoRuntimeErrors(runtimeErrors);
+});

@@ -21,8 +21,8 @@
 // never from `fxRng` (decoration only). The pre-existing area-scaled rock/tree scatter below
 // keeps using `simRng` exactly as it did before this phase — it is not new, and its draw count
 // and order are unchanged, so it does not shift anything downstream.
-import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r3b20caaaa2ab';
-import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r3b20caaaa2ab';
+import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r66ae1724dd52';
+import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r66ae1724dd52';
 
 // See the corridor-safety comment above the hill loop in buildFromBrief for the measurement
 // behind these two numbers.
@@ -322,7 +322,8 @@ function placeCamp(battle, cx, cy, fwd, side, rng, fxRng) {
   const GATE_INDEX = 3;
   for (let i = 0; i < 7; i++) {
     const base = at(1.6, -0.9 + i * 0.3);
-    const px = base.x + (fxRng() - 0.5) * 14, py = base.y + (fxRng() - 0.5) * 14;
+    // Shared plank/collider positions are terrain; only decorative size draws from FX.
+    const px = base.x + (rng() - 0.5) * 14, py = base.y + (rng() - 0.5) * 14;
     battle.props.push({ kind: 'plank', x: px, y: py, s: 11 + fxRng() * 5 });
     if (i === GATE_INDEX) continue; // the gate: no collider here
     battle.obstacles.push({ kind: 'none', x: px, y: py, r: 13 });

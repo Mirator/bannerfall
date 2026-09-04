@@ -16,7 +16,7 @@
 //
 // Determinism/boundary notes: this module reads only simulation state (positions,
 // terrain arrays), consumes NO RNG, and never reads camera/HUD/render state.
-import { clamp } from '../engine.js?v=r3b20caaaa2ab';
+import { clamp } from '../engine.js?v=r66ae1724dd52';
 
 // Build the runtime objective from the plain descriptor, or null for the classic
 // elimination fight. Called from the Battle constructor AFTER buildTerrain so the
@@ -91,8 +91,8 @@ export function buildObjective(battle) {
 // resolveBattleResult, so the resolution always sees this tick's status.
 export function updateObjectivePhase(battle, dt) {
   // Stronghold reinforcement waves (Entrenched holds): arrive on schedule at the
-  // enemy edge, behind their line. Spawning bumps totalEnemies so kill accounting
-  // and the loot formula stay coherent.
+  // enemy edge, behind their line. spawnEnemy records reward types; totalEnemies
+  // counts arrivals for the kill accounting shown in the HUD.
   if (battle.pendingWaves && battle.pendingWaves.length) {
     const due = battle.pendingWaves.filter(w => battle.time >= w.at);
     if (due.length) {

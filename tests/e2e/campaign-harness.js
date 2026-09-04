@@ -117,6 +117,7 @@ async function campaignBody(opts) {
     strongholdStateAtStorm: null, strongholdPointsAtStorm: null,
     storm: null,
     fights: [],
+    claimVisits: [],
   };
 
   let world = null;          // the CURRENT World instance (rebuilt after every battle)
@@ -456,7 +457,8 @@ async function campaignBody(opts) {
   }
 
   // --- route steps ---------------------------------------------------------
-  function claim(settlement) {
+  function claim(settlement, stage) {
+    rec.claimVisits.push({ stage, id: settlement.id });
     rideTo(settlement.x, settlement.y);
     const rec0 = world.save.settlements.find(s => s.id === settlement.id);
     if (!rec0 || rec0.owner === 'player') return;
@@ -539,11 +541,11 @@ async function campaignBody(opts) {
 
 
   // Greedy nearest-first over the settlements still worth claiming.
-  function nextUnclaimed() {
+  function nextUnclaimed(attempted) {
     let best = null, bd = Infinity;
     for (const s of WORLD.settlements) {
       const st = world.save.settlements.find(x => x.id === s.id);
-      if (!st || st.owner === 'player') continue;
+      if (!st || st.owner === 'player' || attempted.has(s.id)) continue;
       const d = Math.hypot(s.x - world.hero.x, s.y - world.hero.y);
       if (d < bd) { bd = d; best = s; }
     }
@@ -572,16 +574,24 @@ async function campaignBody(opts) {
     return best;
   }
 
+  // Refusal is still a completed visit. Each route stage gets a fresh set so
+  // the mixed policy may deliberately retry a refusal AFTER its intervening raid.
+  function claimStage(stage, count) {
+    const attempted = new Set();
+    for (let i = 0; i < count; i++) {
+      const s = nextUnclaimed(attempted);
+      if (!s) break;
+      attempted.add(s.id);
+      claim(s, stage);
+    }
+  }
+
   // --- the policies --------------------------------------------------------
   function runPolicy() {
     if (policy === 'claimRush') {
       // The route the audit called the credible fastest win: claim everything, fight
       // nothing until the storm. No purchases at all.
-      for (let i = 0; i < WORLD.settlements.length; i++) {
-        const s = nextUnclaimed();
-        if (!s) break;
-        claim(s);
-      }
+      claimStage('claimRush', WORLD.settlements.length);
       storm();
       return;
     }
@@ -596,10 +606,10 @@ async function campaignBody(opts) {
     }
     if (policy === 'captureThenRaze') {
       // claim two, raze one, claim two, raze two, storm
-      for (let i = 0; i < 2; i++) { const s = nextUnclaimed(); if (s) claim(s); }
+      claimStage('beforeRaid', 2);
       shop(false, false);
       raid(RAIDABLE[0]);
-      for (let i = 0; i < 2; i++) { const s = nextUnclaimed(); if (s) claim(s); }
+      claimStage('afterRaid', 2);
       shop(false, false);
       raid(RAIDABLE[1]);
       shop(false, false);

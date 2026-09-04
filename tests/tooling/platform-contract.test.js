@@ -188,3 +188,57 @@ test('settings survive both stored shapes and recover from a corrupt blob', asyn
   assert.equal(corrupt.values.has(PLATFORM_SLOTS.SETTINGS), false,
     'a corrupt settings blob must be removed, not left to fail again on the next boot');
 });
+
+test('only recovery of the failed slot clears a durability error', async () => {
+  const fake = fakePlatform();
+  const repository = await new SaveRepository(fake.platform).initialize();
+  const write = fake.platform.storage.write;
+  fake.platform.storage.write = async (slot, raw) => {
+    if (slot === PLATFORM_SLOTS.CAMPAIGN) throw new Error('campaign disk full');
+    return write(slot, raw);
+  };
+  await assert.rejects(repository.writeCampaign(false, JSON.parse(validSaveRaw())), /campaign disk full/);
+  await repository.setMuted(true);
+  await repository.writeCampaign(true, JSON.parse(validSaveRaw()));
+  await assert.rejects(repository.flush(), /campaign disk full/);
+  fake.platform.storage.write = write;
+  await repository.writeCampaign(false, JSON.parse(validSaveRaw()));
+  await assert.doesNotReject(repository.flush());
+  assert.equal(repository.lastError, null);
+});
+
+test('a failed flush needs a successful flush rather than an unrelated write', async () => {
+  const fake = fakePlatform();
+  const repository = await new SaveRepository(fake.platform).initialize();
+  fake.platform.storage.flush = async () => { throw new Error('flush failed'); };
+  await assert.rejects(repository.flush(), /flush failed/);
+  await repository.setMuted(true);
+  assert.match(repository.lastError.message, /flush failed/);
+  fake.platform.storage.flush = async () => {};
+  await repository.flush();
+  assert.equal(repository.lastError, null);
+});
+
+for (const slot of Object.values(PLATFORM_SLOTS)) {
+  test(`failed ${slot} hydration leaves all bytes untouched and supports retry`, async () => {
+    const fake = fakePlatform({ campaign: validSaveRaw(), testCampaign: '{invalid', settings: '1' });
+    const before = [...fake.values];
+    const read = fake.platform.storage.read;
+    fake.platform.storage.read = async key => {
+      if (key === slot) throw new Error('read denied');
+      return read(key);
+    };
+    const repository = new SaveRepository(fake.platform);
+    await assert.rejects(repository.initialize(), /read denied/);
+    await assert.rejects(repository.initialize(), /read denied/);
+    assert.equal(repository.initialized, false);
+    assert.deepEqual([...fake.values], before);
+    assert.equal(fake.calls.some(([op]) => op === 'remove' || op === 'write'), false);
+    fake.platform.storage.read = read;
+    await repository.initialize();
+    assert.equal(repository.initialized, true);
+    assert.equal(repository.getCampaign().gold, 0);
+    await repository.flush();
+    assert.equal(fake.values.get('campaign'), before[0][1]);
+  });
+}

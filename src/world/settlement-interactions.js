@@ -7,10 +7,10 @@
 // called by a row of the site menu (world/site-menu.js), which is what the one map verb
 // opens. The rules — and their refusal wording — stay here, so the menu's row state and
 // the charge it makes can never disagree.
-import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp, enemyStrength } from '../data.js?v=r3b20caaaa2ab';
-import { perkMods, recruitTroop } from '../progression.js?v=r3b20caaaa2ab';
-import { dist2 } from '../engine.js?v=r3b20caaaa2ab';
-import { REGION, SPECIALIZATIONS, OWNERSHIP, settlementRecord } from '../region.js?v=r3b20caaaa2ab';
+import { PAL, WORLD, UNIT_TYPES, BALANCE, armySlots, troopMaxHp, enemyStrength } from '../data.js?v=r66ae1724dd52';
+import { perkMods, recruitTroop } from '../progression.js?v=r66ae1724dd52';
+import { dist2 } from '../engine.js?v=r66ae1724dd52';
+import { REGION, SPECIALIZATIONS, OWNERSHIP, settlementRecord } from '../region.js?v=r66ae1724dd52';
 
 const P = PAL.world;
 
@@ -186,7 +186,9 @@ export function campVictoryExtra(world, camp, st) {
         // rather than ending the walk, so one oversized band cannot block the smaller ones
         // behind it. Save order is stable and this consumes no RNG, so it replays exactly.
         for (const p of (world.save.parties || [])) {
-          if (p.camp !== 'strong') continue;
+          // Deployed forces keep their settlement lifecycle: withdrawing an occupier
+          // here would orphan occupied=true, and an inbound raid must still arrive.
+          if (p.camp !== 'strong' || p.occupying || p.raid) continue;
           if (enemyStrength([...strongSt.garrison, ...p.comp]) > ceiling) continue;
           strongSt.garrison.push(...p.comp);
           taken.add(p);

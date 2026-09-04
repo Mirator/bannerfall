@@ -1,7 +1,17 @@
-import { parseSave } from '../save.js?v=r3b20caaaa2ab';
-import { PLATFORM_SLOTS } from '../platform/platform-contract.js?v=r3b20caaaa2ab';
+import { parseSave } from '../save.js?v=r66ae1724dd52';
+import { PLATFORM_SLOTS } from '../platform/platform-contract.js?v=r66ae1724dd52';
 
 const SETTINGS_DEFAULTS = Object.freeze({ muted: false });
+
+// Only read failures are retryable startup storage errors. Parser/programming
+// faults must retain their normal error reporting rather than masquerading as one.
+export class StorageReadError extends Error {
+  constructor(slot, cause) {
+    super(`Could not read ${slot}: ${cause.message}`, { cause });
+    this.name = 'StorageReadError';
+    this.slot = slot;
+  }
+}
 
 export class SaveRepository {
   constructor(platform) {
@@ -9,12 +19,16 @@ export class SaveRepository {
     this.cache = new Map();
     this.initialized = false;
     this.queue = Promise.resolve();
-    this.lastError = null;
+    this.errors = new Map();
+    this.statusListeners = new Set();
   }
 
   async initialize() {
     const slots = Object.values(PLATFORM_SLOTS);
-    const raws = await Promise.all(slots.map(slot => this.platform.storage.read(slot)));
+    const raws = await Promise.all(slots.map(async slot => {
+      try { return await this.platform.storage.read(slot); }
+      catch (error) { throw new StorageReadError(slot, error); }
+    }));
     const [campaign, testCampaign, settings] = raws;
     this.cache.set(PLATFORM_SLOTS.CAMPAIGN, this.#parseCampaign(campaign, PLATFORM_SLOTS.CAMPAIGN));
     this.cache.set(PLATFORM_SLOTS.TEST_CAMPAIGN, this.#parseCampaign(testCampaign, PLATFORM_SLOTS.TEST_CAMPAIGN));
@@ -44,16 +58,23 @@ export class SaveRepository {
   }
 
   #campaignSlot(testMode) { return testMode ? PLATFORM_SLOTS.TEST_CAMPAIGN : PLATFORM_SLOTS.CAMPAIGN; }
-  // lastError tracks the outcome of the most recently SETTLED queued operation, not a
-  // permanent latch: a later operation that succeeds clears it, so one transient failure
-  // does not pin flush() to reject forever once the queue has moved past it. Nothing
-  // inside flush() consumes or clears this field, so concurrent flush() calls all observe
-  // the same value and cannot race each other into losing a still-current error.
+  // Failures belong to their durability slot. A settings write cannot recover a
+  // failed campaign write; flush failures need a successful flush of their own.
+  get lastError() { return [...this.errors.values()].at(-1) ?? null; }
+  onStatusChange(listener) {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
+  }
+  #settled(slot, error = null) {
+    if (error) this.errors.set(slot, error);
+    else this.errors.delete(slot);
+    for (const listener of this.statusListeners) listener(slot, error);
+  }
   #enqueue(slot, operation) {
     const run = this.queue.then(operation, operation);
     this.queue = run.then(
-      () => { this.lastError = null; },
-      error => { this.lastError = error; },
+      () => { this.#settled(slot); },
+      error => { this.#settled(slot, error); },
     );
     return run;
   }
@@ -82,8 +103,17 @@ export class SaveRepository {
 
   flush() {
     return this.queue.then(async () => {
-      if (this.lastError) throw this.lastError;
-      await this.platform.storage.flush();
+      // A previously failed flush is retryable; slot failures require a new
+      // successful operation on that slot before the aggregate flush may succeed.
+      const slotError = [...this.errors].find(([slot]) => slot !== 'flush');
+      if (slotError) throw slotError[1];
+      try {
+        await this.platform.storage.flush();
+        this.#settled('flush');
+      } catch (error) {
+        this.#settled('flush', error);
+        throw error;
+      }
       if (this.lastError) throw this.lastError;
     });
   }

@@ -505,3 +505,56 @@ test('each single-behavior fixture keeps its intended right answer', async ({ pa
     }
   });
 });
+
+
+test('explicit pre-fight FOLLOW survives deployment while the untouched default holds', async ({ page }) => {
+  const errors = collectRuntimeErrors(page);
+  await page.goto('/');
+  await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+  const out = await page.evaluate(() => {
+    const g = window.__g, real = g.update.bind(g), dt = 1 / 60;
+    g.update = () => {};
+    try {
+      const run = (keys, duringDeploy = false, ambush = false) => {
+        g.startBattle({ troops: [{ type: 'spear' }, { type: 'archer' }],
+          enemies: [{ type: 'bandit' }], seed: 17, ambush, onEnd: () => {} });
+        const b = g.scene;
+        const press = key => { g.input.injectKey(key, true); real(dt); g.input.injectKey(key, false); };
+        if (duringDeploy) for (let i = 0; i < 100; i++) real(dt);
+        const orderState = b.state;
+        for (const key of keys) press(key);
+        for (let i = 0; i < 100 && b.state === 'intro'; i++) real(dt);
+        const afterIntro = b.state;
+        if (b.state === 'deploy') {
+          for (let i = 0; i < 30; i++) real(dt);
+          press('Enter');
+        }
+        return { orderState, afterIntro, state: b.state,
+          spear: b.squads.spear.stance, archer: b.squads.archer.stance };
+      };
+      return {
+        untouched: run([]), follow: run(['Digit1']), charge: run(['Digit2']),
+        changedBack: run(['Digit2', 'Digit1']), selected: run(['Tab', 'Digit1']),
+        deployFollow: run(['Digit1'], true), ambush: run(['Digit1'], false, true),
+      };
+    } finally { g.update = real; }
+  });
+  for (const key of ['untouched', 'follow', 'charge', 'changedBack', 'selected']) {
+    expect(out[key].orderState).toBe('intro');
+    expect(out[key].afterIntro).toBe('deploy');
+    expect(out[key].state).toBe('fight');
+  }
+  expect(out.untouched.spear).toBe('hold');
+  expect(out.untouched.archer).toBe('hold');
+  for (const key of ['follow', 'changedBack', 'deployFollow', 'ambush']) {
+    expect(out[key].spear).toBe('follow');
+    expect(out[key].archer).toBe('follow');
+  }
+  expect(out.charge.spear).toBe('charge');
+  expect(out.charge.archer).toBe('charge');
+  expect(out.selected.spear).toBe('follow');
+  expect(out.selected.archer).toBe('hold');
+  expect(out.deployFollow.orderState).toBe('deploy');
+  expect(out.ambush.afterIntro).toBe('fight');
+  expect(errors).toEqual([]);
+});

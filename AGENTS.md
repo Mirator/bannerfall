@@ -404,6 +404,13 @@ movement bonuses cannot diverge.
 Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
 
+Plan 042: adjacent inflated battle colliders can form a concave pocket that ordinary
+single-circle tangent steering cannot escape. `ai-phases.js` retains a per-unit
+contact envelope until the direct path clears, revalidates new contacts, and bounds
+both stalled progress and detour lifetime. Keep the fresh-envelope path from
+overwriting its caller's shared spatial-query buffer. The terrain suite covers
+both teams, mirrored pockets, and an extra obstacle on the escape path.
+
 ## Determinism and RNG domains
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,
@@ -546,6 +553,12 @@ Two v5 rules that are easy to get wrong:
   slot cost then binds every future recruit. A CURRENT save whose cap does not cover its own
   column is malformed, not old, and is refused.
 Preserve `bf_save`/`bf_save_test` isolation.
+Plan 042 repairs the narrow negative cooldown residue that released saves could
+contain: `waryT` and `clashT` in the inclusive range `[-1/60, 0)` normalize to zero
+during save migration/canonicalization. The bound records the historical fixed
+tick and must not grow with future scheduler changes. More-negative values,
+nonfinite values, wrong types, and unrelated malformed fields remain rejected.
+Runtime countdowns saturate at zero so new saves do not need this recovery.
 Run `npx playwright test tests/e2e/save-schema.spec.js` and
 `npx playwright test tests/e2e/campaign-persistence.spec.js` in addition to
 the required `npm test` gate.
@@ -1001,6 +1014,10 @@ the future desktop adapter will map the same contract to atomic per-user files
 and a native quit handshake. Repository reads are hydrated before Game exists;
 the fixed loop only uses its synchronous in-memory cache, while writes are ordered,
 flushable, and observable on error. Real and test campaign slots remain isolated.
+Failures remain latched per storage slot until that slot succeeds; a successful
+settings write must not clear a failed campaign write. Flush failures have their
+own recovery latch. Startup retries must read every slot successfully before any
+validation cleanup or Game construction, so unreadable data is never treated as absent.
 There are no synchronous storage escape hatches or adapter rereads from Game;
 browser fixtures must seed storage before bootstrap/reload.
 

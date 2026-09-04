@@ -1500,3 +1500,16 @@ playtest on a second port): all nine fixes confirmed in play, and the "Refresh" 
 chiefly a chargeAll field fight that never resolves on four of four seeds (most likely the
 terrain stall Plan 035 recorded at world 1600,900; not yet bisected), and a defeat baseline
 that shows a reason line real play cannot produce.
+
+## Plan 042 — September 4 P1/P2 audit corrections
+
+User request: Fix all P1 and P2 findings in subagents, make a plan, implement, open a PR, and merge.
+
+- [x] Plan committed; isolated campaign, platform/harness, and battle executors dispatched.
+- [x] Pre-change baseline: 234 browser tests, 15 tooling checks, and release-cache verification passed on 9c5270d.
+- [x] Review and integrate all nine fixes; preserve the P3 backlog.
+- [x] Inspect save-warning/startup-retry UX and browser smoke output; tooling 20 passed, release graph verified.
+- [x] Review and fix the concave-collider stall exposed by the combined balance run; focused 21 passed, including five pocket controls.
+- [x] Recapture only the reviewed battle-break baseline through CI; focused visual check passed.
+- [x] Open [PR #34](https://github.com/Mirator/bannerfall/pull/34), which records final full browser/performance/visual and balance results and the merge status. Both checks must pass on the reviewed revision before merge.
+

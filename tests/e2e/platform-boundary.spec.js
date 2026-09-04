@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { bootToMenu as boot } from './test-helpers.js';
+import { bootToMenu as boot, collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 
 test('suspend is deduplicated and requests one storage flush', async ({ page }) => {
   await boot(page);
@@ -118,3 +118,142 @@ test('a non-finite campaign coordinate is refused rather than persisted', async 
     expect(result.slotUnchanged).toBe(true);
   }
 });
+
+test('save warning is drawn across scenes and clears only after campaign recovery', async ({ page }, testInfo) => {
+  const errors = collectRuntimeErrors(page);
+  await boot(page);
+  await page.evaluate(async () => {
+    window.game.scenario('world', { seed: 8844 });
+    await window.__g.saves.flush();
+    const game = window.__g;
+    const write = game.platform.storage.write, remove = game.platform.storage.remove;
+    window.restoreWrites = () => { game.platform.storage.write = write; game.platform.storage.remove = remove; };
+    game.platform.storage.remove = async slot => {
+      if (slot === 'testCampaign') throw new Error('campaign removal denied');
+      return remove(slot);
+    };
+    game.platform.storage.write = async (slot, raw) => {
+      if (slot === 'testCampaign') throw new Error('quota exceeded');
+      return write(slot, raw);
+    };
+    game.persistRun();
+    await game.saves.flush().catch(() => {});
+    await game.sfx.setMuted(true); // settings success must not clear the campaign failure
+    game.update = () => {};
+    game.draw();
+  });
+  const canvas = page.locator('#game');
+  await canvas.screenshot({ path: testInfo.outputPath('save-warning-world.png') });
+  for (const scene of ['world', 'battle_small', 'victory_summary', 'menu']) {
+    const drawn = await page.evaluate(sceneName => {
+      const game = window.__g;
+      if (sceneName !== 'world') window.game.scenario(sceneName, { seed: 8844 });
+      const ctx = document.getElementById('game').getContext('2d');
+      const fillText = ctx.fillText.bind(ctx), text = [];
+      ctx.fillText = (...args) => { text.push(args[0]); return fillText(...args); };
+      try { game.draw(); game.paused = true; game.draw(); game.paused = false; }
+      finally { ctx.fillText = fillText; }
+      return { scene: game.sceneName, text, warning: game.saveWarning, stateWarning: JSON.parse(window.render_game_to_text()).saveWarning };
+    }, scene);
+    expect(drawn.scene).toBe({ world: 'world', battle_small: 'battle', victory_summary: 'victory', menu: 'menu' }[scene]);
+    expect(drawn.warning).toBe('Save failed — progress may not be stored.');
+    expect(drawn.text.filter(text => text === drawn.warning)).toHaveLength(2);
+    expect(drawn.stateWarning).toBe(drawn.warning);
+    expect(drawn.text.join(' ')).not.toMatch(/campaign saved|closing the tab is safe/);
+  }
+  await page.evaluate(async () => {
+    window.restoreWrites();
+    window.game.scenario('world', { seed: 8844 });
+    window.__g.persistRun();
+    await window.__g.saves.flush();
+    window.__g.draw();
+  });
+  expect(await page.evaluate(() => window.__g.saveWarning)).toBeNull();
+  assertNoRuntimeErrors(errors);
+});
+
+test('an older pending write cannot clear a newer snapshot validation failure', async ({ page }) => {
+  await boot(page);
+  const result = await page.evaluate(async () => {
+    window.game.scenario('world', { seed: 8844 });
+    const game = window.__g;
+    await game.saves.flush();
+    const write = game.platform.storage.write;
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    game.platform.storage.write = async (slot, raw) => { await gate; return write(slot, raw); };
+    game.persistRun();
+    const x = game.scene.hero.x;
+    game.scene.hero.x = NaN;
+    game.persistRun();
+    game.scene.hero.x = x;
+    release();
+    await game.saves.flush();
+    const afterOlderWrite = game.saveWarning;
+    await game.sfx.setMuted(true);
+    const afterSettings = game.saveWarning;
+    game.persistRun();
+    await game.saves.flush();
+    return { afterOlderWrite, afterSettings, afterRecovery: game.saveWarning };
+  });
+  expect(result.afterOlderWrite).toBe('Save failed — progress may not be stored.');
+  expect(result.afterSettings).toBe(result.afterOlderWrite);
+  expect(result.afterRecovery).toBeNull();
+});
+
+for (const key of ['bf_save', 'bf_save_test', 'bf_mute']) {
+  test(`startup read failure for ${key} preserves bytes and retries without duplicate wiring`, async ({ page }, testInfo) => {
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+    await boot(page);
+    const before = await page.evaluate(async () => {
+      window.__g.startNewCampaign(false);
+      await window.__g.saves.flush();
+      localStorage.setItem('bf_save_test', localStorage.getItem('bf_save'));
+      localStorage.setItem('bf_mute', '1');
+      return ['bf_save', 'bf_save_test', 'bf_mute'].map(key => localStorage.getItem(key));
+    });
+    await page.addInitScript(failedKey => {
+      window.failReads = true;
+      const original = Storage.prototype.getItem;
+      window.storedBytes = () => ['bf_save', 'bf_save_test', 'bf_mute'].map(key => original.call(localStorage, key));
+      Storage.prototype.getItem = function (key) {
+        if (window.failReads && key === failedKey) throw new Error('storage denied');
+        return original.call(this, key);
+      };
+      window.wiringCounts = {};
+      const add = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (type, ...args) {
+        if (this === window || this === document) window.wiringCounts[type] = (window.wiringCounts[type] || 0) + 1;
+        return add.call(this, type, ...args);
+      };
+    }, key);
+    await page.reload();
+    const retry = page.getByRole('button', { name: 'Retry loading' });
+    await expect(retry).toBeVisible();
+    expect(await page.evaluate(() => window.__g === undefined)).toBe(true);
+    expect(await page.evaluate(() => window.storedBytes())).toEqual(before);
+    const counts = await page.evaluate(() => window.wiringCounts);
+    await retry.click();
+    await expect(retry).toBeEnabled();
+    expect(await page.evaluate(() => window.wiringCounts)).toEqual(counts);
+    expect(await page.evaluate(() => window.storedBytes())).toEqual(before);
+    await page.screenshot({ path: testInfo.outputPath('startup-storage-retry.png') });
+    await page.evaluate(() => { window.failReads = false; });
+    await retry.click();
+    await expect(page.locator('#storage-recovery')).toHaveCount(0);
+    await page.waitForFunction(() => window.__g?.sceneName === 'menu');
+    expect(await page.evaluate(() => window.storedBytes())).toEqual(before);
+    const resumed = await page.evaluate(() => {
+      let calls = 0;
+      window.__g.platform.lifecycle.onSuspend(() => calls++);
+      window.dispatchEvent(new PageTransitionEvent('pagehide'));
+      window.dispatchEvent(new PageTransitionEvent('pagehide'));
+      return { calls, savedGold: window.__g.loadRun().gold };
+    });
+    expect(resumed.calls).toBe(1);
+    expect(resumed.savedGold).toBe(JSON.parse(before[0]).gold);
+    expect(errors).toEqual([]);
+  });
+}

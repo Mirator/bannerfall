@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   collectRuntimeErrors, assertNoRuntimeErrors, openPlayerGame as openPlayerGameWith,
 } from './test-helpers.js';
-import { WORLD } from '../../src/data.js';
+import { WORLD, BALANCE } from '../../src/data.js';
 
 const DT = 1 / 60;
 const PARTY_KEY = 'c1';
@@ -690,3 +690,45 @@ test('recapturing an occupied settlement survives an explicit save and Continue'
   expect(restoredOccupied).toBe(false);
   assertNoRuntimeErrors(runtimeErrors);
 });
+
+for (const checkpoint of ['explicit', 'autosave']) {
+  test(`expired party cooldowns survive ${checkpoint} save and Continue`, async ({ page }) => {
+    const runtimeErrors = collectRuntimeErrors(page);
+    await openPlayerGame(page, runtimeErrors);
+    await startRawWorld(page, { seed: 4242 });
+    const stored = await page.evaluate(async ({ settlement, grace, checkpoint }) => {
+      const g = window.__g, w = g.scene;
+      // Keep the real slot and park rAF. Drive the real party phase at 60Hz until
+      // both released 25s/6s countdowns have crossed their old negative edge.
+      const update = g.update.bind(g);
+      g.update = () => {};
+      const post = w.occupierPost(settlement);
+      w.save.settlements.find(s => s.id === settlement.id).occupied = true;
+      const party = w.parties[0];
+      Object.assign(party, post, { vx: 0, vy: 0, occupying: settlement.id,
+        raid: null, waryT: 25, clashT: grace, navT: 0, navGoal: null });
+      w.parties = [party];
+      w.hero.x = 1500; w.hero.y = 1840;
+      w.hero.vx = 0; w.hero.vy = 0;
+      for (let i = 0; i < 1600; i++) w.updateParties(1 / 60);
+      const expired = { waryT: party.waryT, clashT: party.clashT };
+      if (checkpoint === 'explicit') g.persistRun();
+      else {
+        g.saveTimer = 0;
+        for (let i = 0; i < 241; i++) update(1 / 60);
+      }
+      await g.saves.flush();
+      return { expired, save: JSON.parse(localStorage.getItem('bf_save')), testMode: g.testMode };
+    }, { settlement: OCCUPY_SETTLEMENT, grace: BALANCE.battleGrace, checkpoint });
+    expect(stored.testMode).toBe(false);
+    expect(stored.expired).toEqual({ waryT: 0, clashT: 0 });
+    expect(stored.save.parties).toHaveLength(1);
+    expect(stored.save.parties[0]).toMatchObject(stored.expired);
+    await page.reload();
+    await page.waitForFunction(() => window.__g && window.__g.sceneName === 'menu');
+    await page.keyboard.press('c');
+    await page.waitForFunction(() => window.__g.sceneName === 'world');
+    expect(await page.evaluate(() => window.__g.scene.save.parties)).toEqual(stored.save.parties);
+    assertNoRuntimeErrors(runtimeErrors);
+  });
+}
