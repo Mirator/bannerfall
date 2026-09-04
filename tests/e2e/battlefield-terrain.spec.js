@@ -595,3 +595,67 @@ test('camp collision geometry is independent of the decorative RNG stream', asyn
   expect(aSizes).not.toEqual(bSizes);
   assertNoRuntimeErrors(runtimeErrors);
 });
+
+
+test('both armies escape a concave collider pocket in either direction', async ({ page }) => {
+  const errors = collectRuntimeErrors(page);
+  await bootWorld(page, { seed: 12 });
+  const out = await page.evaluate(() => {
+    const g = window.__g, real = g.update;
+    g.update = () => {};
+    try {
+      const results = [];
+      const cases = [false, true].flatMap(friendly => [1, -1].map(direction => ({ friendly, direction })));
+      cases.push({ friendly: false, direction: 1, third: true });
+      for (const { friendly, direction, third } of cases) {
+        g.startBattle({ troops: friendly ? [{ type: 'knight' }] : [],
+          enemies: [{ type: friendly ? 'bandit' : 'brute' }], seed: 12, deploy: 0 });
+        const b = g.scene;
+        b.state = 'fight'; b.bloodlust = true; b.enemyCmd = null;
+        const unit = friendly ? b.troops[0] : b.enemies[0];
+        const mirror = y => 666 + direction * (y - 666);
+        // The exact three-post pocket which left seed12's brute motionless
+        // from 70s through 95s, despite commanding 71 px/s toward the hero.
+        b.obstacles = [
+          { kind: 'none', x: 1129.743196205236, y: mirror(665.6771270837635), r: 13 },
+          { kind: 'none', x: 1160.4916358850896, y: mirror(660.1031276658177), r: 13 },
+          { kind: 'none', x: 1205.0489727277309, y: mirror(666.7680062535219), r: 13 },
+        ];
+        // Place each archetype at the upper intersection of its inflated circles.
+        const a = b.obstacles[1], c = b.obstacles[2];
+        const dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy);
+        const height = Math.sqrt((13 + unit.d.radius) ** 2 - d * d / 4);
+        unit.x = (a.x + c.x) / 2 + direction * dy / d * height;
+        unit.y = (a.y + c.y) / 2 - direction * dx / d * height;
+        unit.vx = 0; unit.vy = 0;
+        const target = friendly ? b.enemies[0] : b.hero;
+        target.x = 1250; target.y = mirror(1290); target.hp = 1e9;
+        if (friendly) { b.hero.x = 40; b.hero.y = 40; b.issueCommand('charge'); }
+        b._obstacleGrid.rebuild(b.obstacles); b._maxObstacleR = 13;
+        b._enemyGrid.rebuild(b.enemies); b._friendlyGrid.rebuild(b.troops);
+        let firstEnvelope;
+        for (let i = 0; i < 600; i++) {
+          if (friendly) b.updateTroopPhase(1 / 60, b.hero);
+          else b.updateEnemyPhase(1 / 60, b.hero);
+          b.updateSeparationPhase(b.hero);
+          if (third && i === 0) {
+            firstEnvelope = unit._steerCluster;
+            // A further collider, outside the original contact set, blocks the
+            // radial escape. Include the new contact, then finish the detour.
+            b.obstacles.push({ kind: 'none', x: 1195, y: 585, r: 18 });
+            b._obstacleGrid.rebuild(b.obstacles); b._maxObstacleR = 18;
+          }
+        }
+        results.push({ friendly, direction, third: !!third,
+          released: !third || (!!firstEnvelope && unit._steerCluster !== firstEnvelope),
+          pastWall: direction * (unit.y - 666) });
+      }
+      return results;
+    } finally { g.update = real; }
+  });
+  for (const result of out) {
+    expect(result.pastWall, JSON.stringify(result)).toBeGreaterThan(100);
+    expect(result.released, JSON.stringify(result)).toBe(true);
+  }
+  assertNoRuntimeErrors(errors);
+});
