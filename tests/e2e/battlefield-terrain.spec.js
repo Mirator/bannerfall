@@ -638,7 +638,7 @@ test('both armies escape a concave collider pocket in either direction', async (
           if (friendly) b.updateTroopPhase(1 / 60, b.hero);
           else b.updateEnemyPhase(1 / 60, b.hero);
           b.updateSeparationPhase(b.hero);
-          if (third && i === 0) {
+          if (third && !firstEnvelope && unit._steerCluster) {
             firstEnvelope = unit._steerCluster;
             // A further collider, outside the original contact set, blocks the
             // radial escape. Include the new contact, then finish the detour.
@@ -656,6 +656,40 @@ test('both armies escape a concave collider pocket in either direction', async (
   for (const result of out) {
     expect(result.pastWall, JSON.stringify(result)).toBeGreaterThan(100);
     expect(result.released, JSON.stringify(result)).toBe(true);
+  }
+  assertNoRuntimeErrors(errors);
+});
+
+
+test('moving past or away from nearby colliders does not start a contact detour', async ({ page }) => {
+  const errors = collectRuntimeErrors(page);
+  await bootWorld(page, { seed: 12 });
+  const out = await page.evaluate(() => {
+    const g = window.__g, real = g.update;
+    g.update = () => {};
+    try {
+      return [{ x: 1190, y: 100 }, { x: 600, y: 636 }].map(target => {
+        g.startBattle({ troops: [], enemies: [{ type: 'brute' }], seed: 12, deploy: 0 });
+        const b = g.scene, unit = b.enemies[0];
+        b.state = 'fight'; b.bloodlust = true; b.enemyCmd = null;
+        Object.assign(unit, { x: 1190, y: 636, vx: 0, vy: 0 });
+        Object.assign(b.hero, target, { hp: 1e9 });
+        b.obstacles = [{ kind: 'none', x: 1170, y: 666, r: 13 },
+          { kind: 'none', x: 1210, y: 666, r: 13 }];
+        b._obstacleGrid.rebuild(b.obstacles); b._maxObstacleR = 13;
+        let detoured = false;
+        for (let i = 0; i < 180; i++) {
+          b.updateEnemyPhase(1 / 60, b.hero);
+          b.updateSeparationPhase(b.hero);
+          detoured ||= !!unit._steerCluster;
+        }
+        return { detoured, moved: Math.hypot(unit.x - 1190, unit.y - 636) };
+      });
+    } finally { g.update = real; }
+  });
+  for (const result of out) {
+    expect(result.detoured).toBe(false);
+    expect(result.moved).toBeGreaterThan(100);
   }
   assertNoRuntimeErrors(errors);
 });

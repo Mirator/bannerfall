@@ -225,7 +225,17 @@ function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist)
     minX = Math.min(minX, o.x); maxX = Math.max(maxX, o.x);
     minY = Math.min(minY, o.y); maxY = Math.max(maxY, o.y); contacts++;
   }
+  // Nearby circles are not by themselves a trap. Wait for commanded movement
+  // to fail to move a body's width over the existing steering window, so passing
+  // beside a wall or walking away keeps the ordinary heading unchanged.
+  let contactStalled = false;
   if (contacts > 1) {
+    if (!(unit._contactStallT > 0) || dist2(ux, uy, unit._contactStallX, unit._contactStallY) >= ur * ur) {
+      unit._contactStallT = dt; unit._contactStallX = ux; unit._contactStallY = uy;
+    } else unit._contactStallT += dt;
+    contactStalled = unit._contactStallT >= STEER_MAX_ACTIVE;
+  } else unit._contactStallT = 0;
+  if (contactStalled) {
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     bestOx = cx - ux; bestOy = cy - uy; bestEffR = 0;
     for (let i = 0; i < count; i++) {
@@ -235,7 +245,8 @@ function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist)
     }
   }
   const D = Math.sqrt(bestOx * bestOx + bestOy * bestOy);
-  if (contacts > 1 && D > 0.01) {
+  if (contactStalled && D > 0.01) {
+    unit._contactStallT = 0;
     const tangent = computeTangentHeading(Math.atan2(bestOy, bestOx), Math.asin(clamp(bestEffR / D, -1, 1)),
       null, null, null, dirX, dirY);
     unit._steerCluster = { x: ux + bestOx, y: uy + bestOy, r: bestEffR, sign: tangent.sign,
