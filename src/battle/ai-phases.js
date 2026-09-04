@@ -6,9 +6,9 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=rfdf6abae5ce0';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rfdf6abae5ce0';
-import { ACTIONS } from '../input-actions.js?v=rfdf6abae5ce0';
+import { HERO } from '../data.js?v=r66ae1724dd52';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r66ae1724dd52';
+import { ACTIONS } from '../input-actions.js?v=r66ae1724dd52';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
   BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, HOLD_REACH_MELEE, STALL_NO_DEATH, ARENA_EDGE,
@@ -16,8 +16,8 @@ import {
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
   FRONT_ARC, FLANK_BONUS,
-} from './constants.js?v=rfdf6abae5ce0';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=rfdf6abae5ce0';
+} from './constants.js?v=r66ae1724dd52';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r66ae1724dd52';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -225,7 +225,17 @@ function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist)
     minX = Math.min(minX, o.x); maxX = Math.max(maxX, o.x);
     minY = Math.min(minY, o.y); maxY = Math.max(maxY, o.y); contacts++;
   }
+  // Nearby circles are not by themselves a trap. Wait for commanded movement
+  // to fail to move a body's width over the existing steering window, so passing
+  // beside a wall or walking away keeps the ordinary heading unchanged.
+  let contactStalled = false;
   if (contacts > 1) {
+    if (!(unit._contactStallT > 0) || dist2(ux, uy, unit._contactStallX, unit._contactStallY) >= ur * ur) {
+      unit._contactStallT = dt; unit._contactStallX = ux; unit._contactStallY = uy;
+    } else unit._contactStallT += dt;
+    contactStalled = unit._contactStallT >= STEER_MAX_ACTIVE;
+  } else unit._contactStallT = 0;
+  if (contactStalled) {
     const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
     bestOx = cx - ux; bestOy = cy - uy; bestEffR = 0;
     for (let i = 0; i < count; i++) {
@@ -235,7 +245,8 @@ function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist)
     }
   }
   const D = Math.sqrt(bestOx * bestOx + bestOy * bestOy);
-  if (contacts > 1 && D > 0.01) {
+  if (contactStalled && D > 0.01) {
+    unit._contactStallT = 0;
     const tangent = computeTangentHeading(Math.atan2(bestOy, bestOx), Math.asin(clamp(bestEffR / D, -1, 1)),
       null, null, null, dirX, dirY);
     unit._steerCluster = { x: ux + bestOx, y: uy + bestOy, r: bestEffR, sign: tangent.sign,

@@ -2,27 +2,27 @@
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
   heaviestLightBody,
-} from './data.js?v=rfdf6abae5ce0';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=rfdf6abae5ce0';
-import { SAVE_VERSION } from './save.js?v=rfdf6abae5ce0';
+} from './data.js?v=r66ae1724dd52';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r66ae1724dd52';
+import { SAVE_VERSION } from './save.js?v=r66ae1724dd52';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
   strongholdPoints,
-} from './region.js?v=rfdf6abae5ce0';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=rfdf6abae5ce0';
+} from './region.js?v=r66ae1724dd52';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r66ae1724dd52';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=rfdf6abae5ce0';
-import { drawScene } from './world/render-scene.js?v=rfdf6abae5ce0';
+} from './progression.js?v=r66ae1724dd52';
+import { drawScene } from './world/render-scene.js?v=r66ae1724dd52';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=rfdf6abae5ce0';
+} from './world/battle-transition.js?v=r66ae1724dd52';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -32,16 +32,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=rfdf6abae5ce0';
+} from './world/settlement-interactions.js?v=r66ae1724dd52';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=rfdf6abae5ce0';
+} from './world/site-menu.js?v=r66ae1724dd52';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=rfdf6abae5ce0';
-import { WORLD_ART } from './world/visual-style.js?v=rfdf6abae5ce0';
+} from './world/terrain.js?v=r66ae1724dd52';
+import { WORLD_ART } from './world/visual-style.js?v=r66ae1724dd52';
 
 const P = PAL.world;
 
