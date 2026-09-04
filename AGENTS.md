@@ -404,6 +404,13 @@ movement bonuses cannot diverge.
 Structural Canvas budgets are machine-independent
 and must never be raised or bypassed to obtain green CI.
 
+Plan 042: adjacent inflated battle colliders can form a concave pocket that ordinary
+single-circle tangent steering cannot escape. `ai-phases.js` retains a per-unit
+contact envelope until the direct path clears, revalidates new contacts, and bounds
+both stalled progress and detour lifetime. Keep the fresh-envelope path from
+overwriting its caller's shared spatial-query buffer. The terrain suite covers
+both teams, mirrored pockets, and an extra obstacle on the escape path.
+
 ## Determinism and RNG domains
 
 Keep browser checks deterministic: use the suite's `makeRng` conventions,

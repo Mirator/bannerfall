@@ -1507,7 +1507,9 @@ User request: Fix all P1 and P2 findings in subagents, make a plan, implement, o
 
 - [x] Plan committed; isolated campaign, platform/harness, and battle executors dispatched.
 - [x] Pre-change baseline: 234 browser tests, 15 tooling checks, and release-cache verification passed on 9c5270d.
-- [ ] Review and integrate all nine fixes; preserve the P3 backlog.
-- [ ] Run combined full, visual/performance, and balance gates; inspect changed UX.
-- [ ] Open PR, wait for passing CI, merge, and verify origin/main.
+- [x] Review and integrate all nine fixes; preserve the P3 backlog.
+- [x] Inspect save-warning/startup-retry UX and browser smoke output; tooling 20 passed, release graph verified.
+- [x] Review and fix the concave-collider stall exposed by the combined balance run; focused 21 passed, including five pocket controls.
+- [x] Recapture only the reviewed battle-break baseline through CI; focused visual check passed.
+- [x] Open [PR #34](https://github.com/Mirator/bannerfall/pull/34), which records final full browser/performance/visual and balance results and the merge status. Both checks must pass on the reviewed revision before merge.
 

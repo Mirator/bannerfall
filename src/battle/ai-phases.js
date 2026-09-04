@@ -6,9 +6,9 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r503b634b847a';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r503b634b847a';
-import { ACTIONS } from '../input-actions.js?v=r503b634b847a';
+import { HERO } from '../data.js?v=rfdf6abae5ce0';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=rfdf6abae5ce0';
+import { ACTIONS } from '../input-actions.js?v=rfdf6abae5ce0';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
   BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, HOLD_REACH_MELEE, STALL_NO_DEATH, ARENA_EDGE,
@@ -16,8 +16,8 @@ import {
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
   FRONT_ARC, FLANK_BONUS,
-} from './constants.js?v=r503b634b847a';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r503b634b847a';
+} from './constants.js?v=rfdf6abae5ce0';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=rfdf6abae5ce0';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -120,7 +120,8 @@ function bonusVersus(battle, attacker, targetType, steady) {
 // every tick — the unit fights itself and never actually clears the obstacle. This was found
 // by measurement, not anticipated: `stance-balance.spec.js`'s FOLLOW-vs-raiders fixture
 // stopped resolving within its 90s budget until this hysteresis was added.
-// Deterministic (no RNG) and allocation-free: uses the existing `_obstacleGrid` broad phase
+// Deterministic (no RNG): the usual single-obstacle path allocates nothing; a contact
+// detour retains one envelope per unit. Uses the existing `_obstacleGrid` broad phase
 // and its own reusable `queryItems` buffer, consumed synchronously.
 // Plan 040: a heading that pushes into the arena wall is not a heading. Both movement
 // tails clamp position to [ARENA_EDGE, W-ARENA_EDGE], so an outward component is absorbed
@@ -144,7 +145,62 @@ function slideAlongArenaEdge(battle, x, y, dirX, dirY, out) {
   return true;
 }
 
+// Keep a detour around simultaneous contacts stable until the direct segment is
+// clear. Re-selecting one circle each tick otherwise walks back into the same pocket.
+function steerContactCluster(battle, unit, dt, ux, uy, dirX, dirY, goalDist, revalidate = true) {
+  const c = unit._steerCluster;
+  c.t += dt; c.progressT += dt;
+  // A detour can meet another part of the same physical barrier. Expand its
+  // envelope on contact without reversing the committed side or resetting its budget.
+  const ur = unit.d.radius, grid = battle._obstacleGrid;
+  const count = revalidate ? grid.query(ux, uy, battle._maxObstacleR + ur + TANGENT_MARGIN) : 0;
+  for (let i = 0; i < count; i++) {
+    const o = grid.queryItems[i], r = o.r + ur + TANGENT_MARGIN;
+    if (dist2(ux, uy, o.x, o.y) > r * r) continue;
+    const dx = o.x - c.x, dy = o.y - c.y, d = len(dx, dy);
+    if (d + r <= c.r) continue;
+    if (d + c.r <= r) { c.x = o.x; c.y = o.y; c.r = r; }
+    else {
+      const radius = (c.r + d + r) / 2, shift = (radius - c.r) / d;
+      c.x += dx * shift; c.y += dy * shift; c.r = radius;
+    }
+  }
+  // A new obstacle can block the escape. Replan after the existing steering
+  // window without a body's worth of travel, rather than retaining a stale envelope.
+  // Moving-target detours also expire after a full circumference at the slowest
+  // terrain speed, plus the ordinary steering window; no permanent orbit is allowed.
+  const expired = c.t > Math.PI * 2 * c.r / (unit.d.speed * 0.55) + STEER_MAX_ACTIVE;
+  const stuck = c.progressT >= STEER_MAX_ACTIVE && dist2(ux, uy, c.px, c.py) < unit.d.radius ** 2;
+  if (expired || stuck) {
+    unit._steerCluster = null; unit._steerCooldownT = STEER_COOLDOWN;
+    return false;
+  }
+  if (c.progressT >= STEER_MAX_ACTIVE) { c.progressT = 0; c.px = ux; c.py = uy; }
+  const dx = c.x - ux, dy = c.y - uy, d = len(dx, dy);
+  const gx = ux + dirX * goalDist - c.x, gy = uy + dirY * goalDist - c.y;
+  // A moving target can enter the envelope; release instead of circling a goal
+  // that this detour can no longer expose (ordinary per-obstacle steering resumes).
+  if (gx * gx + gy * gy < c.r * c.r) { unit._steerCluster = null; return false; }
+  const projection = clamp(dx * dirX + dy * dirY, 0, goalDist);
+  const px = dx - dirX * projection, py = dy - dirY * projection;
+  if (d >= c.r && px * px + py * py >= c.r * c.r) {
+    unit._steerCluster = null;
+    return false;
+  }
+  // First back out of the enclosing footprint. A tangent while inside it can
+  // still penetrate either constituent collider and get cancelled by separation.
+  if (d < c.r) {
+    battle._steerScratch.x = d > 0 ? -dx / d : -dirX;
+    battle._steerScratch.y = d > 0 ? -dy / d : -dirY;
+  } else {
+    const a = Math.atan2(dy, dx) + c.sign * Math.asin(clamp(c.r / d, -1, 1));
+    battle._steerScratch.x = Math.cos(a); battle._steerScratch.y = Math.sin(a);
+  }
+  return true;
+}
+
 function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist) {
+  if (unit._steerCluster && steerContactCluster(battle, unit, dt, ux, uy, dirX, dirY, goalDist)) return true;
   // A unit deflected for too long without a break gives up on steering for a short cooldown,
   // falling back to its raw heading (and `pushOutOf`) instead. This bounds the worst case:
   // measurement found a goal that is ITSELF moving (a kiting raider, a routed troop) can keep
@@ -158,7 +214,37 @@ function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist)
   const grid = battle._obstacleGrid;
   const count = grid.query(ux, uy, rayLen + battle._maxObstacleR + ur + TANGENT_MARGIN);
   const items = grid.queryItems;
-  let bestT = Infinity, bestObstacle = null, bestEffR = 0;
+  let bestOx = 0, bestOy = 0, bestEffR = 0;
+  // Enclose only simultaneous nearby contacts, not the entire obstacle field.
+  // The midpoint of their bounds plus the furthest inflated radius covers every
+  // constituent circle. It is retained per unit until the desired segment clears.
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, contacts = 0;
+  for (let i = 0; i < count; i++) {
+    const o = items[i], contactR = o.r + ur + TANGENT_MARGIN;
+    if (dist2(ux, uy, o.x, o.y) > contactR * contactR) continue;
+    minX = Math.min(minX, o.x); maxX = Math.max(maxX, o.x);
+    minY = Math.min(minY, o.y); maxY = Math.max(maxY, o.y); contacts++;
+  }
+  if (contacts > 1) {
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    bestOx = cx - ux; bestOy = cy - uy; bestEffR = 0;
+    for (let i = 0; i < count; i++) {
+      const o = items[i], contactR = o.r + ur + TANGENT_MARGIN;
+      if (dist2(ux, uy, o.x, o.y) <= contactR * contactR)
+        bestEffR = Math.max(bestEffR, Math.hypot(o.x - cx, o.y - cy) + contactR);
+    }
+  }
+  const D = Math.sqrt(bestOx * bestOx + bestOy * bestOy);
+  if (contacts > 1 && D > 0.01) {
+    const tangent = computeTangentHeading(Math.atan2(bestOy, bestOx), Math.asin(clamp(bestEffR / D, -1, 1)),
+      null, null, null, dirX, dirY);
+    unit._steerCluster = { x: ux + bestOx, y: uy + bestOy, r: bestEffR, sign: tangent.sign,
+      t: 0, progressT: 0, px: ux, py: uy };
+    // The fresh envelope already covers these contacts; preserve the caller's query buffer.
+    if (steerContactCluster(battle, unit, dt, ux, uy, dirX, dirY, goalDist, false)) return true;
+  }
+
+  let bestT = Infinity, bestObstacle = null;
   for (let i = 0; i < count; i++) {
     const o = items[i];
     const ox = o.x - ux, oy = o.y - uy;
@@ -172,9 +258,9 @@ function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist)
     if (t < bestT) { bestT = t; bestObstacle = o; bestEffR = effR; }
   }
   if (bestObstacle === null) { unit._steerObstacle = null; unit._steerActiveT = 0; return false; }
-  const bestOx = bestObstacle.x - ux, bestOy = bestObstacle.y - uy;
-  const D = Math.sqrt(bestOx * bestOx + bestOy * bestOy);
-  if (D <= bestEffR) return false; // degenerate guard, should not happen given the check above
+  bestOx = bestObstacle.x - ux; bestOy = bestObstacle.y - uy;
+  const distance = Math.sqrt(bestOx * bestOx + bestOy * bestOy);
+  if (distance <= bestEffR) return false; // degenerate guard, should not happen given the check above
   unit._steerActiveT = (unit._steerActiveT || 0) + dt;
   if (unit._steerActiveT > STEER_MAX_ACTIVE) {
     // Give up steering for a cooldown: fall back to the raw heading (and pushOutOf) so a
@@ -185,7 +271,7 @@ function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist)
     return false;
   }
   const alpha = Math.atan2(bestOy, bestOx);
-  const theta = Math.asin(clamp(bestEffR / D, -1, 1));
+  const theta = Math.asin(clamp(bestEffR / distance, -1, 1));
   const tang = computeTangentHeading(alpha, theta, unit._steerObstacle, bestObstacle, unit._steerSign, dirX, dirY);
   unit._steerObstacle = bestObstacle;
   unit._steerSign = tang.sign;

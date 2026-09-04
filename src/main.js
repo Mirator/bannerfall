@@ -1,18 +1,18 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r503b634b847a';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r503b634b847a';
-import { Sfx } from './audio.js?v=r503b634b847a';
-import { Battle } from './battle.js?v=r503b634b847a';
-import { World } from './world.js?v=r503b634b847a';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r503b634b847a';
-import { FIELD } from './battle/constants.js?v=r503b634b847a';
-import { ACTIONS } from './input-actions.js?v=r503b634b847a';
-import { createWebPlatform } from './platform/web-platform.js?v=r503b634b847a';
-import { PLATFORM_SLOTS } from './platform/platform-contract.js?v=r503b634b847a';
-import { SaveRepository, StorageReadError } from './persistence/save-repository.js?v=r503b634b847a';
-import { buildSummaryModel } from './world-screens.js?v=r503b634b847a';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r503b634b847a';
-import { perkChoiceDue, perkMods } from './progression.js?v=r503b634b847a';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=rfdf6abae5ce0';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rfdf6abae5ce0';
+import { Sfx } from './audio.js?v=rfdf6abae5ce0';
+import { Battle } from './battle.js?v=rfdf6abae5ce0';
+import { World } from './world.js?v=rfdf6abae5ce0';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=rfdf6abae5ce0';
+import { FIELD } from './battle/constants.js?v=rfdf6abae5ce0';
+import { ACTIONS } from './input-actions.js?v=rfdf6abae5ce0';
+import { createWebPlatform } from './platform/web-platform.js?v=rfdf6abae5ce0';
+import { PLATFORM_SLOTS } from './platform/platform-contract.js?v=rfdf6abae5ce0';
+import { SaveRepository, StorageReadError } from './persistence/save-repository.js?v=rfdf6abae5ce0';
+import { buildSummaryModel } from './world-screens.js?v=rfdf6abae5ce0';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=rfdf6abae5ce0';
+import { perkChoiceDue, perkMods } from './progression.js?v=rfdf6abae5ce0';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

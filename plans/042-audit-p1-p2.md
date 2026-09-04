@@ -4,7 +4,7 @@
 
 - Priority: P1/P2; effort L across three parallel executors; risk medium.
 - Planned at `9c5270d` on 2026-09-04; dependencies: shipped Plan 041 and the passing 234-test baseline from the audit.
-- Status: IN PROGRESS.
+- Status: IMPLEMENTED. Final integrated gate results and merge status are recorded in [PR #34](https://github.com/Mirator/bannerfall/pull/34); merge requires passing browser QA and balance checks.
 - User authorization: make a plan, implement all P1/P2 findings in subagents, open a PR, and merge it. This authorizes the integration commits, push, PR creation, and merge; it supersedes the improve skill's default advisory-only and no-merge workflow for this task.
 - P3 findings 10–12 are excluded, except narrowly related documentation updates required by an implemented contract.
 
@@ -67,4 +67,8 @@ All nine assigned fixes were implemented in three isolated worktrees and reviewe
 The first integrated full gate passed 247 of 248 tests; its sole failure was the reviewed `battle-break.png` visual difference following the terrain RNG correction. The normal CI recapture retained the previous image because Linux remained within its tolerance, so a separate capture-only branch omits exactly that PNG to request its targeted regeneration through the documented workflow. No other baselines or thresholds change.
 
 The first integrated balance gate passed three of four tests. Its unchanged 11/12 campaign guard exposed a real palisade navigation deadlock on seed 12: a brute and raider remained at identical positions from 70 through 90 simulated seconds between adjacent plank colliders. Restoring the old physical placement alone removed that particular deadlock, attributing the newly exposed failure to geometry rather than economy, claim policy, or the timer fix. Neither zeroing jitter nor changing an overlap threshold was accepted merely because it improved this seed; isolated trapped-unit checks showed they did not fix the underlying problem. The battle executor is correcting navigation at adjoining colliders, with focused escape and direction controls; a gate-only detour was rejected after it exposed the same deadlock at other obstacle joins. This necessary P2 correction extends finding 6; it does not authorize balance-policy tuning or a weaker guard.
+
+The final correction (`2597eaf`) retains a per-unit enclosing-circle detour for simultaneous contacts, expands it when another obstacle blocks escape, and bounds its lifetime and lack of progress. Single-obstacle behavior is preserved. Five regression cases (both teams, mirrored directions, and an additional blocker) cross the pocket within ten simulated seconds; the terrain/stance/QA gate passed 21 tests. The integrated seed-12 probe has no unresolved battle and storms at ratio 0.960 versus claimRush's 1.338. Both root and campaign executor reviewed the final geometry and buffer ownership.
+
+The targeted visual capture from [workflow run 33847497308](https://github.com/Mirator/bannerfall/actions/runs/33847497308) was reviewed against the local actual image, and only `battle-break.png` was adopted. Its local focused screenshot check passed. The final integrated release graph is `rfdf6abae5ce0`; release verification and all 20 tooling checks passed. Final full browser/performance/visual and balance runs are tracked on the PR so their status corresponds to the exact revision being merged.
 
