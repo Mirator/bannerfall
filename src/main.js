@@ -1,17 +1,18 @@
 // Bannerfall — boot, state machine, fixed-timestep loop, headless test API.
-import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=r3b20caaaa2ab';
-import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=r3b20caaaa2ab';
-import { Sfx } from './audio.js?v=r3b20caaaa2ab';
-import { Battle } from './battle.js?v=r3b20caaaa2ab';
-import { World } from './world.js?v=r3b20caaaa2ab';
-import { sampleBattlefield } from './world/battlefield-brief.js?v=r3b20caaaa2ab';
-import { FIELD } from './battle/constants.js?v=r3b20caaaa2ab';
-import { ACTIONS } from './input-actions.js?v=r3b20caaaa2ab';
-import { createWebPlatform } from './platform/web-platform.js?v=r3b20caaaa2ab';
-import { SaveRepository } from './persistence/save-repository.js?v=r3b20caaaa2ab';
-import { buildSummaryModel } from './world-screens.js?v=r3b20caaaa2ab';
-import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=r3b20caaaa2ab';
-import { perkChoiceDue, perkMods } from './progression.js?v=r3b20caaaa2ab';
+import { PAL, WORLD, enemyStrength, armySlots, rankOf } from './data.js?v=rd93aa08103be';
+import { Input, Camera, makeRng, deriveSeed, RNG_DOMAINS, rrect, mountain } from './engine.js?v=rd93aa08103be';
+import { Sfx } from './audio.js?v=rd93aa08103be';
+import { Battle } from './battle.js?v=rd93aa08103be';
+import { World } from './world.js?v=rd93aa08103be';
+import { sampleBattlefield } from './world/battlefield-brief.js?v=rd93aa08103be';
+import { FIELD } from './battle/constants.js?v=rd93aa08103be';
+import { ACTIONS } from './input-actions.js?v=rd93aa08103be';
+import { createWebPlatform } from './platform/web-platform.js?v=rd93aa08103be';
+import { PLATFORM_SLOTS } from './platform/platform-contract.js?v=rd93aa08103be';
+import { SaveRepository, StorageReadError } from './persistence/save-repository.js?v=rd93aa08103be';
+import { buildSummaryModel } from './world-screens.js?v=rd93aa08103be';
+import { strongholdModifiers, STRONGHOLD_POWER_LABELS, REGION } from './region.js?v=rd93aa08103be';
+import { perkChoiceDue, perkMods } from './progression.js?v=rd93aa08103be';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -140,6 +141,11 @@ class Game {
   constructor({ platform, saves }) {
     this.platform = platform;
     this.saves = saves;
+    this.snapshotErrors = new Map();
+    // Repository failures are observed here, including settings and suspend flushes;
+    // promise rejection handlers below only prevent duplicate unhandled rejections.
+    saves.onStatusChange(() => this.refreshSaveWarning());
+    this.refreshSaveWarning();
     this.input = new Input(canvas, platform, view);
     this.camera = new Camera(view.w, view.h);
     this.sfx = new Sfx(saves);
@@ -173,10 +179,16 @@ class Game {
 
   invalidate() { this.renderDirty = true; }
 
-  reportSaveFailure(error) {
-    this.saveWarning = 'Save failed — progress may not be stored.';
-    this.saveError = error;
+  refreshSaveWarning() {
+    this.saveError = [...this.snapshotErrors.values()].at(-1) ?? this.saves.lastError;
+    this.saveWarning = this.saveError ? 'Save failed — progress may not be stored.' : null;
     this.invalidate();
+  }
+
+  reportSaveFailure(error) {
+    const slot = this.testMode ? PLATFORM_SLOTS.TEST_CAMPAIGN : PLATFORM_SLOTS.CAMPAIGN;
+    this.snapshotErrors.set(slot, error);
+    this.refreshSaveWarning();
   }
 
   // ---- campaign persistence: the run survives a refresh
@@ -188,15 +200,25 @@ class Game {
         this.reportSaveFailure(new Error('Save snapshot contains non-finite campaign coordinates'));
         return;
       }
-      this.saves.writeCampaign(this.testMode, snapshot)
-        .catch(error => this.reportSaveFailure(error));
+      const slot = this.testMode ? PLATFORM_SLOTS.TEST_CAMPAIGN : PLATFORM_SLOTS.CAMPAIGN;
+      const validationError = this.snapshotErrors.get(slot);
+      this.saves.writeCampaign(this.testMode, snapshot).then(() => {
+        // An older pending write cannot recover a newer rejected snapshot.
+        if (this.snapshotErrors.get(slot) === validationError) this.snapshotErrors.delete(slot);
+        this.refreshSaveWarning();
+      }).catch(() => {});
     }
   }
   loadRun() {
     return this.saves.getCampaign(this.testMode);
   }
   clearRun() {
-    this.saves.removeCampaign(this.testMode).catch(error => this.reportSaveFailure(error));
+    const slot = this.testMode ? PLATFORM_SLOTS.TEST_CAMPAIGN : PLATFORM_SLOTS.CAMPAIGN;
+    const validationError = this.snapshotErrors.get(slot);
+    this.saves.removeCampaign(this.testMode).then(() => {
+      if (this.snapshotErrors.get(slot) === validationError) this.snapshotErrors.delete(slot);
+      this.refreshSaveWarning();
+    }).catch(() => {});
   }
 
   // The one place scene-to-music mapping lives. The menu and the campaign map share a bed
@@ -285,7 +307,7 @@ class Game {
     else if (id === 'settings') this.setMenuPanel('settings');
     else if (id === 'credits') this.setMenuPanel('credits');
     else if (id === 'mute') {
-      this.sfx.setMuted(!this.sfx.muted).catch(error => this.reportSaveFailure(error));
+      this.sfx.setMuted(!this.sfx.muted).catch(() => {});
       this.invalidate();
     } else if (id === 'replace') this.startNewCampaign(this.pendingHard);
     else if (id === 'cancel') this.setMenuPanel('new');
@@ -379,7 +401,7 @@ class Game {
   update(dt) {
     // mute toggle works everywhere
     if (this.input.pressedAction(ACTIONS.MUTE)) {
-      this.sfx.setMuted(!this.sfx.muted).catch(error => this.reportSaveFailure(error));
+      this.sfx.setMuted(!this.sfx.muted).catch(() => {});
       this.muteToastT = 2.5; this.invalidate();
     }
     if (this.muteToastT > 0) this.muteToastT -= dt;
@@ -522,7 +544,22 @@ class Game {
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('🔇 muted', view.w - 55, view.h - 27);
     }
+    if (this.saveWarning) this.drawSaveWarning();
     this.renderDirty = false;
+  }
+
+  drawSaveWarning() {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const w = Math.min(560, view.w - 24), x = (view.w - w) / 2;
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#752C35';
+    rrect(ctx, x, view.h - 62, w, 48, 8); ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '700 14px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(this.saveWarning, view.w / 2, view.h - 38, w - 24);
+    ctx.restore();
   }
 
   drawPause() {
@@ -536,7 +573,7 @@ class Game {
     ctx.fillText('PAUSED', W / 2, H * 0.4);
     ctx.font = '600 16px Inter, system-ui, sans-serif';
     ctx.fillText('ESC / P — resume    ·    M — mute', W / 2, H * 0.4 + 54);
-    ctx.fillText('Q — quit to menu (campaign saved)', W / 2, H * 0.4 + 82);
+    ctx.fillText('Q — save and quit to menu', W / 2, H * 0.4 + 82);
     // The destructive exit says it destroys, on its own line, in its own colour. While
     // armed it says what the second press does and how long the offer stands, so the arm
     // is a visible state rather than a key that silently did nothing the first time.
@@ -551,7 +588,7 @@ class Game {
     }
     ctx.font = '600 13px Inter, system-ui, sans-serif';
     ctx.fillStyle = '#9BA3BF';
-    ctx.fillText('Your campaign auto-saves on the map — closing the tab is safe', W / 2, H * 0.4 + 146);
+    ctx.fillText('Saving is automatic on the map; battles resume from their entry checkpoint', W / 2, H * 0.4 + 146);
   }
 
   menuLayout(W, H) {
@@ -972,7 +1009,7 @@ class Game {
       const controls = [
         'E  site menu / confirm    ·    X  leave / withdraw    ·    TAB  squad',
         'ESC  backs out of an open menu — otherwise pauses the run',
-        'Q  quit to menu (campaign saved)    ·    R twice  abandon run (erases it)',
+        'Q  save and quit to menu    ·    R twice  abandon run (erases it)',
       ];
       controls.forEach((line, i) => ctx.fillText(line, layout.centerX, H - 24 - (controls.length - i) * 24));
     }
@@ -1189,6 +1226,7 @@ window.game = {
   keepAwake: (on = true) => { markTest(); keepAwake(game.scene, on); },
   state: () => {
     const s = { scene: game.sceneName };
+    if (game.saveWarning) s.saveWarning = game.saveWarning;
     const sc = game.scene;
     if (game.sceneName === 'victory') {
       s.summary = game.summary;
@@ -1633,8 +1671,8 @@ async function loadUiFonts() {
 }
 
 async function bootstrap() {
-  platform = createWebPlatform();
-  saves = new SaveRepository(platform);
+  platform ??= createWebPlatform();
+  saves ??= new SaveRepository(platform);
   await saves.initialize();
   // Size the canvas before Input captures its initial mouse center. The legacy
   // synchronous boot performed this resize before constructing Game; preserving
@@ -1649,13 +1687,57 @@ async function bootstrap() {
   platform.lifecycle.onSuspend(() => {
     game.input.clear();
     if (game.sceneName === 'world') game.persistRun();
-    saves.flush().catch(error => game.reportSaveFailure(error));
+    saves.flush().catch(() => {});
   });
   exposeTestApi();
   await loadUiFonts();
   game.draw();
 }
 
-bootstrap().catch(error => {
-  console.error('Bannerfall failed to initialize', error);
-});
+// Storage may become available after the player changes browser permissions.
+// Reuse one platform/repository and create Game only AFTER hydration succeeds:
+// repeated retries must not add input/audio/lifecycle listeners or another loop.
+let bootPending = false;
+let bootRecovery = null;
+async function tryBootstrap() {
+  if (bootPending || game) return;
+  bootPending = true;
+  const button = bootRecovery?.querySelector('button');
+  if (button) button.disabled = true;
+  try {
+    await bootstrap();
+    bootRecovery?.remove();
+    bootRecovery = null;
+  } catch (error) {
+    if (!(error instanceof StorageReadError)) {
+      bootRecovery?.remove();
+      bootRecovery = null;
+      console.error('Bannerfall failed to initialize', error);
+      return;
+    }
+    console.warn('Bannerfall: storage could not be loaded', error);
+    if (!bootRecovery) {
+      bootRecovery = document.createElement('section');
+      bootRecovery.id = 'storage-recovery';
+      bootRecovery.setAttribute('role', 'alert');
+      bootRecovery.style.cssText = 'position:fixed;inset:0;display:grid;place-content:center;gap:18px;padding:24px;background:#1E2A4A;color:#F2E3C1;text-align:center;font:16px/1.5 Inter,system-ui,sans-serif';
+      const title = document.createElement('h1');
+      title.textContent = 'Your saved game could not be loaded';
+      title.style.cssText = 'font-size:28px;margin:0';
+      const detail = document.createElement('p');
+      detail.textContent = 'Your stored data has not been changed. Allow browser storage, then retry.';
+      detail.style.margin = '0';
+      const retry = document.createElement('button');
+      retry.type = 'button'; retry.textContent = 'Retry loading';
+      retry.style.cssText = 'justify-self:center;padding:12px 24px;border:0;border-radius:8px;background:#FFD34D;color:#1E2A4A;font:700 16px Inter,system-ui,sans-serif;cursor:pointer';
+      retry.addEventListener('click', tryBootstrap);
+      bootRecovery.append(title, detail, retry);
+      document.body.append(bootRecovery);
+    }
+  } finally {
+    bootPending = false;
+    const retry = bootRecovery?.querySelector('button');
+    if (retry) retry.disabled = false;
+  }
+}
+tryBootstrap();
