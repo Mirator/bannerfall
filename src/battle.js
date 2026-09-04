@@ -2,42 +2,42 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=r3b20caaaa2ab';
-import { perkMods } from './progression.js?v=r3b20caaaa2ab';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r3b20caaaa2ab';
-import { SpatialGrid } from './battle/spatial-index.js?v=r3b20caaaa2ab';
-import { ACTIONS } from './input-actions.js?v=r3b20caaaa2ab';
+} from './data.js?v=r56667fad5904';
+import { perkMods } from './progression.js?v=r56667fad5904';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r56667fad5904';
+import { SpatialGrid } from './battle/spatial-index.js?v=r56667fad5904';
+import { ACTIONS } from './input-actions.js?v=r56667fad5904';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
   DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
-} from './battle/constants.js?v=r3b20caaaa2ab';
+} from './battle/constants.js?v=r56667fad5904';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=r3b20caaaa2ab';
-import { drawScene, drawProps } from './battle/render-scene.js?v=r3b20caaaa2ab';
+} from './battle/terrain.js?v=r56667fad5904';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r56667fad5904';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=r3b20caaaa2ab';
+} from './battle/separation.js?v=r56667fad5904';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=r3b20caaaa2ab';
+} from './battle/ai-phases.js?v=r56667fad5904';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=r3b20caaaa2ab';
+} from './battle/combat.js?v=r56667fad5904';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=r3b20caaaa2ab';
+} from './battle/objectives.js?v=r56667fad5904';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
   placeEnemyDeployment as placeEnemyLine,
-} from './battle/enemy-command.js?v=r3b20caaaa2ab';
+} from './battle/enemy-command.js?v=r56667fad5904';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -280,6 +280,8 @@ export class Battle {
     this.troops = [];
     (setup.troops || []).forEach((t, i) => this.spawnTroop(t.type, t.hp, t.vet));
     // enemies spawn AHEAD along your approach; ambushes pincer from ahead and behind
+    // Reward roster records every actual arrival without mutating the initial setup.
+    this.deployedEnemyTypes = [];
     this.enemies = [];
     const ecx = enemyCx, ecy = enemyCy;
     const bcx = cx0 - adx * FLANK_GAP, bcy = cy0 - ady * FLANK_GAP; // behind you
@@ -323,7 +325,7 @@ export class Battle {
     this.deployEnabled = !setup.ambush && (setup.deploy == null || setup.deploy > 0);
     this.deployArmT = DEPLOY_ARM_T;
     this.dragUnit = null; // the body under the mouse while placing, deployment phase only
-    // Squad types the player explicitly ordered during the deployment phase (written by
+    // Squad types the player explicitly ordered during intro or deployment (written by
     // issueCommand). confirmDeploy reads it to tell a deliberate FOLLOW from the neutral
     // default it promotes to HOLD — the stance string alone cannot make that distinction.
     this._deployOrdered = new Set();
@@ -384,6 +386,7 @@ export class Battle {
   }
   spawnEnemy(type, x, y) {
     const d = ENEMY_TYPES[type];
+    this.deployedEnemyTypes.push(type);
     this.enemies.push({
       type, team: 'enemy', d, x, y, vx: 0, vy: 0, hp: d.hp, maxHp: d.hp,
       // Facing the player's side of the field for any approach (the old hardcoded west was
@@ -468,14 +471,13 @@ export class Battle {
     if (squadType && !this.troops.some(t => t.type === squadType)) return;
     const targets = squadType ? [squadType] : this.mannedSquads();
     if (!targets.length) return;
-    // Plan 033: an order pressed during the deployment phase is a deliberate choice even
-    // when it re-states the current stance — pressing 1 (FOLLOW) on the neutral default is
-    // exactly how a player refuses the confirm's hold-promotion, so it is recorded BEFORE
-    // the repeat no-op below, and the no-op itself is skipped there so the press is
-    // acknowledged with the usual horn and flash rather than silence.
-    if (this.state === 'deploy') for (const type of targets) this._deployOrdered.add(type);
-    // Re-issuing the same order is a no-op except for HOLD, which re-anchors the line.
-    if (this.state !== 'deploy' && cmd !== 'hold' && targets.every(type => this.squads[type].stance === cmd)) return;
+    // Intro commands are as deliberate as deployment commands. Remember even an
+    // explicit FOLLOW on the neutral default so confirmation does not turn it into HOLD.
+    const preDeploy = this.deployEnabled && (this.state === 'intro' || this.state === 'deploy');
+    if (preDeploy) for (const type of targets) this._deployOrdered.add(type);
+    // Re-issuing a pre-fight order acknowledges the choice; live repeats are no-ops
+    // except for HOLD, which re-anchors the line.
+    if (!preDeploy && cmd !== 'hold' && targets.every(type => this.squads[type].stance === cmd)) return;
     for (const type of targets) this.squads[type].stance = cmd;
     this.command = this.aggregateStance();
     const sfx = this.game.sfx;
@@ -636,8 +638,8 @@ export class Battle {
     this.state = 'fight';
     this.dragUnit = null;
     // The placed line means something: a squad the player gave NO order holds where he put
-    // it until ordered otherwise. `_deployOrdered` (written by issueCommand while the phase
-    // is up) is what separates the neutral default from a deliberate FOLLOW pressed during
+    // it until ordered otherwise. `_deployOrdered` (written by pre-fight issueCommand
+    // calls) is what separates the neutral default from a deliberate FOLLOW pressed during
     // the phase — the stance string alone cannot, and silently overwriting a chosen order
     // is the misfire issueCommand's own guard exists to prevent.
     //

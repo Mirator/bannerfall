@@ -569,3 +569,29 @@ test('obstacle size caps hold: rocks, colliding trees, and corridor-adjacent hil
 
   assertNoRuntimeErrors(runtimeErrors);
 });
+
+
+test('camp collision geometry is independent of the decorative RNG stream', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await bootWorld(page, { seed: 7 });
+  const out = await page.evaluate(async () => {
+    const { buildTerrain } = await import('/src/battle/terrain.js');
+    const { makeRng } = await import('/src/engine.js');
+    const build = fxSeed => {
+      const b = { W: 2500, H: 1760, adx: 1, ady: 0, hero: { x: 840, y: 880 },
+        setup: { seed: 17, arena: 'camp' }, simRng: makeRng(19), fxRng: makeRng(fxSeed) };
+      buildTerrain(b);
+      return {
+        obstacles: b.obstacles.map(({ kind, x, y, r }) => ({ kind, x, y, r })),
+        zones: b.zones, blockers: b.blockers, crossings: b.crossings, riverSegs: b.riverSegs,
+        plankSizes: b.props.filter(p => p.kind === 'plank').map(p => p.s),
+      };
+    };
+    return [build(1), build(2)];
+  });
+  const [{ plankSizes: aSizes, ...a }, { plankSizes: bSizes, ...b }] = out;
+  expect(a.obstacles.filter(o => o.kind === 'none' && o.r === 13)).toHaveLength(6);
+  expect(a).toEqual(b);
+  expect(aSizes).not.toEqual(bSizes);
+  assertNoRuntimeErrors(runtimeErrors);
+});
