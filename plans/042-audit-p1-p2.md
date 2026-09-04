@@ -59,3 +59,12 @@ Escalate to the reviewer on false assumptions, out-of-scope semantic needs, repe
 ## Maintenance notes
 
 Countdown writers and readers must agree on their valid range. Party removal must maintain occupation/raid ownership. Save UX should describe real durability rather than cache state. Shared physical/visual coordinates belong to a simulation RNG. Explicit pre-fight orders and deployed reward rosters must survive their state transitions. Campaign measurements must prove their route policy before being used for balance decisions.
+
+## Integration findings
+
+All nine assigned fixes were implemented in three isolated worktrees and reviewed before integration. The integrated semantic files were compared against the executor commits after resolving generated cache-token conflicts. Tooling passed 20 checks, and the integrated release graph passed with 33 modules and 121 references. The browser smoke client reached and rode through the campaign without runtime errors; startup-retry and persistent save-warning screenshots were inspected.
+
+The first integrated full gate passed 247 of 248 tests; its sole failure was the reviewed `battle-break.png` visual difference following the terrain RNG correction. The normal CI recapture retained the previous image because Linux remained within its tolerance, so a separate capture-only branch omits exactly that PNG to request its targeted regeneration through the documented workflow. No other baselines or thresholds change.
+
+The first integrated balance gate passed three of four tests. Its unchanged 11/12 campaign guard exposed a real palisade navigation deadlock on seed 12: a brute and raider remained at identical positions from 70 through 90 simulated seconds between adjacent plank colliders. Restoring the old physical placement alone removed that particular deadlock, attributing the newly exposed failure to geometry rather than economy, claim policy, or the timer fix. Neither zeroing jitter nor changing an overlap threshold was accepted merely because it improved this seed; isolated trapped-unit checks showed they did not fix the underlying problem. The battle executor is correcting navigation at adjoining colliders, with focused escape and direction controls; a gate-only detour was rejected after it exposed the same deadlock at other obstacle joins. This necessary P2 correction extends finding 6; it does not authorize balance-policy tuning or a weaker guard.
+

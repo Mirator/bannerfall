@@ -1007,6 +1007,10 @@ the future desktop adapter will map the same contract to atomic per-user files
 and a native quit handshake. Repository reads are hydrated before Game exists;
 the fixed loop only uses its synchronous in-memory cache, while writes are ordered,
 flushable, and observable on error. Real and test campaign slots remain isolated.
+Failures remain latched per storage slot until that slot succeeds; a successful
+settings write must not clear a failed campaign write. Flush failures have their
+own recovery latch. Startup retries must read every slot successfully before any
+validation cleanup or Game construction, so unreadable data is never treated as absent.
 There are no synchronous storage escape hatches or adapter rereads from Game;
 browser fixtures must seed storage before bootstrap/reload.
 
