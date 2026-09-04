@@ -126,8 +126,12 @@ test('save warning is drawn across scenes and clears only after campaign recover
     window.game.scenario('world', { seed: 8844 });
     await window.__g.saves.flush();
     const game = window.__g;
-    const write = game.platform.storage.write;
-    window.restoreWrites = () => { game.platform.storage.write = write; };
+    const write = game.platform.storage.write, remove = game.platform.storage.remove;
+    window.restoreWrites = () => { game.platform.storage.write = write; game.platform.storage.remove = remove; };
+    game.platform.storage.remove = async slot => {
+      if (slot === 'testCampaign') throw new Error('campaign removal denied');
+      return remove(slot);
+    };
     game.platform.storage.write = async (slot, raw) => {
       if (slot === 'testCampaign') throw new Error('quota exceeded');
       return write(slot, raw);
@@ -140,7 +144,7 @@ test('save warning is drawn across scenes and clears only after campaign recover
   });
   const canvas = page.locator('#game');
   await canvas.screenshot({ path: testInfo.outputPath('save-warning-world.png') });
-  for (const scene of ['world', 'battle_small', 'victory', 'menu']) {
+  for (const scene of ['world', 'battle_small', 'victory_summary', 'menu']) {
     const drawn = await page.evaluate(sceneName => {
       const game = window.__g;
       if (sceneName !== 'world') window.game.scenario(sceneName, { seed: 8844 });
@@ -149,8 +153,9 @@ test('save warning is drawn across scenes and clears only after campaign recover
       ctx.fillText = (...args) => { text.push(args[0]); return fillText(...args); };
       try { game.draw(); game.paused = true; game.draw(); game.paused = false; }
       finally { ctx.fillText = fillText; }
-      return { text, warning: game.saveWarning, stateWarning: JSON.parse(window.render_game_to_text()).saveWarning };
+      return { scene: game.sceneName, text, warning: game.saveWarning, stateWarning: JSON.parse(window.render_game_to_text()).saveWarning };
     }, scene);
+    expect(drawn.scene).toBe({ world: 'world', battle_small: 'battle', victory_summary: 'victory', menu: 'menu' }[scene]);
     expect(drawn.warning).toBe('Save failed — progress may not be stored.');
     expect(drawn.text.filter(text => text === drawn.warning)).toHaveLength(2);
     expect(drawn.stateWarning).toBe(drawn.warning);
