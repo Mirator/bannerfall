@@ -1248,3 +1248,83 @@ test('razing the last camp leaves the March alive: the hold fields it, and the b
   expect(out.atCap, 'the re-homed remnants were not counted against the cap').toBe(out.filled.cap);
   assertNoRuntimeErrors(runtimeErrors);
 });
+
+// Plan 042: the remnant ceiling applies to roaming bands, never deployed forces.
+test('final-camp absorption preserves occupiers and inbound raids while taking roaming remnants', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  await page.evaluate(({ occupied, raidTarget, camp, hold }) => {
+    const w = window.__g.scene;
+    for (const id of ['c1', 'c2']) w.save.camps.find(c => c.id === id).razed = true;
+    w.save.camps.find(c => c.id === 'strong').garrison = ['bandit'];
+    w.save.settlements.find(s => s.id === occupied.id).occupied = true;
+    const template = w.parties[0];
+    const make = (extra) => ({ ...template, comp: ['bandit'], camp: 'strong',
+      home: { x: hold.x, y: hold.y }, waryT: 0, clashT: 0,
+      vx: 0, vy: 0, navT: 0, navGoal: null, navFor: null, raid: null, occupying: null,
+      ...extra });
+    w.parties = [
+      make({ camp: 'c3', ...w.occupierPost(occupied), occupying: occupied.id }),
+      make({ x: 2500, y: 1000, raid: raidTarget.id, raidKind: 'regional' }),
+      make({ x: 2500, y: 1100 }),
+    ];
+    w.hero.x = camp.x; w.hero.y = camp.y;
+    w.persistParties();
+  }, { occupied: S('ashford'), raidTarget: S('brindle'), camp: C('c3'), hold: STRONGHOLD });
+  await tickSiteRow(page, 'raid');
+  await tickAction(page, 'confirm');
+  await page.evaluate(() => { window.__g.scene.endBattle(true); window.__tick(3); });
+  const after = await page.evaluate(() => {
+    const w = window.__g.scene;
+    return { parties: w.save.parties, settlements: w.save.settlements,
+      garrison: w.save.camps.find(c => c.id === 'strong').garrison };
+  });
+  expect(after.garrison).toEqual(['bandit', 'bandit']);
+  expect(after.parties).toHaveLength(2);
+  expect(after.parties.find(p => p.occupying)).toMatchObject({ camp: 'strong', occupying: 'ashford', comp: ['bandit'] });
+  expect(after.parties.find(p => p.raid)).toMatchObject({ raid: 'brindle', raidKind: 'regional', comp: ['bandit'] });
+  expect(after.settlements.find(s => s.id === 'ashford').occupied).toBe(true);
+  // The restored inbound party still completes its lifecycle; a reservation is not
+  // merely a serialized marker. Keep the hero away so arrival means occupation.
+  const arrival = await page.evaluate(target => {
+    const w = window.__g.scene, p = w.parties.find(p => p.raid === target.id);
+    p.x = target.x; p.y = target.y;
+    w.updateParties(1 / 60);
+    return { raid: p.raid, occupying: p.occupying,
+      occupied: w.save.settlements.find(s => s.id === target.id).occupied };
+  }, S('brindle'));
+  expect(arrival).toEqual({ raid: null, occupying: 'brindle', occupied: true });
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+test('regional raids reserve one service across held, neutral, occupied and inbound sites', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openWorld(page);
+  const results = await page.evaluate(() => {
+    const w = window.__g.scene;
+    const run = (occupied, inbound) => {
+      for (const s of w.save.settlements) {
+        s.owner = s.id === 'ashford' ? 'player' : 'neutral';
+        s.occupied = occupied.includes(s.id);
+        delete s.spec;
+      }
+      // A breakoff reservation must count even though the separate one-regional-
+      // raid guard would not see it. No movement is needed to test dispatch.
+      w.parties = inbound ? [{ camp: 'c1', raid: inbound, raidKind: 'breakoff' }] : [];
+      w.raidCdT = 0;
+      w.updateRegionalPressure(1 / 60);
+      return w.parties.filter(p => p.raidKind === 'regional').map(p => p.raid);
+    };
+    return {
+      lastHeld: run(['brindle', 'coldwell', 'keep'], null),
+      reservedNeutral: run(['coldwell', 'keep'], 'brindle'),
+      reservedHeld: run(['coldwell', 'keep'], 'ashford'),
+      twoAvailable: run(['coldwell', 'keep'], null),
+    };
+  });
+  expect(results.lastHeld).toEqual([]);
+  expect(results.reservedNeutral).toEqual([]);
+  expect(results.reservedHeld).toEqual([]);
+  expect(results.twoAvailable).toEqual(['ashford']);
+  assertNoRuntimeErrors(runtimeErrors);
+});

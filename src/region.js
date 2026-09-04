@@ -19,7 +19,7 @@
 // Only BALANCE is read here: `WORLD` went unused when strongholdModifiers stopped
 // publishing the map's total as a point denominator (see STRONGHOLD_TOP_POINTS), and
 // `UNIT_TYPES` had already been dead alongside it.
-import { BALANCE } from './data.js?v=r3b20caaaa2ab';
+import { BALANCE } from './data.js?v=r93a845f7e898';
 
 // ---------------------------------------------------------------------------
 // Regional configuration — one named region (Milestone 025 scope: exactly one).

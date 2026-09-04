@@ -2,27 +2,27 @@
 import {
   PAL, WORLD, HERO, BALANCE, UNIT_TYPES, enemyStrength, playerStrength, rollComposition, armySlots,
   heaviestLightBody,
-} from './data.js?v=r3b20caaaa2ab';
-import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r3b20caaaa2ab';
-import { SAVE_VERSION } from './save.js?v=r3b20caaaa2ab';
+} from './data.js?v=r93a845f7e898';
+import { TAU, clamp, lerp, angLerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, distToSegment, Particles } from './engine.js?v=r93a845f7e898';
+import { SAVE_VERSION } from './save.js?v=r93a845f7e898';
 import {
   REGION, SPECIALIZATIONS, OWNERSHIP, RAID,
   encounterObjective, strongholdModifiers, isPlayerOwned, settlementRecord, isValidSpec,
   strongholdPoints,
-} from './region.js?v=r3b20caaaa2ab';
-import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r3b20caaaa2ab';
+} from './region.js?v=r93a845f7e898';
+import { buildAftermathModel, buildSpecModel, buildPerkModel } from './world-screens.js?v=r93a845f7e898';
 import {
   PERKS, isValidPerk, perkChoiceDue, availablePerks, bannerCost, bannerLabel, perkMods,
   recruitTroop,
-} from './progression.js?v=r3b20caaaa2ab';
-import { drawScene } from './world/render-scene.js?v=r3b20caaaa2ab';
+} from './progression.js?v=r93a845f7e898';
+import { drawScene } from './world/render-scene.js?v=r93a845f7e898';
 import {
   startBattle as beginBattle,
   requestBattle as openBattleBrief,
   cancelBrief as dismissBrief,
   confirmBrief as acceptBrief,
   updateWorldScreens as worldScreens,
-} from './world/battle-transition.js?v=r3b20caaaa2ab';
+} from './world/battle-transition.js?v=r93a845f7e898';
 import {
   say as sayToast,
   costAt as unitCostAt,
@@ -32,16 +32,16 @@ import {
   isSettlementOccupied as settlementOccupied,
   updateSettlementInteractions as settlementInteractions,
   campVictoryExtra as campVictoryBookkeeping,
-} from './world/settlement-interactions.js?v=r3b20caaaa2ab';
+} from './world/settlement-interactions.js?v=r93a845f7e898';
 import {
   updateSiteInteraction as siteInteraction,
-} from './world/site-menu.js?v=r3b20caaaa2ab';
+} from './world/site-menu.js?v=r93a845f7e898';
 import {
   buildTerrainGeometry as buildGeometry, linesToSegments as sampleToSegments,
   buildStaticPaths as bakeStaticPaths, buildScenery as placeScenery,
   lineClear as segmentClear, pathGoal as navPathGoal,
-} from './world/terrain.js?v=r3b20caaaa2ab';
-import { WORLD_ART } from './world/visual-style.js?v=r3b20caaaa2ab';
+} from './world/terrain.js?v=r93a845f7e898';
+import { WORLD_ART } from './world/visual-style.js?v=r93a845f7e898';
 
 const P = PAL.world;
 
@@ -929,9 +929,9 @@ export class World {
       }
       const pStr = this.strength(p.comp), mine = this.myStrength();
       let goal = null, speed = 105;
-      if (p.waryT > 0) p.waryT -= dt;
+      if (p.waryT > 0) p.waryT = Math.max(0, p.waryT - dt);
       if (p.chaseT > 0) p.chaseT -= dt;
-      if (p.clashT > 0) p.clashT -= dt;
+      if (p.clashT > 0) p.clashT = Math.max(0, p.clashT - dt);
 
       if (p.raid || p.occupying) {
         // Design decision 3: a party that broke off no longer cares about the hero at
@@ -1415,7 +1415,10 @@ export class World {
       return rec && rec.owner !== OWNERSHIP.PLAYER && !rec.occupied && unclaimed(s);
     });
     const seizing = held.length === 0;
-    const targets = seizing ? (neutral.length > 1 ? neutral : []) : held;
+    // A held site is still a service the player needs. Reserve one free site
+    // across BOTH ownership groups; inbound raids already reserve their targets.
+    if (held.length + neutral.length <= 1) return;
+    const targets = seizing ? neutral : held;
     if (!targets.length) return;
     // Only one regional raid may be active at a time.
     if (this.parties.some(p => p.raidKind === 'regional' && p.raid)) return;
