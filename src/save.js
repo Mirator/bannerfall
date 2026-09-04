@@ -1,12 +1,12 @@
 // Campaign save schema — the pure boundary between persisted text and World.
 import {
   WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, armySlots, troopMaxHp, rankOf,
-} from './data.js?v=r1a9c8ccf4d55';
-import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r1a9c8ccf4d55';
+} from './data.js?v=ra5856137107c';
+import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=ra5856137107c';
 import {
   BANNER_MAX, PERK_IDS, PERKS, PERK_TIER_GATES, isValidPerk, bannerRankCap, perkMods,
   perkPointsEarned,
-} from './progression.js?v=r1a9c8ccf4d55';
+} from './progression.js?v=ra5856137107c';
 
 // Version 2 made party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
