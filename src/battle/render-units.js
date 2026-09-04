@@ -2,7 +2,7 @@
 // on the field. Presentation only — every function takes the Battle instance, reads it,
 // and draws. Nothing here mutates simulation state (see AGENTS.md: presentation may read
 // simulation, never the reverse).
-import { TAU, rrect, shade } from '../engine.js?v=r93a845f7e898';
+import { TAU, rrect, shade } from '../engine.js?v=r503b634b847a';
 
 // Stance glyphs, shared by every squad row: an arrow to follow, crossed swords to
 // charge, a heater shield to hold. Drawn at native scale so they read at 1x.

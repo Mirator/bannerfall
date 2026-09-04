@@ -206,3 +206,26 @@ test.describe('campaign arc', () => {
     // HELD_FLOOR to 12 when a future slice closes that gap; do not skip/fixme it meanwhile.
   });
 });
+
+test('claim policies visit unique destinations per stage and replay those routes', async ({ page }) => {
+  const errors = collectRuntimeErrors(page);
+  for (const policy of ['claimRush', 'captureThenRaze']) {
+    const options = { seed: 7, policy, resolve: 'forced', wallT: 900 };
+    const first = await runCampaign(page, options);
+    expect(await runCampaign(page, options)).toEqual(first);
+    const stages = Object.groupBy(first.claimVisits, visit => visit.stage);
+    for (const visits of Object.values(stages)) {
+      expect(new Set(visits.map(visit => visit.id)).size).toBe(visits.length);
+    }
+    if (policy === 'claimRush') {
+      expect(first.claimVisits.map(visit => visit.id).sort()).toEqual(WORLD.settlements.map(s => s.id).sort());
+      expect(first.claimsRefused).toBeGreaterThan(0);
+    } else {
+      expect(stages.beforeRaid).toHaveLength(2);
+      expect(stages.afterRaid).toHaveLength(2);
+      // The unaffordable second visit is deliberately retried after the raid.
+      expect(stages.afterRaid.map(visit => visit.id)).toContain(stages.beforeRaid[1].id);
+    }
+  }
+  assertNoRuntimeErrors(errors);
+});
