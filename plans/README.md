@@ -193,3 +193,10 @@ deliberately extracted less than the audit proposed.
 - Add a runtime dependency or build step to run QA: rejected. Playwright is a
   development-only dependency; the shipped game remains plain static HTML and ES
   modules.
+
+## Plan 042 — current audit corrections
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|---|---|---|---|---|---|
+| 042 | Close all nine P1/P2 findings from the September 4 codebase audit | P1/P2 | L | 041 | IN PROGRESS — three isolated executor worktrees; integrated verification and PR merge follow |
+
