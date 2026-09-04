@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { lootFor } from '../../src/data.js';
 import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 
 // Milestone 025 Slice C regression guard: the three reusable battle objectives.
@@ -559,7 +560,7 @@ test('an Entrenched stronghold reserve wave arrives on schedule and keeps kill a
         flash: b.commandFlash && b.commandFlash.text,
       };
       // Now wipe everything — original, wave, and guards — and the fight must end
-      // in a coherent victory (totalEnemies feeds the loot formula). The guard
+      // in a coherent victory paying all deployed types. The guard
       // deaths set hit-stop, so step past it before judging the result.
       for (const e of [...b.enemies]) b.damageEnemy(e, e.hp + 10, 0, 0, 'qa');
       for (const t of b.objectiveTargets) b.damageObjective(t, t.hp + 10);
@@ -577,7 +578,7 @@ test('an Entrenched stronghold reserve wave arrives on schedule and keeps kill a
   expect(out.after.flash).toBe('REINFORCEMENTS!');
   expect(out.state).toBe('end');
   expect(out.victory).toBe(true);
-  expect(out.loot).toBeGreaterThan(0);
+  expect(out.loot).toBe(lootFor(['brute', 'bandit', 'wolf']));
   assertNoRuntimeErrors(runtimeErrors);
 });
 
@@ -617,5 +618,44 @@ test('the objective panel surface exposes live progress for both kinds', async (
   expect(brk.kind).toBe('break');
   expect(brk.guardsTotal).toBe(2);
   expect(brk.guardsAlive).toBe(1);
+  assertNoRuntimeErrors(runtimeErrors);
+});
+
+
+test('victory pays arrived reserves once and excludes pending waves', async ({ page }) => {
+  const runtimeErrors = collectRuntimeErrors(page);
+  await openBattleHarness(page);
+  const out = await page.evaluate(dt => {
+    const g = window.__g, real = g.update.bind(g);
+    g.update = () => {};
+    try {
+      const results = [];
+      const b = window.__bootObjectiveBattle({
+        troops: ['spear'], enemies: ['bandit'], seed: 55, arena: 'road',
+        objective: { kind: 'break', guards: 1, hp: 10 },
+        waves: [{ at: 0, comp: ['brute'] }, { at: 100, comp: ['wolf', 'raider'] }],
+      });
+      b.setup.onEnd = result => results.push(result);
+      // One live tick deploys the due wave; another must not deploy it twice.
+      real(dt); real(dt);
+      const arrived = b.totalEnemies, pending = b.pendingWaves.length;
+      b.damageObjective(b.objectiveTargets[0], 100);
+      for (let i = 0; i < 30; i++) real(dt);
+      const loot = b.loot;
+      b.endBattle(true); b.endBattle(false, true);
+      for (let i = 0; i < 240; i++) real(dt);
+      return { arrived, pending, loot, finalLoot: b.loot, results,
+        initial: b.setup.enemies.map(e => e.type), remaining: b.enemies.map(e => e.type) };
+    } finally { g.update = real; }
+  }, DT);
+  expect(out.arrived).toBe(2);
+  expect(out.pending).toBe(1);
+  expect(out.initial).toEqual(['bandit']);
+  expect(out.remaining).toEqual(['bandit', 'brute']);
+  expect(out.loot).toBe(lootFor(['bandit', 'brute']));
+  expect(out.finalLoot).toBe(out.loot);
+  expect(out.results).toHaveLength(1);
+  expect(out.results[0].loot).toBe(out.loot);
+  expect(out.results[0].victory).toBe(true);
   assertNoRuntimeErrors(runtimeErrors);
 });

@@ -132,10 +132,9 @@ export function endBattle(battle, victory, retreated) {
   battle.victory = victory;
   battle.retreated = !!retreated;
   if (victory) {
-    // Plan 038: paid per body TYPE, through the one exported formula. `setup.enemies` is
-    // the force that ENTERED, so a Hold-the-ground win that leaves survivors on the field
-    // still pays for the whole force, exactly as the headcount rule did.
-    battle.loot = lootFor(battle.setup.enemies);
+    // Pay every body that actually deployed, including arrived reserves. Objective
+    // wins still pay for survivors, while pending waves have not earned a reward.
+    battle.loot = lootFor(battle.deployedEnemyTypes);
     battle.game.sfx.victory();
   } else if (retreated) {
     battle.game.sfx.horn(131);
