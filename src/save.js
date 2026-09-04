@@ -1,12 +1,12 @@
 // Campaign save schema — the pure boundary between persisted text and World.
 import {
   WORLD, UNIT_TYPES, ENEMY_TYPES, HERO, BALANCE, armySlots, troopMaxHp, rankOf,
-} from './data.js?v=r3b20caaaa2ab';
-import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r3b20caaaa2ab';
+} from './data.js?v=r93a845f7e898';
+import { SPECIALIZATIONS, isValidSpec, OWNERSHIP } from './region.js?v=r93a845f7e898';
 import {
   BANNER_MAX, PERK_IDS, PERKS, PERK_TIER_GATES, isValidPerk, bannerRankCap, perkMods,
   perkPointsEarned,
-} from './progression.js?v=r3b20caaaa2ab';
+} from './progression.js?v=r93a845f7e898';
 
 // Version 2 made party.home a runtime invariant. Version 0 is the original
 // unversioned shape; version 1 is the first explicitly versioned shape.
@@ -49,6 +49,17 @@ const integer = value => Number.isInteger(value) && Number.isFinite(value);
 const nonNegative = value => finite(value) && value >= 0;
 const nonNegativeInteger = value => integer(value) && value >= 0;
 const coordinate = (value, limit) => finite(value) && value >= 0 && value <= limit;
+
+// Plan 042: released countdown writers subtracted one fixed 1/60-second tick
+// before stopping at <= 0. Recover only that historical expiry residue for these
+// two existing fields; this is v5 canonicalization, not a new persisted shape.
+// Keep the historical bound literal: changing a future scheduler must not broaden
+// what old saves accept. Nonfinite, nonnumeric and more-negative values still fail.
+const HISTORIC_PARTY_TIMER_TICK = 1 / 60;
+function partyCooldown(value) {
+  if (!finite(value) || value < -HISTORIC_PARTY_TIMER_TICK) return undefined;
+  return Math.max(0, value);
+}
 
 function validPoint(value) {
   return plain(value) && coordinate(value.x, WORLD.w) && coordinate(value.y, WORLD.h);
@@ -230,14 +241,14 @@ function buildParties(raw, preV4, missingHomeOk) {
       return undefined;
     }
     if (hasOwn(party, 'waryT')) {
-      if (!nonNegative(party.waryT)) return undefined;
-      next.waryT = party.waryT;
+      next.waryT = partyCooldown(party.waryT);
+      if (next.waryT === undefined) return undefined;
     } else {
       next.waryT = 0;
     }
     if (hasOwn(party, 'clashT')) {
-      if (!nonNegative(party.clashT)) return undefined;
-      next.clashT = party.clashT;
+      next.clashT = partyCooldown(party.clashT);
+      if (next.clashT === undefined) return undefined;
     } else {
       next.clashT = 0;
     }

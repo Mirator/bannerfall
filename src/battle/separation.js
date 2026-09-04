@@ -2,8 +2,8 @@
 // other. Two paths on purpose — designed battles keep the exact legacy O(n^2) mutation
 // order, and only stress sizes use the spatial broad phase (see tests/README.md), so a
 // normal encounter can never change because a bucket boundary moved.
-import { HERO } from '../data.js?v=r3b20caaaa2ab';
-import { dist2 } from '../engine.js?v=r3b20caaaa2ab';
+import { HERO } from '../data.js?v=r93a845f7e898';
+import { dist2 } from '../engine.js?v=r93a845f7e898';
 
 export function updateSeparationPhase(battle, h) {
   const all = battle._allUnits;
