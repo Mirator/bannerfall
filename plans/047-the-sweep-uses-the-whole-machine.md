@@ -100,6 +100,24 @@ and the check it waits on is Browser QA again rather than the sweep. The two are
 within ten seconds of each other, which is the useful end state — there is no longer one
 check to attack.
 
+**On CI the gain is smaller, and CI is what a reviewer waits on.** Plan 046 established
+that this fleet spreads ±20% on Browser QA, so these are reported against the clusters
+rather than as a pair — and the sweep's clusters have been tight all along:
+
+| step | Plan 045 config | Plan 046 config | this plan |
+| --- | --- | --- | --- |
+| Balance sweep | 362 s, 355 s | 282 s, 279 s, 278 s | **202 s** |
+| Browser QA | — | 168 s, 167 s, 163 s | **145 s** |
+
+−28% on the sweep against a three-run cluster it sits clearly below, and −13% on QA. That
+QA number is one sample and its own cluster is a noisy instrument, but it is the number
+the mechanism predicts: the deadlock probe is the only thing in that project this plan
+touches, it went 44 s to 26 s, and 165 − 18 = 147. Job totals 304 s → 227 s.
+
+The gap between −44% locally and −28% on CI is the runner: four vCPUs that behave like two
+physical cores return less from four contexts than a box that gives four. The change is
+worth the same either way; the ceiling is not.
+
 `scripts/serve.py` also stops printing `BrokenPipeError` tracebacks. Several contexts now
 tear down their connections at the end of every measurement, and the default handler
 prints a stack for each one; CI logs filled with what look like failures and are not.

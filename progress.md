@@ -1834,6 +1834,15 @@ the larger: 274s -> 163s, -41%. The check it waits on is Browser QA again rather
 sweep, and the two are now within ten seconds of each other — there is no longer one check to
 attack.
 
+On CI the gain is smaller, and CI is what a reviewer waits on. Reported against clusters
+rather than as a pair, because Plan 046 established this fleet spreads +/-20% on QA: the
+sweep step read 362s and 355s under Plan 045's config, 282s / 279s / 278s under Plan 046's,
+and 202s now (-28%); QA read 168s / 167s / 163s under Plan 046's and 145s now (-13%). The QA
+figure is one sample against a noisy instrument, but it is what the mechanism predicts — the
+deadlock probe is the only thing this plan touches in that project, it went 44s to 26s, and
+165 - 18 = 147. Job totals 304s -> 227s. The gap between -44% locally and -28% on CI is the
+runner: four vCPUs behaving like two physical cores return less from four contexts.
+
 `scripts/serve.py` also stops printing BrokenPipeError tracebacks. Several contexts now tear
 down their connections at the end of every measurement and the default handler prints a stack
 for each, which filled CI logs with what look like failures and are not.
