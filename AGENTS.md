@@ -453,6 +453,14 @@ the artifact, and commit only the intentionally changed or new PNGs. See
 `tests/README.md` for the covered world/battle states and the baseline
 workflow.
 
+Plan 043: the pixel cap is 13,824 pixels at 720p and a HUD chip is about 300x50, so
+the comparison CANNOT see a copy change — three baselines drifted to retired wording
+with the suite green. Player-facing STRINGS are gated by
+`tests/e2e/hud-copy.spec.js`, which records every `fillText` on the prototype and
+asserts the complete ordered list per screen. Change a string and its expectation in
+the same commit. Do not answer a copy failure by loosening the list; do not raise
+`maxDiffPixelRatio` to absorb one either.
+
 ## Audio
 
 Audio lives in `src/audio.js` (Plan 026) and imports `engine.js` for its RNG helpers.

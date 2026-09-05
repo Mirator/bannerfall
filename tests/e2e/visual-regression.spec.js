@@ -30,10 +30,13 @@ async function settle(page, scenario, options = {}) {
     }
     // Advance only through the synchronous fixed-step API. Replace the live
     // scheduler update with a no-op after the explicit steps so the capture is
-    // frozen without drawing the user-facing pause overlay.
+    // frozen without drawing the user-facing pause overlay — unless the overlay
+    // IS the subject, which `paused: true` asks for. The freeze is what makes
+    // that safe: a real pause would keep re-arming the abandon countdown, and
+    // the overlay draws that countdown.
     if (scenarioOptions.steps) window.game.step(scenarioOptions.steps);
     game.update = () => {};
-    game.paused = false;
+    game.paused = !!scenarioOptions.paused;
     game.draw();
   }, { scenarioName: scenario, scenarioOptions: options });
   return page.locator('#game');
@@ -199,4 +202,30 @@ test('the stronghold assault HUD with its reserve wave remains visually stable',
 test('the campaign summary remains visually stable', async ({ page }) => {
   const canvas = await settle(page, 'victory_summary', { steps: 1.5 });
   await expect(canvas).toHaveScreenshot('victory-summary.png', VISUAL_OPTIONS);
+});
+
+// The two screens the suite could not see, added after the 2026-09-05 UI audit.
+//
+// The summary above is captured at steps 1.5 and the terminal choice only draws past
+// `victoryT > 1.5` (main.js drawVictory), so the rows the player needs in order to do
+// anything at all were outside every baseline in the repository. Captured at 3s, which is
+// also past the point where the selected row's alpha pulse has left its opening phase.
+//
+// NOTE for whoever fixes finding 1 of critiques/ui-ux-audit-2026-09-05.md: this baseline
+// pins the CURRENT layout, in which those rows are drawn at H*0.885 on top of the banner
+// poles drawn from H*0.80, and the pulse lets a pole show through the primary action. It is
+// a truthful record of a screen that is wrong. Moving the rows is a deliberate visual change
+// and re-records this PNG; that is the gate working, not a regression.
+test('the armed victory choice remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'victory_summary', { steps: 3 });
+  await expect(canvas).toHaveScreenshot('victory-summary-armed.png', VISUAL_OPTIONS);
+});
+
+// The pause overlay had no coverage of any kind: it is drawn by main.js outside every
+// scene's own draw path, so no scene baseline reaches it. `abandonArmT` is deliberately
+// left at 0: the armed variant of that line prints a countdown to one decimal, which a PNG
+// cannot hold stable. Its wording is pinned in hud-copy.spec.js, which can set the arm.
+test('the pause overlay remains visually stable', async ({ page }) => {
+  const canvas = await settle(page, 'world', { seed: 20260817, steps: 0.5, paused: true });
+  await expect(canvas).toHaveScreenshot('world-paused.png', VISUAL_OPTIONS);
 });
