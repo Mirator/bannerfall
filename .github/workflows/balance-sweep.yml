@@ -1,11 +1,19 @@
 name: Balance sweep
 
-# The 360-raid stance sweep in tests/e2e/stance-balance.spec.js is a recorded measurement,
-# not a regression guard: it carries `test.fail()` because commanding does not currently
-# beat not commanding, so it cannot go red on a code change — only report a different
-# margin. It costs minutes, so it runs here, beside Browser QA rather than inside it, and
-# the PR gate returns without waiting on it. Read its result when a change touches stance
-# behaviour, squad orders or battle balance.
+# The 360-raid stance sweep in tests/e2e/stance-balance.spec.js. It costs minutes, so it
+# runs here, beside Browser QA rather than inside it, and the PR gate returns without
+# waiting on it — but IT CAN GO RED AND A RED SWEEP BLOCKS THE MERGE. It asserts a timeout
+# budget (a policy that cannot finish its fights is not a measurement) and drift against the
+# committed table in tests/e2e/__baselines__/orders-sweep.json.
+#
+# This description used to say the opposite — "not a regression guard: it carries
+# `test.fail()` ... so it cannot go red on a code change" — describing an annotation Plan 033
+# had already removed. PR #34 was merged over three red runs of this workflow. Do not
+# reintroduce that sentence; see plans/044-the-sweep-tells-the-truth.md.
+#
+# A red run means one of two things: a policy started deadlocking (read `unresolved` in the
+# printed table), or the balance moved past the drift tolerance. Neither is answered by
+# re-recording the baseline unless the plan says why the new number is the correct one.
 
 on:
   push:

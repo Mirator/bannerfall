@@ -1,7 +1,7 @@
 # Plan 044 — the sweep was measuring the wrong thing
 
-- Status: PROPOSED. Every number below is measured on this tree and reproduced; nothing is
-  implemented yet.
+- Status: **SLICE 1 IMPLEMENTED** (the instrument). Slices 2-4 remain PROPOSED.
+- Every number below is measured on this tree and reproduced.
 - Trigger: `@sweep` `deliberate orders beat giving no order at all` has been red on `main`
   since `2df8896` (PR #34).
 
@@ -163,7 +163,7 @@ the header, or the workflow blurb, was told the failure was expected. Two-file f
 
 ## 7. What to change
 
-### Slice 1 — the instrument (no gameplay risk; do this first and alone)
+### Slice 1 — the instrument (no gameplay risk; do this first and alone) — DONE
 
 1. **Delete the two stale claims** and replace them with what is true: the assertion guards a
    property, a red sweep blocks the merge, the number is recorded either way.

@@ -1622,3 +1622,38 @@ budget, assert the paired margin with its SE, commit a baseline table, add a 24-
 the PR gate), then re-decide the property on it, then cost replacing the palisade's jittered
 circle colliders with one capsule and a gate, then an AGENTS.md rule that navigation, obstacle
 geometry and terrain RNG changes must re-measure and record the sweep in the same PR.
+
+### Plan 044 slice 1 — the instrument
+
+Implemented. Tests and docs only; no production source changed.
+
+`raidSweep` now returns one row per raid (`seed`, `campId`, `resolved`, `victory`) and an
+`unresolved` count. The `@sweep` test prints the full table INCLUDING unresolved and the
+paired McNemar margin with its standard error, prints the delta against a new committed
+baseline, and asserts the two things this sample can actually resolve:
+
+- a timeout budget of 10% per policy (worst on this tree: idle 3.3%, holdLine 5.8%; the
+  pre-042 fixture ran at 19% and 21%), and
+- drift against `tests/e2e/__baselines__/orders-sweep.json` within 7.4 points, which is twice
+  the per-policy standard error at 120 raids. PR #34 moved idle by 14.
+
+The strict `best.winPct > idle.winPct` is gone, and that is the one change here worth
+arguing with. It asserted a difference this fixture has never resolved: paired margins read
++7.5 +/- 6.0 pre-042 (1.2 sigma) and -3.3 +/- 5.4 on main (0.6 sigma), so it passed Plan 040
+at +3 and fails now at -3.3 on identical evidence quality. The margin is still measured and
+still printed on every run - it is recorded rather than asserted, and the design question it
+poses is reopened in the plan rather than buried in an annotation.
+
+New in the PR gate: `no order policy deadlocks its way through a camp raid`, 8 seeds x 3
+camps x 3 policies, ~30s, timeout budget only. It asserts nothing about the margin (the
+standard error at 24 raids is ~8 points). Its threshold was calibrated by running it against
+both trees rather than picked: unresolved per 24 raids is idle 3 / chargeAll 0 / holdLine 7
+on `9c5270d` and 0 / 0 / 3 on `main`, so 20% separates them, and the probe was verified to
+FAIL on the pre-042 tree at holdLine 7/24 before being accepted.
+
+Also removed: the two stale claims that this check cannot go red - the spec header and the
+`balance-sweep.yml` description a reviewer reads beside the red X, both describing a
+`test.fail()` Plan 033 had removed. `CLAUDE.md` and `tests/README.md` updated to match.
+
+Gate: `npm test` 270 passed (was 269 - the new probe), `npm run test:balance` 4 passed,
+tooling 20 passed, release cache verified at `r66ae1724dd52`.

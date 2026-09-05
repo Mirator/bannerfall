@@ -63,12 +63,14 @@ intentionally fixed (`<10000` world and `<9000` battle `beginPath` calls over
 
 ## Stance and squad balance
 
-`tests/e2e/stance-balance.spec.js` is the balance harness for Plan 019. Four of its five
-tests run in the PR gate. The fifth, the 360-raid policy sweep, is tagged `@sweep`, runs
+`tests/e2e/stance-balance.spec.js` is the balance harness for Plan 019. All but one of its
+tests run in the PR gate. The exception, the 360-raid policy sweep, is tagged `@sweep`, runs
 in the `balance` project only, and reaches CI through the separate `Balance sweep`
-workflow — it is a recorded measurement carrying `test.fail()`, so it cannot go red on a
-code change, and it costs minutes the gate should not spend. Run it with
-`npm run test:balance`. It runs fixed
+workflow, because it costs minutes the gate should not spend. Run it with
+`npm run test:balance`. **It can go red, and a red sweep blocks the merge** — the header
+that used to sit here and in the workflow said it could not, describing a `test.fail()` Plan
+033 had removed, and PR #34 was merged over three red runs of it (see §"What the sweep
+asserts" below). It runs fixed
 troop/enemy fixtures once per stance with the hero completely idle, so each number
 isolates what the ORDER did rather than what the player did. It asserts that measurements
 replay identically, that the wolf and raider fixtures keep their intended right answer
@@ -82,8 +84,35 @@ zero and documents a constant value that WOULD have made the assertion pass and 
 for it. Plan 033's deployment phase resolved it — with the un-ordered warband holding its
 placed formed line by default, the sweep measured idle 49% against chargeAll 60%, replayed
 digit for digit across two runs — and the `test.fail` annotation came off on its own stated
-terms. The assertion is now a guard: a change that makes the idle default the best policy
-again fails the sweep.
+terms.
+
+### What the sweep asserts (Plan 044)
+
+Plan 044 retracted that conclusion. The margin all six attempts argued over was largely the
+TIMEOUT gap between policies: idle left 23 of 120 raids unresolved inside the harness's 95s
+window against chargeAll's 3, an unresolved raid is scored as a loss, and `raidSweep` never
+printed the count. Plan 042's obstacle rescue closed that gap (idle 23 → 4) while leaving the
+real losses alone, so the ranking inverted. Paired (McNemar) margins for chargeAll against
+idle read +7.5 ± 6.0 before, −3.3 ± 5.4 after: this fixture has never resolved the sign of
+that difference at 120 raids, so `best > idle` was asserting a coin flip.
+
+What it asserts now, being what the sample can resolve:
+
+- **A timeout budget** (`TIMEOUT_BUDGET_PCT`, 10% at 120 raids). A policy that cannot finish
+  its fights is not a measurement. The pre-042 fixture would have failed this at 19% and 21%.
+- **Drift against a committed table** (`tests/e2e/__baselines__/orders-sweep.json`,
+  ±7.4 points = 2× the per-policy standard error). This is the guard PR #34 actually needed:
+  idle moving 68 → 82 fails loudly, where a sign flip merely got argued about.
+
+The margin itself is **recorded with its error bar on every run, not asserted**. Whether
+commanding should beat pressing nothing is an open design question again. Re-record the
+baseline only in the change that legitimately moves it, and say in the plan why the new
+number is the correct one — never to turn a run green.
+
+The cheap half runs in the PR gate: `no order policy deadlocks its way through a camp raid`
+is 8 seeds × 3 camps × 3 policies (~30s), asserts the timeout budget only at the looser
+threshold that sample can resolve (`PROBE_TIMEOUT_BUDGET_PCT`, 20%), and is calibrated
+against both trees — it passes on this one and fails on pre-042 at holdLine 7/24.
 
 ## The campaign arc
 
