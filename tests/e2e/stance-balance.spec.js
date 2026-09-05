@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors } from './test-helpers.js';
 import { WOLF_STALK_R, HOLD_REACH_MELEE } from '../../src/battle/constants.js';
+import ORDERS_BASELINE from './__baselines__/orders-sweep.json' with { type: 'json' };
 import { UNIT_TYPES } from '../../src/data.js';
 
 // Plan 019 balance harness.
@@ -151,6 +152,7 @@ async function raidSweep(page, orders, seeds, campIds, held = 0) {
     game.camera.w = 1280; game.camera.h = 720;
     const mix = ['spear', 'spear', 'spear', 'spear', 'archer', 'archer', 'archer', 'knight', 'knight'];
     const totals = { runs: 0, wins: 0, lost: 0, heroHp: 0 };
+    const rows = []; // Plan 044: one entry per raid — the pairing and the timeout budget
     const real = game.update.bind(game);
     game.update = () => {};
     try {
@@ -207,6 +209,11 @@ async function raidSweep(page, orders, seeds, campIds, held = 0) {
           if (b.victory) totals.wins++;
           totals.lost += b.startTroops - b.troops.length;
           totals.heroHp += Math.max(0, Math.round(b.hero.hp));
+          // Plan 044: a raid that never reached a terminal state inside the window is NOT a
+          // loss, it is a raid this harness failed to measure — and scoring it as a loss is
+          // what manufactured this sweep's entire recorded margin for five plans. Recorded
+          // per raid so the caller can both budget them and pair policies seed by seed.
+          rows.push({ seed, campId, resolved: b.state === 'end', victory: !!b.victory });
         }
       }
     } finally { game.update = real; }
@@ -215,9 +222,55 @@ async function raidSweep(page, orders, seeds, campIds, held = 0) {
       winPct: Math.round(100 * totals.wins / totals.runs),
       avgLost: Math.round(10 * totals.lost / totals.runs) / 10,
       avgHeroHp: Math.round(totals.heroHp / totals.runs),
+      unresolved: rows.filter(r => !r.resolved).length,
+      rows,
     };
   }, { orders, seeds, campIds, dt: DT, held });
 }
+
+// Plan 044: the paired (McNemar) comparison the sweep should always have used. The policies
+// run the SAME seeds and camps, so comparing two rounded `winPct` integers with `>` throws
+// away the pairing and compares two independent-looking proportions whose difference the
+// sample cannot resolve. Over discordant pairs only, the margin is (wonOnly - lostOnly) / N
+// and its standard error is sqrt(discordant) / N.
+function pairedMargin(policy, idle) {
+  const key = r => `${r.seed}|${r.campId}`;
+  const idleWon = new Map(idle.rows.map(r => [key(r), r.victory]));
+  let wonOnly = 0, lostOnly = 0;
+  for (const r of policy.rows) {
+    const i = idleWon.get(key(r));
+    if (r.victory && !i) wonOnly++;
+    else if (!r.victory && i) lostOnly++;
+  }
+  const discordant = wonOnly + lostOnly, n = policy.rows.length;
+  const marginPct = Math.round(1000 * (wonOnly - lostOnly) / n) / 10;
+  const sePct = discordant ? Math.round(1000 * Math.sqrt(discordant) / n) / 10 : 0;
+  return { wonOnly, lostOnly, discordant, marginPct, sePct,
+    sigma: sePct ? Math.round(10 * Math.abs(marginPct) / sePct) / 10 : 0 };
+}
+
+// A policy that cannot finish its fights is not a measurement. Pre-Plan-042 this sweep ran
+// at 19% (idle) and 21% (holdLine) unresolved and printed nothing about it; on the tree that
+// budget was written against the worst policy is 5.8%. See plans/044.
+const TIMEOUT_BUDGET_PCT = 10;
+
+// The same budget for the 24-raid PR-gate probe below, loosened to what THAT sample can
+// resolve. Calibrated by running the probe against both trees (seeds 1..8 x 3 camps):
+//
+//     policy      pre-042 9c5270d   main 2df8896
+//     idle              3 (12.5%)       0
+//     chargeAll         0               0
+//     holdLine          7 (29.2%)       3 (12.5%)
+//
+// 20% sits between the two and fails the broken tree on holdLine, the slowest policy and so
+// the best canary. Tightening it to the full sweep's 10% would fail the healthy tree on a
+// three-raid subsample fluctuation around a true rate of 5.8%.
+const PROBE_TIMEOUT_BUDGET_PCT = 20;
+
+// Drift tolerance against the committed table: 2x the per-policy standard error at 120 raids
+// (sqrt(0.8 * 0.2 / 120) = 3.7 points). Ordinary sampling movement passes; the 14-point idle
+// shift PR #34 introduced does not.
+const BASELINE_DRIFT_PCT = 7.4;
 
 test.describe('stance balance', () => {
   test('stance measurements are deterministic and error-free', async ({ page }) => {
@@ -252,10 +305,16 @@ test.describe('stance balance', () => {
   // was vacuous: the wolf and raider fixtures alone guarantee it, so it passed with the
   // whole feature reverted. Both are replaced by the honest measurement below.
 
-  // @sweep: 360 raids, minutes of wall clock, and a recorded finding rather than a
-  // regression guard — it cannot go red on a code change, only report a different margin.
-  // It runs as its own check (.github/workflows/balance-sweep.yml) so the PR gate does not
-  // wait on it; `npm run test:balance` runs it locally. The annotation below stays.
+  // @sweep: 360 raids and minutes of wall clock, so it runs as its own check
+  // (.github/workflows/balance-sweep.yml) and the PR gate does not wait on it;
+  // `npm run test:balance` runs it locally.
+  //
+  // IT CAN GO RED, AND A RED SWEEP BLOCKS THE MERGE. The header that used to sit here said
+  // the opposite — "a recorded finding rather than a regression guard … it cannot go red on
+  // a code change" and "the annotation below stays" — describing a `test.fail()` that Plan
+  // 033 had already removed. `.github/workflows/balance-sweep.yml` carried the same stale
+  // claim in the description a reviewer reads beside the red X. PR #34 was merged over three
+  // red sweep runs. Do not reintroduce either sentence.
   test('deliberate orders beat giving no order at all', { tag: '@sweep' }, async ({ page }) => {
     // EXPECTED FAILURE — Plan 019's premise is not met, measured on the fight the campaign
     // actually serves: organic camp raids with real garrison rolls, hero parked and idle.
@@ -360,9 +419,44 @@ test.describe('stance balance', () => {
     //
     // The `test.fail()` that sat here from Plan 019's retraction to Plan 033 is therefore
     // removed on its own stated terms ("remove it only when commanding actually beats not
-    // commanding"), and the assertion below now GUARDS the property: a change that makes
-    // the idle default the best policy again fails this sweep, exactly as weakening any
-    // other guard would.
+    // commanding").
+    //
+    // PLAN 044 RETRACTS THAT CONCLUSION, and with it the strict inequality this test used to
+    // assert. The margin every plan above argued over was, in large part, the TIMEOUT gap
+    // between policies, and this harness never printed timeouts at all. Measured at 120
+    // raids per policy, each raid split into win / timeout (never terminal inside the 95s
+    // window, scored as a loss) / real loss:
+    //
+    //                 pre-042 9c5270d      rescue disabled        main 2df8896
+    //                 win%  t/o  loss      win%  t/o  loss      win%  t/o  loss
+    //     idle        68.3   23    15      63.3   25    19      81.7    4    18
+    //     chargeAll   75.8    3    26      79.2    4    21      78.3    1    25
+    //     split       52.5   18    39      58.3   18    32      75.8    0    29
+    //     holdLine    54.2   25    30      51.7   30    28      70.8    7    28
+    //
+    // Idle timed out on 23 of 120 raids and chargeAll on 3: a 20-raid gap, ~17 points of win
+    // rate, against a recorded margin of +7.5. Plan 042's obstacle rescue closed that gap
+    // (idle 23 -> 4) and left the REAL losses alone (15 -> 18, 26 -> 25, 39 -> 29, 30 -> 28),
+    // so the raids it recovered resolve as wins and the ranking inverted. Charging was not
+    // winning more fights; it was finishing them (median 20s against idle's 42s) before the
+    // palisade could deadlock them.
+    //
+    // Paired (McNemar) margins for chargeAll against idle: +7.5 +/- 6.0 pre-042 (1.2 sigma),
+    // +15.8 +/- 6.2 with the rescue disabled, -3.3 +/- 5.4 on main (0.6 sigma). The only
+    // reading past two sigma is the one with the deadlocks left in. This test never measured
+    // its property at a resolvable confidence, so asserting `best > idle` was asserting a
+    // coin flip — it passed Plan 040 at +3 (0.6 sigma) and fails now at -3.3 (0.6 sigma) on
+    // the same evidence quality.
+    //
+    // What is asserted instead, below: the two things this sample CAN resolve.
+    //   1. A timeout budget. A policy that cannot finish its fights is not a measurement, and
+    //      the old fixture would have failed this at 19% and 21%.
+    //   2. Drift against a committed baseline table. That is the guard PR #34 needed: idle
+    //      moving 68 -> 82 is enormous against a per-policy SE of ~4, and fails loudly here,
+    //      where `best > idle` merely flipped sign and got argued about.
+    // The margin itself is RECORDED with its confidence interval on every run. Whether
+    // commanding should beat pressing nothing is a live design question again (see
+    // plans/044-the-sweep-tells-the-truth.md); it is not a property this fixture can assert.
     // PLAN 039 RE-BASED THE FIXTURE, and this is the one change to it that was not a
     // change to what it asserts. Plan 038 priced every generated force off campaign STAGE,
     // and this fixture installs the near-capped roster the stage curve calls stage 7 into a
@@ -379,8 +473,7 @@ test.describe('stance balance', () => {
     // Four held settlements is the highest stage this fixture can reach (the camps must
     // stay un-razed — they are what it raids), it puts all four policies in a measurable
     // band with nothing at 0 or 100, and the guard's margin WIDENS from 5.8 to 7.5 points.
-    // The stage was chosen on headroom, and the grid is recorded here whichever way it
-    // fell; the assertion below is untouched.
+    // The stage was chosen on headroom, and the grid is recorded here whichever way it fell.
     test.setTimeout(600_000); // measured ~168s wall-clock for the full 360-raid sweep; ~3.6x headroom
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked
     const camps = ['c1', 'c2', 'c3'];
@@ -388,12 +481,77 @@ test.describe('stance balance', () => {
     const idle = await raidSweep(page, null, seeds, camps, HELD);
     const chargeAll = await raidSweep(page, { spear: 'charge', archer: 'charge', knight: 'charge' }, seeds, camps, HELD);
     const split = await raidSweep(page, { spear: 'charge', archer: 'hold', knight: 'charge' }, seeds, camps, HELD);
-    console.log('camp-raid policy sweep:');
-    console.log(JSON.stringify({ idle, chargeAll, split }, null, 2));
+    const measured = { idle, chargeAll, split };
 
-    const best = [chargeAll, split].reduce((a, b) => (b.winPct > a.winPct ? b : a));
-    expect(best.winPct, 'the best deliberate order policy must beat pressing nothing')
-      .toBeGreaterThan(idle.winPct);
+    // The record, printed whichever way the assertions fall — including the two numbers the
+    // old table hid: how many raids never finished, and what the margin's error bar is.
+    const table = {};
+    for (const [name, r] of Object.entries(measured)) {
+      table[name] = { runs: r.runs, winPct: r.winPct, unresolved: r.unresolved,
+        avgLost: r.avgLost, avgHeroHp: r.avgHeroHp };
+      if (name !== 'idle') table[name].pairedVsIdle = pairedMargin(r, idle);
+    }
+    console.log('camp-raid policy sweep:');
+    console.log(JSON.stringify(table, null, 2));
+    console.log('delta vs ' + ORDERS_BASELINE.recordedAt + ' baseline:');
+    console.log(JSON.stringify(Object.fromEntries(Object.entries(measured).map(([name, r]) =>
+      [name, { winPct: r.winPct - ORDERS_BASELINE.policies[name].winPct,
+        unresolved: r.unresolved - ORDERS_BASELINE.policies[name].unresolved }])), null, 2));
+
+    // 1. The timeout budget. Unresolved is not a loss, it is a raid this harness failed to
+    //    measure; a policy over the budget invalidates every number beside it.
+    for (const [name, r] of Object.entries(measured)) {
+      expect(100 * r.unresolved / r.runs,
+        `${name} left ${r.unresolved}/${r.runs} raids unresolved — a policy that cannot finish ` +
+        `its fights is not a measurement (see plans/044)`).toBeLessThanOrEqual(TIMEOUT_BUDGET_PCT);
+    }
+
+    // 2. Drift against the committed table. Tolerance is 2x the per-policy standard error at
+    //    this sample size (sqrt(0.8*0.2/120) = 3.7 points), so ordinary sampling movement
+    //    passes and a real balance shift — PR #34 moved idle by 14 — does not. Re-record
+    //    tests/e2e/__baselines__/orders-sweep.json in the same change that moves it, and say
+    //    in the plan why the new number is the correct one.
+    for (const [name, r] of Object.entries(measured)) {
+      const was = ORDERS_BASELINE.policies[name];
+      expect(Math.abs(r.winPct - was.winPct),
+        `${name} moved ${was.winPct} -> ${r.winPct} against the recorded baseline ` +
+        `(${ORDERS_BASELINE.recordedAt}); re-record it deliberately or explain the shift`)
+        .toBeLessThanOrEqual(BASELINE_DRIFT_PCT);
+    }
+  });
+
+  // Plan 044: the sweep above is minutes of wall clock and runs in its own check, so the PR
+  // gate never saw the defect it was built to catch. This is the cheap half — the timeout
+  // budget only, over 8 seeds x 3 camps (24 raids/policy, ~30s) — and it is deliberately NOT
+  // tagged @sweep so it runs inside `npm test`.
+  //
+  // It asserts nothing about the MARGIN: at 24 raids the standard error is ~8 points, which
+  // could not resolve a policy difference if it tried. Deadlocks are a different quantity and
+  // a much louder one — see the calibration table at PROBE_TIMEOUT_BUDGET_PCT — so this is
+  // the part worth paying for on every pull request.
+  //
+  // holdLine is in this probe and not in the sweep above on purpose: it is the slowest policy
+  // and therefore the first to deadlock, which makes it the canary.
+  test('no order policy deadlocks its way through a camp raid', async ({ page }) => {
+    test.setTimeout(180_000);
+    const seeds = Array.from({ length: 8 }, (_, i) => i + 1);
+    const camps = ['c1', 'c2', 'c3'];
+    const policies = {
+      idle: null,
+      chargeAll: { spear: 'charge', archer: 'charge', knight: 'charge' },
+      holdLine: { spear: 'hold', archer: 'hold', knight: 'charge' },
+    };
+    const table = {};
+    for (const [name, orders] of Object.entries(policies)) {
+      const r = await raidSweep(page, orders, seeds, camps, 4);
+      table[name] = { runs: r.runs, winPct: r.winPct, unresolved: r.unresolved };
+    }
+    console.log('camp-raid deadlock probe:\n' + JSON.stringify(table, null, 2));
+    for (const [name, r] of Object.entries(table)) {
+      expect(100 * r.unresolved / r.runs,
+        `${name} left ${r.unresolved}/${r.runs} camp raids unresolved inside the 95s window`)
+        .toBeLessThanOrEqual(PROBE_TIMEOUT_BUDGET_PCT);
+    }
   });
 
   test('battle outcomes are independent of canvas size and cursor position', async ({ page }) => {

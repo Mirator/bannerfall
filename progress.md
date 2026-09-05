@@ -1576,3 +1576,84 @@ PNG-by-PNG review, and the drift measurement above cannot separate copy drift fr
 skew per file, so that review is a human's.
 
 No production source changed.
+
+## Plan 044 — analysis: the sweep was measuring deadlock susceptibility
+
+User request: analyse the red balance sweep and plan what to improve in that area. Analysis
+only; `plans/044-the-sweep-tells-the-truth.md` is PROPOSED and nothing is implemented.
+
+`@sweep` `deliberate orders beat giving no order at all` has been red since `2df8896`, and it
+was red on PR #34 itself three times (runs 47, 48, 49) before that PR was merged. CI's own run
+47 attributes the swing without a bisect: at `d5ccbed`, with every save/storage/terrain-RNG
+fix in place, the guard PASSED at its widest margin ever (+16, idle 63 / chargeAll 79 /
+split 58); at `fd280c6`, with the obstacle-rescue rework added, it failed. The terrain
+RNG-ownership change is not the cause.
+
+Measured three trees at 120 raids per policy, decomposing each raid into win / timeout / real
+loss (`node scripts/zz-orders-wide.mjs --seeds 40 --held 4`), which is the decomposition the
+shipped sweep does not print:
+
+    policy      pre-#34 9c5270d      main, rescue OFF        main 2df8896
+                win%  t/o  loss     win%  t/o  loss      win%  t/o  loss
+    idle        68.3   23    15     63.3   25    19      81.7    4    18
+    chargeAll   75.8    3    26     79.2    4    21      78.3    1    25
+    split       52.5   18    39     58.3   18    32      75.8    0    29
+    holdLine    54.2   25    30     51.7   30    28      70.8    7    28
+
+Before PR #34 idle timed out on 23 of 120 raids and chargeAll on 3. That 20-raid gap is ~17
+points of win rate against a recorded margin of +7.5: the guard's margin WAS the timeout gap.
+The rescue closed it (idle 23 -> 4, split 18 -> 0, holdLine 25 -> 7) and left real losses
+alone (15 -> 18, 26 -> 25, 39 -> 29, 30 -> 28), so the raids it recovered resolve as wins for
+a line that was never actually losing. Disabling the rescue on `main` reproduces both the
+pre-rework shape and CI's `d5ccbed` table to the digit, which is what fixes the attribution.
+
+Paired (McNemar) margins for chargeAll against idle: pre-#34 +7.5 +/- 6.0 (1.2 sigma), rescue
+OFF +15.8 +/- 6.2 (2.5 sigma), `main` -3.3 +/- 5.4 (0.6 sigma). The only reading that clears
+two sigma is the one with the deadlocks left in. This guard has never measured its property at
+a resolvable confidence, and it compares two ROUNDED integers with a strict `>`.
+
+Also found: two comments state that this check cannot go red — the spec header at
+`stance-balance.spec.js:254-258` and the `balance-sweep.yml` workflow description a reviewer
+reads beside the red X. Both predate Plan 033 removing the `test.fail()`, and the same spec
+says the opposite 100 lines lower. That is the likeliest reason a red sweep was merged.
+
+The plan proposes four slices: fix the instrument first (report timeouts and fail on a timeout
+budget, assert the paired margin with its SE, commit a baseline table, add a 24-raid proxy to
+the PR gate), then re-decide the property on it, then cost replacing the palisade's jittered
+circle colliders with one capsule and a gate, then an AGENTS.md rule that navigation, obstacle
+geometry and terrain RNG changes must re-measure and record the sweep in the same PR.
+
+### Plan 044 slice 1 — the instrument
+
+Implemented. Tests and docs only; no production source changed.
+
+`raidSweep` now returns one row per raid (`seed`, `campId`, `resolved`, `victory`) and an
+`unresolved` count. The `@sweep` test prints the full table INCLUDING unresolved and the
+paired McNemar margin with its standard error, prints the delta against a new committed
+baseline, and asserts the two things this sample can actually resolve:
+
+- a timeout budget of 10% per policy (worst on this tree: idle 3.3%, holdLine 5.8%; the
+  pre-042 fixture ran at 19% and 21%), and
+- drift against `tests/e2e/__baselines__/orders-sweep.json` within 7.4 points, which is twice
+  the per-policy standard error at 120 raids. PR #34 moved idle by 14.
+
+The strict `best.winPct > idle.winPct` is gone, and that is the one change here worth
+arguing with. It asserted a difference this fixture has never resolved: paired margins read
++7.5 +/- 6.0 pre-042 (1.2 sigma) and -3.3 +/- 5.4 on main (0.6 sigma), so it passed Plan 040
+at +3 and fails now at -3.3 on identical evidence quality. The margin is still measured and
+still printed on every run - it is recorded rather than asserted, and the design question it
+poses is reopened in the plan rather than buried in an annotation.
+
+New in the PR gate: `no order policy deadlocks its way through a camp raid`, 8 seeds x 3
+camps x 3 policies, ~30s, timeout budget only. It asserts nothing about the margin (the
+standard error at 24 raids is ~8 points). Its threshold was calibrated by running it against
+both trees rather than picked: unresolved per 24 raids is idle 3 / chargeAll 0 / holdLine 7
+on `9c5270d` and 0 / 0 / 3 on `main`, so 20% separates them, and the probe was verified to
+FAIL on the pre-042 tree at holdLine 7/24 before being accepted.
+
+Also removed: the two stale claims that this check cannot go red - the spec header and the
+`balance-sweep.yml` description a reviewer reads beside the red X, both describing a
+`test.fail()` Plan 033 had removed. `CLAUDE.md` and `tests/README.md` updated to match.
+
+Gate: `npm test` 270 passed (was 269 - the new probe), `npm run test:balance` 4 passed,
+tooling 20 passed, release cache verified at `r66ae1724dd52`.

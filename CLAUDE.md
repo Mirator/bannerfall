@@ -106,16 +106,19 @@ replacing a delegator with a direct module call silently disables coverage.
 - A world-scene modal genuinely pauses the campaign, and `stats.playT` is gated
   on both the modal and the frozen clock so neither can inflate reported time.
 - `deliberate orders beat giving no order at all` in
-  `tests/e2e/stance-balance.spec.js` carried the suite's one `test.fail`
-  annotation from Plan 019 to Plan 033, recording that squad orders did not beat
-  pressing nothing. Plan 033's deployment phase resolved it (measured twice,
-  digit-identical: idle 49%, chargeAll 60%) and the annotation came off on its
-  own stated terms — the assertion now GUARDS the property, so a change that
-  makes the idle default the best policy again fails the sweep. It is tagged
-  `@sweep` and excluded from the `chromium` project, so `npm test` does not run
-  it; it runs as its own `Balance sweep` check and via `npm run test:balance`.
-  Use `test.fail` with a plan or finding reference for expected failures — never
-  `skip` or `fixme`.
+  `tests/e2e/stance-balance.spec.js` no longer asserts that. Plan 044 measured
+  that the margin six plans argued over was largely the TIMEOUT gap between
+  policies — idle left 23 of 120 raids unresolved against chargeAll's 3, and the
+  harness never printed the count — so the paired margin has never been
+  resolvable (±5.5 points on a 3-point difference). The sweep now asserts a
+  timeout budget and drift against `tests/e2e/__baselines__/orders-sweep.json`,
+  and RECORDS the margin with its error bar. Whether commanding should beat
+  pressing nothing is an open design question, not a property this fixture can
+  prove. **A red sweep blocks the merge** — it is tagged `@sweep` and excluded
+  from the `chromium` project, so `npm test` does not run it, but it runs as its
+  own `Balance sweep` check and via `npm run test:balance`. The cheap half (a
+  24-raid deadlock probe) does run in `npm test`. Use `test.fail` with a plan or
+  finding reference for expected failures — never `skip` or `fixme`.
 
 ## Working conventions
 

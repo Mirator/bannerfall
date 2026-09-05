@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Plan 044. The recorded camp-raid policy table for tests/e2e/stance-balance.spec.js's",
+    "@sweep fixture: 40 seeds x 3 camps at held = 4, hero parked and idle.",
+    "",
+    "`winPct` is guarded against drift (BASELINE_DRIFT_PCT); `unresolved` is guarded",
+    "against its own budget (TIMEOUT_BUDGET_PCT) rather than against this record, so a",
+    "change that removes MORE deadlocks never has to re-record to pass.",
+    "",
+    "`pairedVsIdle` is RECORDED, NOT ASSERTED. The McNemar margin's standard error at this",
+    "sample size is ~5.5 points, so no reading here resolves the sign of a 3-point",
+    "difference. It is written down so the next plan argues against a number with an error",
+    "bar instead of against two rounded integers.",
+    "",
+    "To re-record: `npm run test:balance`, read the printed table, paste it here, and say in",
+    "the plan why the new number is the correct one. Never re-record to turn a run green."
+  ],
+  "recordedAt": "2026-09-05, main 2df8896 (Plan 042)",
+  "fixture": { "seeds": 40, "camps": 3, "raidsPerPolicy": 120, "held": 4 },
+  "policies": {
+    "idle": { "winPct": 82, "unresolved": 4, "avgLost": 2.8, "avgHeroHp": 83 },
+    "chargeAll": { "winPct": 78, "unresolved": 1, "avgLost": 3.4, "avgHeroHp": 95 },
+    "split": { "winPct": 76, "unresolved": 0, "avgLost": 4.1, "avgHeroHp": 79 }
+  },
+  "pairedVsIdle": {
+    "chargeAll": { "marginPct": -3.3, "sePct": 5.4, "sigma": 0.6 },
+    "split": { "marginPct": -5.8, "sePct": 5.6, "sigma": 1.0 }
+  }
+}
