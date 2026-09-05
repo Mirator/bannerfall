@@ -1718,49 +1718,60 @@ tooling 20 passed, release cache regenerated and verified at `r0254bc45c5c3`.
 
 ## Plan 046 — the CI gate costs less
 
-Both required checks were leaving three of the runner's four cores idle and spending 16% of
-their wall clock tracing tests that pass. Config and workflow files only; no `src/` change,
-no assertion touched, no budget raised, no baseline re-recorded.
+Both required checks were leaving three of the runner's four cores idle and tracing every
+passing test only to delete the trace. Config and workflow files only; no `src/` change, no
+assertion touched, no budget raised, no baseline re-recorded.
 
-Measured from the step timestamps of the last green pair on `main` (`6b45426`): Browser QA
-28s setup + 228s tests, Balance sweep 42s setup + 188s tests. They run as separate
-workflows, so a PR waits on the larger, 4m21s. Setup is 11% of that and the test step is
-the rest.
+Measured as an A/B on real CI over the SAME code (`main` after Plan 045), old config against
+this one. QA: install 22s -> 16s, test step 226s -> 163s, job 255s -> 186s. Sweep: install
+21s -> 18s, test step 362s -> 278s, job 388s -> 304s. The two are separate workflows, so a PR
+waits on the larger: **388s -> 304s, -22%**. Setup is 8% of the after-job; caching the browser
+download, the obvious first instinct, was never where the time was.
 
-`workers` is 2 now, derived from the core count and capped. The cap is the measurement, not
-a guess — full `chromium` project on a 4-vCPU box: 258s at one worker, 179s at two, 183s at
+The long pole moved while this was being written. Before Plan 045 the sweep ran three policies
+in 188s and Browser QA at 228s was what a PR waited on; Plan 045 added holdLine as a fourth
+column and the sweep went to 362s. Both checks are cut here, but the sweep now decides the
+wait.
+
+`workers` is 2, derived from the core count and capped. The cap is the measurement, not a
+guess — full `chromium` project on a 4-vCPU box: 258s at one worker, 179s at two, 183s at
 three, 178s at four, while summed per-test CPU climbs 254s -> 665s. Past two workers the
 machine only pays for contention, and that contention runs into the 30s test timeout: the
 slowest ordinary test measures 16.7s at one worker, 18.7s at two and 24.5s at four, with
-`failOnFlakyTests` on. Nothing above 4 vCPU was measured, which is why the cap is 2 rather
-than `cpus / 2`; `PW_WORKERS` overrides it.
+`failOnFlakyTests` on. That table is from the pre-045 tree (270 tests); 045 made fights end
+sooner, so the same box now runs 300s at one worker over 271 tests. The shape is unchanged and
+the CI A/B above is on the current tree. Nothing above 4 vCPU was measured, which is why the
+cap is 2 rather than `cpus / 2`; `PW_WORKERS` overrides it.
 
 `fullyParallel` stays off and is now asserted in `tests/tooling/config-contract.test.js`.
 Playwright gives a whole spec file to one worker, and that — not the worker count — is what
-lets `campaign-arc.spec.js` share one 48-campaign measurement across its three `@sweep`
-tests. The comment in that file and in `tests/README.md` credited `workers: 1` for it, which
-named the wrong invariant; both now name `fullyParallel`.
+lets `campaign-arc.spec.js` share one 48-campaign measurement across its three `@sweep` tests.
+The comment in that file and in `tests/README.md` credited `workers: 1` for it, which named the
+wrong invariant; both now name `fullyParallel`.
 
-`trace` is `on-first-retry`, was `retain-on-failure`. The old setting traced all 270 tests
-and deleted 270 traces because they all passed: 179s with it against 151s without, at two
-workers. A genuine failure is retried once in CI and the retry is traced, so it still
-arrives with one; a fail-then-pass goes red through `failOnFlakyTests` with the error, the
-stack and — new here — a failure screenshot, but no trace. That is a trade and it is spelled
-out in the config rather than left to be rediscovered.
+`trace` is `on-first-retry`, was `retain-on-failure`. The old setting traced every test and
+then deleted every trace, because on a green run they all pass: 179s with it against 151s
+without, at two workers on the 270-test tree. A genuine failure is retried once in CI and the
+retry is traced, so it still arrives with one; a fail-then-pass goes red through
+`failOnFlakyTests` with the error, the stack and — new here — a failure screenshot, but no
+trace. That is a trade and it is spelled out in the config rather than left to be rediscovered.
 
 All three workflows install `chromium-headless-shell` instead of `chromium`. The latter
-fetches Chrome for Testing AND the shell; every run is headless, so it launches the shell
-and the ~150MB browser was downloaded to sit unused. Baselines are untouched — the shell is
-already what rendered every committed PNG. `actions/checkout` and `actions/setup-node` moved
-to v5, which is what the Node 20 deprecation warning in every run has been asking for.
+fetches Chrome for Testing AND the shell; every run is headless, so it launches the shell and
+the ~150MB browser was downloaded to sit unused. Baselines cannot move on it, and that was
+checked rather than assumed: in `playwright-core`'s registry the headless shell carries
+`_dependencyGroup: "chromium"`, the same entry `chromium` carries, and still pulls FFmpeg whose
+`tools` group holds the font packages, so `--with-deps` resolves an identical apt set — and the
+shell is already the binary that rendered every committed PNG. `actions/checkout` and
+`actions/setup-node` moved to v5, which is what the Node 20 deprecation warning in every run
+has been asking for.
 
-Result on the same box: `chromium` 258s -> 162s, `balance` 309s -> 188s. Both green, 270 and
-4 expected, 0 unexpected, 0 flaky, and the sweep's third test still returns in 0.1s, which
-is the memoized measurement proving the file-level worker guarantee held.
+What is left: the balance check is now what a PR waits on, and inside it one test —
+`deliberate orders beat giving no order at all`, four policies over 120 camp raids each since
+Plan 045 — is the floor. That sample size is a statistical argument from Plans 044 and 045, not
+a wall-clock decision, so cutting it further means sharding that test's policies or reopening
+the sample size. Both are recorded in the plan as deliberate calls rather than config edits.
 
-The balance check is now bounded below by one 185s test. Sharding `chromium` across two
-runners would halve it again at double the runner minutes and a required-check aggregation
-job; recorded in the plan as not done rather than forgotten.
-
-Gate: `npm test` 270 passed, `npm run test:balance` 4 passed, tooling 23 passed (three new
-config-contract tests), release cache verified at `r66ae1724dd52`.
+Gate: both CI checks green on the first run — `npm test` 271 expected, `test:balance` 4
+expected, 0 unexpected, 0 flaky; tooling 23 passed (three new config-contract tests), release
+cache verified at `r0254bc45c5c3`.

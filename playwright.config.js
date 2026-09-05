@@ -14,6 +14,9 @@ const isCi = process.env.CI === 'true' || process.env.CI === '1';
 // 16.7 s at one worker, 18.7 s at two, and 24.5 s at four. Two is the knee; four is a red
 // build waiting to happen. Nothing above 4 vCPU was measured, which is why the cap is not
 // simply `cpus / 2` — raise it with numbers, not with reasoning.
+//
+// Confirmed end to end on CI rather than only here: over the same commit, the Browser QA
+// test step went 226 s -> 163 s and the Balance sweep's 362 s -> 278 s.
 const cores = os.availableParallelism?.() ?? os.cpus().length;
 const workers = Number(process.env.PW_WORKERS) || Math.max(1, Math.min(2, Math.floor(cores / 2)));
 
