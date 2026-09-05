@@ -50,9 +50,14 @@ test('a spec file is never split across workers', async () => {
   // tests read it. That is only correct while Playwright hands a whole file to a single
   // worker, which is what `fullyParallel: false` buys. Raising the worker count does not
   // touch it; turning this flag on would run the sweep three times and nothing would fail
-  // loudly enough to notice — the check would just get slower. Assert it explicitly.
+  // loudly enough to notice — the check would just get slower. Plan 047 also measured it as
+  // a few seconds slower on the chromium project, which is CPU-bound rather than long-pole
+  // bound, so there is no case for flipping it per project either. Assert it explicitly.
   const { default: config } = await import(`${configUrl}?config-contract=parallelism`);
   assert.equal(config.fullyParallel, false);
+  for (const project of config.projects) {
+    assert.equal(project.fullyParallel, undefined, `${project.name} must not override it`);
+  }
 });
 
 test('the derived worker count is a positive integer inside the measured range', async () => {

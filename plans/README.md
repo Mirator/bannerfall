@@ -205,3 +205,10 @@ deliberately extracted less than the audit proposed.
 | Plan | Title | Priority | Effort | Depends on | Status |
 |---|---|---|---|---|---|
 | 046 | Make both required checks faster without touching an assertion | P3 | S | — | IMPLEMENTED — two workers, no trace on passing runs, headless-shell-only install |
+
+## Plan 047 — the sweep uses the whole machine
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|---|---|---|---|---|---|
+| 047 | Run the independent balance policies at the same time instead of one after another | P3 | S | 046 | IMPLEMENTED — one browser context per policy; sweep 185s -> 95s, balance check -44% |
+

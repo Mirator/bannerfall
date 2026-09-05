@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { BALANCE, WORLD } from '../../src/data.js';
 import { runCampaign, summarize, goldByComposition, POLICIES } from './campaign-harness.js';
+import { measureInParallel } from './parallel-measure.js';
 import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 
 // Plan 038 — the campaign arc, measured.
@@ -22,18 +23,24 @@ const SWEEP_SEEDS = Array.from({ length: 12 }, (_, i) => i + 1);
 // The sweep is 48 campaigns and three tests read it. Playwright gives a whole spec FILE to
 // one worker, so the module-level cache below is shared between the three and the
 // measurement is taken once rather than three times. That is a property of
-// `fullyParallel: false`, NOT of the worker count — the config runs two workers now and the
-// guarantee is unchanged, but turning `fullyParallel` on would silently triple this file.
+// `fullyParallel: false`, NOT of the worker count — turning it on would silently triple
+// this file. Plan 047 measured that flag as no help anywhere and left it off; the two
+// tests in this file that run in the PR gate do not read this cache either way.
+//
+// Plan 047: the four policies run at the same time, one browser context each. They share
+// no state — each seeds its own world and steps it with an explicit dt — so this changes
+// no recorded number; the twelve seeds within a policy stay sequential, which is where the
+// `farmer` and `campRaider` routes spend their time anyway.
 let sweepPromise = null;
-function sweep(page) {
+function sweep(browser) {
   if (!sweepPromise) {
     sweepPromise = (async () => {
-      const byPolicy = {};
-      for (const policy of POLICIES) {
-        byPolicy[policy] = [];
-        for (const seed of SWEEP_SEEDS) byPolicy[policy].push(await runCampaign(page, { seed, policy }));
-      }
-      return byPolicy;
+      const perPolicy = await measureInParallel(browser, POLICIES, async (page, policy) => {
+        const runs = [];
+        for (const seed of SWEEP_SEEDS) runs.push(await runCampaign(page, { seed, policy }));
+        return [policy, runs];
+      });
+      return Object.fromEntries(perPolicy);
     })();
   }
   return sweepPromise;
@@ -84,11 +91,11 @@ test.describe('campaign arc', () => {
     }
   });
 
-  test('a claim is bought, and riding past four settlements does not expose the hold', { tag: '@sweep' }, async ({ page }) => {
+  test('a claim is bought, and riding past four settlements does not expose the hold', { tag: '@sweep' }, async ({ browser }) => {
     // Plan 038 acceptance criteria 2 and 4, plus the console table that
     // `critiques/campaign-arc-comparison.md` quotes.
     test.setTimeout(1_800_000);
-    const byPolicy = await sweep(page);
+    const byPolicy = await sweep(browser);
     const all = Object.values(byPolicy).flat();
     console.log('campaign arc:');
     for (const r of all) console.log('  ' + summarize(r));
@@ -133,7 +140,7 @@ test.describe('campaign arc', () => {
       .toBeLessThanOrEqual(1.5);
   });
 
-  test('a warband that fought and spent storms Wolfsjaw at better odds than one that did not', { tag: '@sweep' }, async ({ page }) => {
+  test('a warband that fought and spent storms Wolfsjaw at better odds than one that did not', { tag: '@sweep' }, async ({ browser }) => {
     // HARD FLOOR, NOT test.fail() — Plan 038 acceptance criterion 3. A blanket test.fail()
     // here would pass on ANY throw: a regression to 0/12, a harness error unrelated to this
     // property, and the known 1-of-12 gap all look identical to it. Instead this counts how
@@ -182,7 +189,7 @@ test.describe('campaign arc', () => {
     // 1.42 against 1.33. With the absorption bounded by
     // `BALANCE.strongholdRemnantCeiling`, that same seed storms at 0.69.
     test.setTimeout(1_800_000);
-    const byPolicy = await sweep(page);
+    const byPolicy = await sweep(browser);
     const HELD_FLOOR = 11; // Plan 039's measured count, out of 12 seeds — see comment above.
     let measured = 0;
     let held = 0;

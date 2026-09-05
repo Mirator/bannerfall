@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { collectRuntimeErrors } from './test-helpers.js';
+import { measureInParallel } from './parallel-measure.js';
 import { WOLF_STALK_R, HOLD_REACH_MELEE } from '../../src/battle/constants.js';
 import ORDERS_BASELINE from './__baselines__/orders-sweep.json' with { type: 'json' };
 import { UNIT_TYPES } from '../../src/data.js';
@@ -324,7 +325,7 @@ test.describe('stance balance', () => {
   // 033 had already removed. `.github/workflows/balance-sweep.yml` carried the same stale
   // claim in the description a reviewer reads beside the red X. PR #34 was merged over three
   // red sweep runs. Do not reintroduce either sentence.
-  test('deliberate orders beat giving no order at all', { tag: '@sweep' }, async ({ page }) => {
+  test('deliberate orders beat giving no order at all', { tag: '@sweep' }, async ({ browser }) => {
     // EXPECTED FAILURE — Plan 019's premise is not met, measured on the fight the campaign
     // actually serves: organic camp raids with real garrison rolls, hero parked and idle.
     // The warband is a competent auto-battler, so orders are decoration on a fight that
@@ -487,15 +488,24 @@ test.describe('stance balance', () => {
     const seeds = Array.from({ length: 40 }, (_, i) => i + 1); // 1..40, plain and unpicked
     const camps = ['c1', 'c2', 'c3'];
     const HELD = 4;
-    const idle = await raidSweep(page, null, seeds, camps, HELD);
-    const chargeAll = await raidSweep(page, { spear: 'charge', archer: 'charge', knight: 'charge' }, seeds, camps, HELD);
-    const split = await raidSweep(page, { spear: 'charge', archer: 'hold', knight: 'charge' }, seeds, camps, HELD);
     // Plan 045: holdLine joins the sweep. It is the slowest policy and therefore the first to
     // deadlock — 25/120 raids unresolved pre-042 and 7/120 after it, the highest of any
     // policy in both — and the sweep ran without it, so the column that mattered most to the
     // finding this fixture exists for was the one it never measured.
-    const holdLine = await raidSweep(page, { spear: 'hold', archer: 'hold', knight: 'charge' }, seeds, camps, HELD);
-    const measured = { idle, chargeAll, split, holdLine };
+    //
+    // Plan 047: the four run at the same time, one browser context each, because they share
+    // no state — same seeds, same camps, different orders. Awaiting them in sequence pinned
+    // 480 raids to one core of four. Nothing measured changes; that was verified row by row
+    // before the change was accepted (see tests/e2e/parallel-measure.js).
+    const POLICIES = [
+      ['idle', null],
+      ['chargeAll', { spear: 'charge', archer: 'charge', knight: 'charge' }],
+      ['split', { spear: 'charge', archer: 'hold', knight: 'charge' }],
+      ['holdLine', { spear: 'hold', archer: 'hold', knight: 'charge' }],
+    ];
+    const measured = Object.fromEntries(await measureInParallel(browser, POLICIES,
+      async (p, [name, orders]) => [name, await raidSweep(p, orders, seeds, camps, HELD)]));
+    const { idle } = measured;
 
     // The record, printed whichever way the assertions fall — including the two numbers the
     // old table hid: how many raids never finished, and what the margin's error bar is.
@@ -546,20 +556,22 @@ test.describe('stance balance', () => {
   //
   // holdLine is in this probe and not in the sweep above on purpose: it is the slowest policy
   // and therefore the first to deadlock, which makes it the canary.
-  test('no order policy deadlocks its way through a camp raid', async ({ page }) => {
+  test('no order policy deadlocks its way through a camp raid', async ({ browser }) => {
     test.setTimeout(180_000);
     const seeds = Array.from({ length: 8 }, (_, i) => i + 1);
     const camps = ['c1', 'c2', 'c3'];
-    const policies = {
-      idle: null,
-      chargeAll: { spear: 'charge', archer: 'charge', knight: 'charge' },
-      holdLine: { spear: 'hold', archer: 'hold', knight: 'charge' },
-    };
-    const table = {};
-    for (const [name, orders] of Object.entries(policies)) {
-      const r = await raidSweep(page, orders, seeds, camps, 4);
-      table[name] = { runs: r.runs, winPct: r.winPct, unresolved: r.unresolved };
-    }
+    // Three independent policies, so Plan 047 runs them in three contexts at once rather
+    // than one after another — the same 72 raids, a third of the wall clock.
+    const policies = [
+      ['idle', null],
+      ['chargeAll', { spear: 'charge', archer: 'charge', knight: 'charge' }],
+      ['holdLine', { spear: 'hold', archer: 'hold', knight: 'charge' }],
+    ];
+    const table = Object.fromEntries(await measureInParallel(browser, policies,
+      async (p, [name, orders]) => {
+        const r = await raidSweep(p, orders, seeds, camps, 4);
+        return [name, { runs: r.runs, winPct: r.winPct, unresolved: r.unresolved }];
+      }));
     console.log('camp-raid deadlock probe:\n' + JSON.stringify(table, null, 2));
     for (const [name, r] of Object.entries(table)) {
       expect(100 * r.unresolved / r.runs,

@@ -1784,3 +1784,72 @@ the sample size. Both are recorded in the plan as deliberate calls rather than c
 Gate: both CI checks green on the first run of every push — `npm test` 271 expected,
 `test:balance` 4 expected, 0 unexpected, 0 flaky; tooling 23 passed (three new config-contract
 tests), release cache verified at `r0254bc45c5c3`.
+
+## Plan 047 — the sweep uses the whole machine
+
+Plan 046 left the Balance sweep as the check a PR waits on and called its cost irreducible.
+That was true of the config and false of the test. Measurement code and config only; no
+`src/` change, no assertion changed, no sample size reduced, no baseline re-recorded.
+
+Where the time goes, measured inside the browser over twelve production-path raids: 36ms of
+setup per raid, 680ms of fight, 0.229ms per battle tick, 2975 ticks in an average raid. The
+sweep's 480 raids are ~330 core-seconds of battle simulation and setup is 5% of it, so there
+is no fat to trim — the cost IS the measurement. What there was instead is an idle machine:
+all 480 raids ran as one synchronous `page.evaluate`, one renderer process, one core, on a
+four-core runner.
+
+The four policies share nothing — same seeds, same camps, different orders, each seeding its
+own world and stepping it with an explicit dt. `tests/e2e/parallel-measure.js` gives each one
+its own browser context, which is a separate renderer process and separate storage, so the
+`bf_save_test` slot one job writes cannot be seen by another. Three measurements use it: the
+@sweep policy table, the gate's deadlock probe, and campaign-arc's 48-campaign sweep.
+
+Verified rather than assumed, because this must not move a number: over 4 policies x 6 seeds
+x 3 camps the serial and parallel row sets are byte-identical at 45.6s against 17.3s, and at
+full size the parallel sweep reproduces `__baselines__/orders-sweep.json` digit for digit —
+idle 84, chargeAll 78, split 76, holdLine 77, every unresolved 0, paired margin -5.8 +/- 5.3.
+The memoized cache behind campaign-arc's three @sweep tests is untouched and still returns
+its third test in 0.0s.
+
+Per test: the 480-raid sweep 185s -> 95s, campaign-arc's sweep 110s -> 53s, the gate's
+deadlock probe 44s -> 26s.
+
+`fullyParallel: true` on the chromium project was tried and is NOT shipped. Every spec in
+that project was audited for module-level state and it was safe; it was also useless, at
+171s and 173s against 167s and 169s with it off. That project is not hostage to its longest
+file, it is bound by total CPU, so test-level parallelism only reshuffles which core does
+what. It stays false everywhere and the contract test now asserts no project overrides it.
+
+Browser QA did not move and cannot on this runner: 323s of summed test time against a 165s
+wall at two workers is 1.96 cores of a "4-vCPU" box, and four workers measured 153s with the
+slowest ordinary test at 24.5s against a 30s timeout. Its remaining cost is battle simulation
+in tests that are all somebody's coverage. One duplication was found and deliberately kept —
+`qa.spec.js` runs the whole 28-record runner.html suite twice, ~16s, because the first run
+has empty storage and the second has a real `bf_save` present, and whether the QA suite
+tramples a player's save is the entire point of the second.
+
+Result, one machine back to back against `main` at 9852923: Balance sweep 274s -> 153s
+(-44%), Browser QA 166s -> 163s (-2%), and since the two are separate workflows a PR waits on
+the larger: 274s -> 163s, -41%. The check it waits on is Browser QA again rather than the
+sweep, and the two are now within ten seconds of each other — there is no longer one check to
+attack.
+
+On CI the gain is smaller, and CI is what a reviewer waits on. Reported against clusters
+rather than as pairs, because Plan 046 established this fleet spreads +/-20%: the sweep step
+read 362s and 355s under Plan 045's config, 282s / 279s / 278s under Plan 046's, and 202s /
+153s / 205s now; QA read 168s / 167s / 163s under Plan 046's and 145s / 158s / 146s now. The
+sweep's after-cluster spans 52s, which is the fleet rather than the change — the before-cluster
+spanned four seconds and happened to draw three similar machines — but every after-run sits
+clear of every before-run: -33% on the means (280s -> 187s), -27% at the worst pairing. QA is
+-10% on the means (166s -> 150s), about what the mechanism predicts and no more, since the
+deadlock probe is the only thing this plan touches there and it went 44s to 26s. Three samples
+a side is the minimum this fleet deserves: two would have said -36%, and the third pulled it
+to -33%. The gap between -44% locally and -36% on CI is the runner: four vCPUs behaving like two physical cores return less from four contexts.
+
+`scripts/serve.py` also stops printing BrokenPipeError tracebacks. Several contexts now tear
+down their connections at the end of every measurement and the default handler prints a stack
+for each, which filled CI logs with what look like failures and are not.
+
+Gate: `npm test` 271 passed, `npm run test:balance` 4 passed, tooling 23 passed, release
+cache verified at `r0254bc45c5c3`.
+
