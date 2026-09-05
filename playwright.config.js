@@ -37,8 +37,14 @@ export default defineConfig({
   // LOAD-BEARING, not a default left in place. Parallelism here is per FILE: every test in
   // one spec file runs in one worker, in order. `campaign-arc.spec.js` relies on that — its
   // three @sweep tests share one 48-campaign measurement through a module-level cache, and
-  // turning this on would run that measurement three times instead of once. Splitting a
-  // file across workers must not be done to chase wall clock; split the FILE instead.
+  // turning this on would run that measurement three times instead of once.
+  //
+  // Plan 047 tried turning it on for the chromium project, where no spec carries module
+  // state and it would therefore have been safe. It measured 171 s and 173 s against 167 s
+  // and 169 s with it off: consistently a few seconds WORSE, because that project is bound
+  // by total CPU rather than by its longest file. An unmeasured win is not a win, so it
+  // stays off everywhere. The parallelism the expensive checks actually needed is inside a
+  // test instead — see tests/e2e/parallel-measure.js.
   fullyParallel: false,
   forbidOnly: isCi,
   retries: isCi ? 1 : 0,
