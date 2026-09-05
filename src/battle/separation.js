@@ -2,8 +2,8 @@
 // other. Two paths on purpose — designed battles keep the exact legacy O(n^2) mutation
 // order, and only stress sizes use the spatial broad phase (see tests/README.md), so a
 // normal encounter can never change because a bucket boundary moved.
-import { HERO } from '../data.js?v=r66ae1724dd52';
-import { dist2 } from '../engine.js?v=r66ae1724dd52';
+import { HERO } from '../data.js?v=r0254bc45c5c3';
+import { dist2 } from '../engine.js?v=r0254bc45c5c3';
 
 export function updateSeparationPhase(battle, h) {
   const all = battle._allUnits;
@@ -34,6 +34,11 @@ export function updateSeparationPhase(battle, h) {
       applyUnitSeparation(battle, a, b);
     }
     pushOutOf(battle, a, h, a.d.radius + HERO.radius + 3, 0.9);
+    // Plan 045: while a fight is `closing` (stalled past STALL_TERMINAL — see
+    // updateStalematePhase) terrain stops separating bodies, so two sides that cannot reach
+    // each other walk through it instead of grinding against it forever. Unit-vs-unit
+    // separation above is deliberately untouched: bodies still have to meet to swing.
+    if (battle.closing) continue;
     const obstacleCandidates = battle._obstacleGrid.queryOrdered(a.x, a.y, a.d.radius + maxObstacleRadius);
     for (let k = 0; k < obstacleCandidates; k++) {
       const o = battle._obstacleGrid.queryItems[k];
@@ -41,6 +46,7 @@ export function updateSeparationPhase(battle, h) {
       pushOutOf(battle, a, o, a.d.radius + o.r, 1);
     }
   }
+  if (battle.closing) return;
   const heroObstacleCandidates = battle._obstacleGrid.queryOrdered(h.x, h.y, HERO.radius + maxObstacleRadius);
   for (let k = 0; k < heroObstacleCandidates; k++) {
     const o = battle._obstacleGrid.queryItems[k];
@@ -50,12 +56,17 @@ export function updateSeparationPhase(battle, h) {
 }
 
 export function updateLegacySeparation(battle, all, h) {
+  // Plan 045: this is the path a designed-size fight (<= 128 bodies) actually takes, so the
+  // `closing` stand-down has to live here as well as in the spatial path above — a camp raid
+  // never reaches the spatial one.
   for (let i = 0; i < all.length; i++) {
     const a = all[i];
     for (let j = i + 1; j < all.length; j++) applyUnitSeparation(battle, a, all[j]);
     pushOutOf(battle, a, h, a.d.radius + HERO.radius + 3, 0.9);
+    if (battle.closing) continue;
     for (const o of battle.obstacles) pushOutOf(battle, a, o, a.d.radius + o.r, 1);
   }
+  if (battle.closing) return;
   for (const o of battle.obstacles) pushOutOf(battle, h, o, HERO.radius + o.r, 1);
 }
 
