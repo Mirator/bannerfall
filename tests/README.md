@@ -129,7 +129,8 @@ The split is the one the config already makes. The four-policy, twelve-seed swee
 tagged `@sweep` and runs under `npm run test:balance`; ONE smoke test (two seeds, four
 fights, `forced` resolution) runs in the PR gate so the harness cannot rot silently. The
 three `@sweep` tests share a single 48-campaign measurement through a module-level cache,
-which is sound only because the config pins `workers: 1`.
+which is sound only because the config pins `fullyParallel: false` and Playwright therefore
+gives the whole file to one worker. The worker COUNT is irrelevant to it and is now two.
 
 Before trusting a number from it, read the harness header. Three limitations are stated
 there and all three shape the results: travel is teleport-plus-clock (so nothing
