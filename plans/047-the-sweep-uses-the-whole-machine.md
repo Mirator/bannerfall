@@ -105,15 +105,19 @@ that this fleet spreads ±20%, so these are clusters rather than pairs:
 
 | step | Plan 045 config | Plan 046 config | this plan |
 | --- | --- | --- | --- |
-| Balance sweep | 362 s, 355 s | 282 s, 279 s, 278 s | **202 s, 153 s** |
-| Browser QA | — | 168 s, 167 s, 163 s | **158 s, 145 s** |
+| Balance sweep | 362 s, 355 s | 282 s, 279 s, 278 s | **202 s, 153 s, 205 s** |
+| Browser QA | — | 168 s, 167 s, 163 s | **145 s, 158 s, 146 s** |
 
-The sweep's two runs are 49 s apart, which is the fleet rather than the change — but both
-sit well clear of a three-run cluster that spanned four seconds, so the direction is not in
-question: **−36% on the means, −28% at the worst pairing.** Browser QA is **−8% on the
-means**, and that is the honest reading of a −13% and a −5%; the mechanism only predicts
-about that much, since the deadlock probe is the only thing this plan touches in that
-project and it went 44 s to 26 s.
+The sweep's after-cluster spans 52 s, which is the fleet rather than the change — the
+before-cluster spanned four seconds and happened to draw three similar machines. Every
+after-run still sits clear of every before-run, so the direction is not in question:
+**−33% on the means (280 s → 187 s), −27% at the worst pairing.** Browser QA is **−10% on
+the means (166 s → 150 s)**, which is about what the mechanism predicts and no more: the
+deadlock probe is the only thing this plan touches in that project, and it went 44 s to
+26 s.
+
+Three samples a side is the minimum this fleet deserves. Two would have said −36% here,
+and the third run pulled it to −33%.
 
 The gap between −44% locally and −36% on CI is the runner: four vCPUs that behave like two
 physical cores return less from four contexts than a box that gives four. The change is
