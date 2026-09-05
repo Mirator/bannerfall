@@ -8,22 +8,36 @@
     "change that removes MORE deadlocks never has to re-record to pass.",
     "",
     "`pairedVsIdle` is RECORDED, NOT ASSERTED. The McNemar margin's standard error at this",
-    "sample size is ~5.5 points, so no reading here resolves the sign of a 3-point",
+    "sample size is ~5.3 points, so no reading here resolves the sign of a 6-point",
     "difference. It is written down so the next plan argues against a number with an error",
     "bar instead of against two rounded integers.",
     "",
     "To re-record: `npm run test:balance`, read the printed table, paste it here, and say in",
-    "the plan why the new number is the correct one. Never re-record to turn a run green."
+    "the plan why the new number is the correct one. Never re-record to turn a run green.",
+    "",
+    "RE-RECORDED BY PLAN 045, for two reasons stated in that plan and measured there:",
+    "  * STALL_TERMINAL ends fights that could not reach themselves. Camp raid seed 7 / c1",
+    "    used to run past 600 simulated seconds with 541 of them without a death; it now",
+    "    resolves at 104s. Every policy's `unresolved` column is 0 where it was 4 / 1 / 0 / 7.",
+    "  * The harness window went 95s -> 180s (RAID_WINDOW_S). At 95s it scored a raid that",
+    "    legitimately takes 131s (seed 7 / c2) identically to one that never ends.",
+    "Movement against the Plan 042 record: idle 82 -> 84, chargeAll 78 -> 78, split 76 -> 76,",
+    "holdLine 71 -> 77. holdLine moved most because it deadlocked most.",
+    "",
+    "holdLine joined the sweep in Plan 045 (slice D1): it is the slowest policy and the first",
+    "to deadlock, and the sweep had never run it."
   ],
-  "recordedAt": "2026-09-05, main 2df8896 (Plan 042)",
-  "fixture": { "seeds": 40, "camps": 3, "raidsPerPolicy": 120, "held": 4 },
+  "recordedAt": "2026-09-05, Plan 045 (stall terminator + 180s window)",
+  "fixture": { "seeds": 40, "camps": 3, "raidsPerPolicy": 120, "held": 4, "windowSeconds": 180 },
   "policies": {
-    "idle": { "winPct": 82, "unresolved": 4, "avgLost": 2.8, "avgHeroHp": 83 },
-    "chargeAll": { "winPct": 78, "unresolved": 1, "avgLost": 3.4, "avgHeroHp": 95 },
-    "split": { "winPct": 76, "unresolved": 0, "avgLost": 4.1, "avgHeroHp": 79 }
+    "idle": { "winPct": 84, "unresolved": 0, "avgLost": 2.8, "avgHeroHp": 82 },
+    "chargeAll": { "winPct": 78, "unresolved": 0, "avgLost": 3.4, "avgHeroHp": 94 },
+    "split": { "winPct": 76, "unresolved": 0, "avgLost": 4.1, "avgHeroHp": 79 },
+    "holdLine": { "winPct": 77, "unresolved": 0, "avgLost": 4.7, "avgHeroHp": 62 }
   },
   "pairedVsIdle": {
-    "chargeAll": { "marginPct": -3.3, "sePct": 5.4, "sigma": 0.6 },
-    "split": { "marginPct": -5.8, "sePct": 5.6, "sigma": 1.0 }
+    "chargeAll": { "marginPct": -5.8, "sePct": 5.3, "sigma": 1.1 },
+    "split": { "marginPct": -8.3, "sePct": 5.5, "sigma": 1.5 },
+    "holdLine": { "marginPct": -7.5, "sePct": 5.1, "sigma": 1.5 }
   }
 }

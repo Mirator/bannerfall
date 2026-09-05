@@ -1,7 +1,9 @@
 # Plan 045 — fights that end, and a margin worth arguing about
 
-- Status: PROPOSED. Successor to `plans/044-the-sweep-tells-the-truth.md`, whose slice 1
-  (the instrument) is implemented.
+- Status: **SLICES E, A and D1 IMPLEMENTED.** B, C and D2 remain PROPOSED — see
+  "What actually shipped" below for why B in particular is its own change.
+- Successor to `plans/044-the-sweep-tells-the-truth.md`, whose slice 1 (the instrument) is
+  implemented.
 - Prerequisite: Plan 044 slice 1. The sweep now prints `unresolved` and a paired margin with
   its standard error, budgets timeouts, and guards drift against a committed table. Without
   that, none of the slices below can be told apart from noise.
@@ -51,6 +53,53 @@ Expect this to move the balance table: raids that currently time out are scored 
 and A2 in particular converts them into withdrawals. **Re-record
 `tests/e2e/__baselines__/orders-sweep.json` in the same change, with the measured before/after
 in this plan.** That is what the drift guard is for.
+
+## What actually shipped
+
+**Slice E** is in `AGENTS.md` under Determinism and RNG domains.
+
+**Slice A** is `STALL_TERMINAL` (30s, twice the game's own `STALL_NO_DEATH`) plus the
+`battle.closing` clock in `updateStalematePhase`. While it holds, obstacle steering and the
+obstacle push-out both stand down on BOTH sides, so bodies walk straight at what they are
+fighting and the fight resolves itself by combat. It decides nothing: unit-vs-unit separation
+is untouched, so somebody still has to land the blows, and handing the win to whoever has more
+bodies left would have invented a scoring rule the game does not have. It is a clock, not a
+latch — one death clears it.
+
+Measured on the fixture that motivated it, camp raid world seed 7 / camp c1: **600+ simulated
+seconds with 541 of them without a death, before; resolves at 104s, a victory with all seven
+troops alive, after.** Guarded by `a camp raid that cannot reach itself still ends` in
+`battlefield-terrain.spec.js`, which drives the production entry (E, site menu, brief, deploy
+confirm) and was verified to FAIL with the terminator disabled before it was accepted.
+
+One thing the diagnosis changed: the harness window. `raidSweep` capped raids at an inline
+95s, and that number was doing two jobs badly — camp raid seed 7 / c2 resolves honestly at
+131s and was being scored identically to the one that never ended. It is `RAID_WINDOW_S = 180`
+now, so `unresolved` means what the Plan 044 budget assumes it means.
+
+**Slice D1** put holdLine in the sweep.
+
+The table moved and was re-recorded with that justification, per slice E's own rule:
+
+| policy | before (Plan 042 record) | after | unresolved before → after |
+| --- | --- | --- | --- |
+| idle | 82 | 84 | 4 → 0 |
+| chargeAll | 78 | 78 | 1 → 0 |
+| split | 76 | 76 | 0 → 0 |
+| holdLine | 71 | 77 | 7 → 0 |
+
+holdLine moved most because it deadlocked most. Paired margins against idle are now
+chargeAll −5.8 ± 5.3, split −8.3 ± 5.5, holdLine −7.5 ± 5.1 — all still inside their own
+error bars, and all slightly more negative than before, which is worth noting for slice C:
+once stalls resolve, commanding looks no better, not better.
+
+**Slice B is deliberately not in that change.** It moves plank collider positions, which moves
+the drawn props, which re-records battle visual baselines — and per `AGENTS.md` those are
+captured through the `Visual baselines` workflow and reviewed PNG by PNG by a human. Bundling
+that with a gameplay terminator would put two independent re-records in one diff. It is also
+no longer urgent: with slice A in place nothing hangs, so B is now about fight QUALITY (the
+brute in the fixture above wasted ~45s orbiting before the terminator reached it) rather than
+about fights that never end.
 
 ## Slice B — the palisade is a pocket generator
 

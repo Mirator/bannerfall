@@ -1657,3 +1657,61 @@ Also removed: the two stale claims that this check cannot go red - the spec head
 
 Gate: `npm test` 270 passed (was 269 - the new probe), `npm run test:balance` 4 passed,
 tooling 20 passed, release cache verified at `r66ae1724dd52`.
+
+## Plan 045 — fights that end (slices E, A, D1)
+
+User request: implement the next plan, open a PR, wait for CI and merge.
+
+Diagnosed first rather than designed first. Reproducing the sweep's unresolved raids on the
+production camp-raid path found two different things wearing the same label. Camp raid world
+seed 7 / camp c1 runs 600 simulated seconds with one brute alive and 541 of them without a
+death - the brute orbiting a 185px steering envelope while a braced line waits - and it never
+ends at any horizon. Camp raid seed 7 / c2 resolves honestly at 131s and was only "unresolved"
+because the harness capped raids at 95.
+
+`updateStalematePhase` was a one-shot behaviour flag: `bloodlust` fires once after 10s without
+damage or `STALL_NO_DEATH` (14) without a body, survivors stop kiting and close in, and that
+was the last thing the battle loop ever did about a stall. The player's only out is the
+retreat edge, whose prompt the HUD does not offer until 45s.
+
+`STALL_TERMINAL` (30, twice STALL_NO_DEATH) and the `battle.closing` clock are the answer.
+While it holds, obstacle steering and the obstacle push-out stand down on both sides, so
+bodies walk straight at what they are fighting through terrain if they must. It decides
+nothing - unit-vs-unit separation is untouched, so somebody still has to land the blows, and
+awarding the fight to whoever has more bodies left would invent a scoring rule the game does
+not have. A clock, not a latch: one death clears it, because a fight producing bodies is
+progressing. Both separation paths carry the stand-down; the legacy one is what a designed-size
+fight actually takes, and patching only the spatial path would have shipped a no-op.
+
+Seed 7 / c1 now ends at 104s, a victory with all seven troops alive. Guarded by `a camp raid
+that cannot reach itself still ends` in `battlefield-terrain.spec.js`, driving the real entry
+(E, site menu, brief, deploy confirm). Verified to FAIL with the terminator disabled - 300s
+without a terminal state - before it was accepted.
+
+`RAID_WINDOW_S` replaces the inline 95: at 95 the harness scored a 131s fight and a fight that
+never ends identically, so `unresolved` did not mean what Plan 044's budget assumes. 180s is
+past every legitimate fight measured here.
+
+holdLine joined the sweep (slice D1) - the slowest policy, the first to deadlock, and the one
+column the sweep had never run. The table moved and was re-recorded with the measurement, per
+the new AGENTS.md rule this change also adds (slice E: navigation, obstacle geometry or a
+terrain RNG stream invalidates every recorded balance number):
+
+    policy      before  after   unresolved
+    idle           82     84       4 -> 0
+    chargeAll      78     78       1 -> 0
+    split          76     76       0 -> 0
+    holdLine       71     77       7 -> 0
+
+Paired margins against idle are chargeAll -5.8 +/- 5.3, split -8.3 +/- 5.5, holdLine
+-7.5 +/- 5.1: all inside their error bars, and all slightly MORE negative than before. Worth
+carrying into slice C - once stalls resolve, commanding does not look better.
+
+Slice B (the palisade capsule) is deliberately not here: it moves plank props, which
+re-records battle visual baselines through the `Visual baselines` workflow and a human PNG
+review, and bundling that with a gameplay terminator would put two independent re-records in
+one diff. With A in place nothing hangs, so B is now about fight quality rather than fights
+that never end.
+
+Gate: `npm test` 271 passed, `npm run test:balance` 4 passed, `npm run test:perf` 10 passed,
+tooling 20 passed, release cache regenerated and verified at `r0254bc45c5c3`.

@@ -6,18 +6,18 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r66ae1724dd52';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r66ae1724dd52';
-import { ACTIONS } from '../input-actions.js?v=r66ae1724dd52';
+import { HERO } from '../data.js?v=r0254bc45c5c3';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r0254bc45c5c3';
+import { ACTIONS } from '../input-actions.js?v=r0254bc45c5c3';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
-  BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, HOLD_REACH_MELEE, STALL_NO_DEATH, ARENA_EDGE,
+  BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, HOLD_REACH_MELEE, STALL_NO_DEATH, STALL_TERMINAL, ARENA_EDGE,
   LOOKAHEAD, TANGENT_MARGIN, STEER_MAX_ACTIVE, STEER_COOLDOWN, BLIND_ADVANCE_T,
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
   FRONT_ARC, FLANK_BONUS,
-} from './constants.js?v=r66ae1724dd52';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r66ae1724dd52';
+} from './constants.js?v=r0254bc45c5c3';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r0254bc45c5c3';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -200,6 +200,10 @@ function steerContactCluster(battle, unit, dt, ux, uy, dirX, dirY, goalDist, rev
 }
 
 function steerAroundObstacle(battle, unit, dt, ux, uy, ur, dirX, dirY, goalDist) {
+  // Plan 045: a fight that has stalled past STALL_TERMINAL stops routing around terrain
+  // entirely — see updateStalematePhase. Any retained detour is dropped with it, or the
+  // envelope this unit committed to would outlive the state that justified it.
+  if (battle.closing) { unit._steerCluster = null; unit._steerObstacle = null; unit._steerActiveT = 0; return false; }
   if (unit._steerCluster && steerContactCluster(battle, unit, dt, ux, uy, dirX, dirY, goalDist)) return true;
   // A unit deflected for too long without a break gives up on steering for a short cooldown,
   // falling back to its raw heading (and `pushOutOf`) instead. This bounds the worst case:
@@ -990,5 +994,30 @@ export function updateStalematePhase(battle) {
     battle.commandFlash = { text: 'THEY CLOSE IN!', t: 1.1 };
     battle.game.sfx.horn(110);
     for (const e of battle.enemies) battle.particles.ring(e.x, e.y, 26, P.enemy, 0.5, 3);
+  }
+
+  // Plan 045: the terminal measure, because `bloodlust` above is a one-shot flag and until
+  // now it was the last thing the loop did about a stall. If the survivors have closed in and
+  // STILL nobody has died for STALL_TERMINAL seconds, the two sides cannot reach each other
+  // and no amount of further simulation will change that — measured at 541 seconds without a
+  // body on camp raid seed 7 / c1, one brute orbiting a 185px steering envelope.
+  //
+  // What this does NOT do is decide the fight. Handing the win to whoever has more bodies
+  // left would invent a scoring rule the game does not otherwise have, and would pay out a
+  // victory nobody earned. It removes the thing in the way instead: while `closing` holds,
+  // obstacle steering is skipped (steerAroundObstacle's first line) and the obstacle
+  // push-out is skipped (separation.js), so every body walks straight at what it is fighting
+  // through terrain if it has to, and the fight resolves itself by combat as it should have.
+  // Unit-vs-unit separation is untouched — bodies still have to meet to swing.
+  //
+  // A CLOCK, NOT A LATCH: one death clears it, and the ordinary steering resumes on the next
+  // tick. A fight that is producing bodies is progressing, however slowly, and slow is not
+  // the thing this guards against — camp raid seed 7 / c2 legitimately takes 131 s.
+  const wasClosing = battle.closing;
+  battle.closing = battle.enemies.length > 0 && battle.troops.length + 1 > 0 &&
+    battle.time - battle.lastDeath > STALL_TERMINAL;
+  if (battle.closing && !wasClosing) {
+    battle.commandFlash = { text: 'NO QUARTER!', t: 1.1 };
+    battle.game.sfx.horn(96);
   }
 }
