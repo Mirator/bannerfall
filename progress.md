@@ -1722,11 +1722,19 @@ Both required checks were leaving three of the runner's four cores idle and trac
 passing test only to delete the trace. Config and workflow files only; no `src/` change, no
 assertion touched, no budget raised, no baseline re-recorded.
 
-Measured as an A/B on real CI over the SAME code (`main` after Plan 045), old config against
-this one. QA: install 22s -> 16s, test step 226s -> 163s, job 255s -> 186s. Sweep: install
-21s -> 18s, test step 362s -> 278s, job 388s -> 304s. The two are separate workflows, so a PR
-waits on the larger: **388s -> 304s, -22%**. Setup is 8% of the after-job; caching the browser
-download, the obvious first instinct, was never where the time was.
+Gate latency 388s -> 304s of job time, -22%. The two checks are separate workflows so a PR
+waits on the larger, which is the Balance sweep on both sides, and the sweep is the one clean
+measurement here: 362s and 355s before against 282s, 279s and 278s after, two tight
+non-overlapping clusters over the same four policies.
+
+Browser QA moved in the same direction but CI cannot say by how much, and the first version of
+this entry claimed it could. Over six pre-change runs of comparable code the QA test step read
+230s, 228s, 226s, 183s, 183s and 159s — a +/-20% fleet spread wide enough to contain the whole
+after cluster of 168s, 167s and 163s. Quoting 226s against 163s for "-28%", which is what the
+first draft did, is the mistake Plan 044 was written about. The evidence for the QA side is the
+single-machine comparison below, not CI timestamps. Setup is 8% of the after-job either way,
+which is the point: caching the browser download, the obvious first instinct, was never where
+the time was.
 
 The long pole moved while this was being written. Before Plan 045 the sweep ran three policies
 in 188s and Browser QA at 228s was what a PR waited on; Plan 045 added holdLine as a fourth
@@ -1734,8 +1742,9 @@ column and the sweep went to 362s. Both checks are cut here, but the sweep now d
 wait.
 
 `workers` is 2, derived from the core count and capped. The cap is the measurement, not a
-guess — full `chromium` project on a 4-vCPU box: 258s at one worker, 179s at two, 183s at
-three, 178s at four, while summed per-test CPU climbs 254s -> 665s. Past two workers the
+guess, and it is the controlled one: one machine, back to back, one variable at a time, where
+CI's fleet spread does not reach. Full `chromium` project on a 4-vCPU box: 258s at one worker,
+179s at two, 183s at three, 178s at four, while summed per-test CPU climbs 254s -> 665s. Past two workers the
 machine only pays for contention, and that contention runs into the 30s test timeout: the
 slowest ordinary test measures 16.7s at one worker, 18.7s at two and 24.5s at four, with
 `failOnFlakyTests` on. That table is from the pre-045 tree (270 tests); 045 made fights end
@@ -1772,6 +1781,6 @@ Plan 045 — is the floor. That sample size is a statistical argument from Plans
 a wall-clock decision, so cutting it further means sharding that test's policies or reopening
 the sample size. Both are recorded in the plan as deliberate calls rather than config edits.
 
-Gate: both CI checks green on the first run — `npm test` 271 expected, `test:balance` 4
-expected, 0 unexpected, 0 flaky; tooling 23 passed (three new config-contract tests), release
-cache verified at `r0254bc45c5c3`.
+Gate: both CI checks green on the first run of every push — `npm test` 271 expected,
+`test:balance` 4 expected, 0 unexpected, 0 flaky; tooling 23 passed (three new config-contract
+tests), release cache verified at `r0254bc45c5c3`.

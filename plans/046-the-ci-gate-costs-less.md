@@ -8,27 +8,47 @@
 
 ## 1. What the gate actually spends
 
-Step timestamps, not estimates. Two pairs of runs on the SAME code (`main` after Plan 045),
-one with the old config and one with this one, on `ubuntu-latest` both times:
+Step timestamps, not estimates — but reported against the SPREAD of the runner fleet rather
+than as one before-run against one after-run, because that spread turns out to be larger than
+some of the differences here. Every figure below is the "run the tests" step on
+`ubuntu-latest`.
 
-| step | before | after |
-| --- | --- | --- |
-| QA — install Chromium | 22 s | **16 s** |
-| QA — test step | 226 s | **163 s** |
-| QA — job total | 255 s | **186 s** |
-| Sweep — install Chromium | 21 s | **18 s** |
-| Sweep — test step | 362 s | **278 s** |
-| Sweep — job total | 388 s | **304 s** |
+**Balance sweep**, four policies on both sides, so like against like:
 
-The two are separate workflows, so a PR waits on the larger: **388 s → 304 s, −22%**.
+| config | samples |
+| --- | --- |
+| before | 362 s, 355 s |
+| after | 282 s, 279 s, 278 s |
+
+Two tight, non-overlapping clusters: **−22%**, and safe to quote.
+
+**Browser QA**, over six pre-change runs of comparable code:
+
+| config | samples |
+| --- | --- |
+| before | 230 s, 228 s, 226 s, 183 s, 183 s, 159 s |
+| after | 168 s, 167 s, 163 s |
+
+The three after-runs are tight, but the before population spans 159-230 s on essentially the
+same code — a ±20% fleet, wide enough to contain the whole after cluster. **CI cannot resolve
+the QA gain.** What supports it is the controlled comparison in §2: one machine, back to back,
+one variable at a time. Do not quote a QA percentage off CI timestamps; the first draft of this
+plan did, picking 226 s against 163 s for "−28%", which is the same mistake Plan 044 was written
+about — asserting a difference the instrument cannot resolve.
+
+**Gate latency** is the number that actually matters, and it survives, because the two checks
+are separate workflows and a PR waits on the larger. That is the sweep on both sides, and the
+sweep is the clean measurement: **388 s → 304 s of job time, −22%**.
 
 The long pole moved while this plan was being written. Before Plan 045 the sweep ran three
-policies in 188 s and Browser QA at 228 s was what a PR waited on; Plan 045 added `holdLine`
-as a fourth column and the sweep went to 362 s. Both checks are cut here, but the sweep is
+policies in 188 s and Browser QA at ~228 s was what a PR waited on; Plan 045 added `holdLine`
+as a fourth column and the sweep went to ~360 s. Both checks are cut here, but the sweep is
 now the one that decides the wait, and §5 says what is left in it.
 
-Setup is 8% of the after-job and was 9% of the before — caching the browser download, the
-obvious first instinct, was never where the time was.
+Installing the headless shell instead of the full browser took 22 s to 16 s on QA and 21 s to
+18 s on the sweep — real, and small enough to be inside the same fleet noise. Setup is 8% of
+the after-job either way, which is the point: caching the browser download, the obvious first
+instinct, was never where the time was.
 
 ## 2. How many workers
 
@@ -48,11 +68,14 @@ right-hand column is why four is worse than useless — the per-test timeout is 
 four workers the slowest ordinary test sits 5.5 s under it. `failOnFlakyTests` is on, so one
 contended test over the line is a red build.
 
-That table was taken on the tree before Plan 045 (270 tests). Plan 045 landed mid-flight and
-made fights end sooner, which moves the absolute numbers — the same box now runs 300 s at one
-worker over 271 tests — but not the shape, and the CI A/B in §1 is measured on the current
-tree and is the number that matters. The table is left as recorded rather than half-refreshed;
-re-derive it whole if the cap is ever argued with.
+This table is the evidence for the QA side of the change, not §1: one machine, back to back,
+one variable at a time, where CI's ±20% fleet spread does not reach. The same box also
+measured the trace change (§3) at 179 s against 151 s.
+
+It was taken on the tree before Plan 045 (270 tests). Plan 045 landed mid-flight and made
+fights end sooner, which moves the absolute numbers — the same box now runs 300 s at one
+worker over 271 tests — but not the shape. Left as recorded rather than half-refreshed;
+re-derive it whole, on one machine, if the cap is ever argued with.
 
 `fullyParallel` stays **off**, and that is now asserted rather than assumed
 (`tests/tooling/config-contract.test.js`). Playwright hands a whole spec file to one
@@ -100,9 +123,11 @@ doesn't exist" rather than drifting to a different raster.
 
 ## 5. Result
 
-Real CI, same code, old config against this one: gate latency **388 s → 304 s (−22%)**, with
-QA's job at −27% and the sweep's at −22%. Both checks green on the first run; `npm test` 271
-expected, `test:balance` 4 expected, 0 unexpected, 0 flaky.
+Gate latency **388 s → 304 s (−22%)**, bounded by the Balance sweep on both sides and measured
+against the sweep's tight clusters rather than a single pair. Browser QA moved in the same
+direction; §1 says why CI cannot put a number on that one and §2 says what can. Both checks
+green on the first run of every push: `npm test` 271 expected, `test:balance` 4 expected,
+0 unexpected, 0 flaky.
 
 The balance check is now what a PR waits on, and inside it one test — `deliberate orders beat
 giving no order at all`, four policies over 120 camp raids each since Plan 045 — is the floor.
