@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r66ae1724dd52';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r0254bc45c5c3';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -167,6 +167,18 @@ export const CHARGE_RECOVER = 1.1;
 export const HOLD_REACH_MELEE = 140;
 // A fight in which nobody has died for this long is not a battle, it is a grind.
 export const STALL_NO_DEATH = 14;
+// Plan 045: and a fight in which nobody has died for THIS long is not ending on its own.
+// `bloodlust` (STALL_NO_DEATH above) is a one-shot behaviour flag — survivors stop kiting
+// and close in — and until this constant existed that was the last thing the battle loop
+// ever did about a stall. Measured: camp raid seed 7 / c1 ran 600 simulated seconds with one
+// brute alive and 541 of them without a death, the brute orbiting a 185px steering envelope
+// while a braced line waited. Nothing in the game stopped it, and the only player-facing out
+// is the retreat edge, whose prompt the HUD does not offer until 45 s.
+//
+// Twice STALL_NO_DEATH, so bloodlust gets a full second window of its own to work before the
+// terminal measure applies. See `battle.closing` in ai-phases.js: this is a clock, not a
+// latch — one death clears it, because a fight that produces bodies is progressing.
+export const STALL_TERMINAL = 30;
 // The arena margin every body is clamped inside. Named by Plan 040 because it is now read
 // by the steering as well as by the clamp: a heading that pushes into this boundary is
 // absorbed whole by the clamp, so a body freezes at full speed and never re-decides — see

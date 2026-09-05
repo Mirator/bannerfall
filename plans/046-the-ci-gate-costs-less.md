@@ -1,4 +1,4 @@
-# Plan 045 — the CI gate costs less
+# Plan 046 — the CI gate costs less
 
 - Status: **IMPLEMENTED**.
 - Scope: `playwright.config.js` and the three workflow files. **No `src/` change**, no test

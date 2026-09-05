@@ -419,6 +419,18 @@ the existing 26 named legacy records and their result shape. Do not weaken an
 assertion, raise a performance budget, or ignore page/console errors to obtain
 green CI.
 
+Plan 045: **a change to battle navigation, obstacle geometry, or any terrain RNG
+stream invalidates every recorded balance number.** Steering, separation,
+collider placement and the streams that position colliders all decide which
+fights resolve and how fast, and the balance fixtures measure the outcome, not
+the mechanism — PR #34's obstacle rescue moved the sweep's idle column by
+fourteen points without touching a single balance constant. Such a change re-runs
+`npm run test:balance` and records the new table in the same commit, and a red
+sweep blocks the merge. Re-recording
+`tests/e2e/__baselines__/orders-sweep.json` is legitimate exactly when the plan
+says which measurement makes the new number the correct one, and never as the
+answer to a run you have not explained.
+
 Randomness domains are explicit: `simRng` may affect gameplay state, `fxRng`
 may only affect particles/decorative variation, and camera shake uses its own
 stream. Derive new streams with `deriveSeed(seed, RNG_DOMAINS.<name>)`; never

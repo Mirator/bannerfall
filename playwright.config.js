@@ -5,7 +5,7 @@ const isCi = process.env.CI === 'true' || process.env.CI === '1';
 
 // One worker per ~2 cores, capped at 2, overridable with PW_WORKERS.
 //
-// The cap is a MEASUREMENT, not a guess (plans/045). On a 4-vCPU box — the shape of
+// The cap is a MEASUREMENT, not a guess (plans/046). On a 4-vCPU box — the shape of
 // ubuntu-latest, which is what both CI checks run on — the full chromium project takes
 // 258 s at one worker and 179 s at two. Three and four workers take 183 s and 178 s: the
 // wall clock stops moving while the summed per-test CPU climbs from 254 s to 665 s, so

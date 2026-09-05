@@ -56,7 +56,7 @@ test('a spec file is never split across workers', async () => {
 });
 
 test('the derived worker count is a positive integer inside the measured range', async () => {
-  // plans/045 measured 1, 2, 3 and 4 workers on a 4-vCPU runner: 258 s, 179 s, 183 s, 178 s.
+  // plans/046 measured 1, 2, 3 and 4 workers on a 4-vCPU runner: 258 s, 179 s, 183 s, 178 s.
   // Two is the knee, and past it the per-test slowdown eats into the 30 s test timeout.
   // The config derives the number from the host's core count, so pin the shape rather than
   // the value, and pin the ceiling that keeps the timeout headroom. PW_WORKERS is unset for

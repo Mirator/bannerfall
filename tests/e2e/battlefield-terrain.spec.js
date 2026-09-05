@@ -693,3 +693,80 @@ test('moving past or away from nearby colliders does not start a contact detour'
   }
   assertNoRuntimeErrors(errors);
 });
+
+// Plan 045: a fight always ends.
+//
+// `updateStalematePhase` used to be a one-shot behaviour flag — `bloodlust` fires once after
+// STALL_NO_DEATH seconds without a body, the survivors stop kiting and close in — and that
+// was the last thing the battle loop ever did about a stall. If they still could not reach
+// each other, nothing else happened. Measured before the fix on the production camp-raid path
+// at world seed 7, camp c1: the fight ran 600 simulated seconds with one brute alive and 541
+// of them without a death, the brute orbiting a 185px steering envelope while a braced line
+// waited it out. The player's only out is the retreat edge, whose prompt the HUD does not
+// offer until 45s.
+//
+// STALL_TERMINAL is the answer: past it, obstacle steering and the obstacle push-out both
+// stand down, so bodies walk straight at what they are fighting and the fight resolves itself
+// by combat. It decides nothing — unit separation is untouched, so somebody still has to land
+// the blows. This drives the real production entry (E at the camp, the site menu, the brief,
+// the deployment confirm) rather than a synthetic battle, because the defect was in a fight
+// the campaign actually serves.
+test('a camp raid that cannot reach itself still ends', async ({ page }) => {
+  test.setTimeout(180_000);
+  const runtimeErrors = collectRuntimeErrors(page);
+  await bootWorld(page, { seed: 7 });
+  const out = await page.evaluate(async () => {
+    const { WORLD } = await import('/src/data.js');
+    const game = window.__g, dt = 1 / 60;
+    const canvas = document.getElementById('game');
+    canvas.width = 1280; canvas.height = 720;
+    game.camera.w = 1280; game.camera.h = 720;
+    const real = game.update.bind(game);
+    game.update = () => {};
+    try {
+      const camp = WORLD.camps.find(c => c.id === 'c1');
+      const world = game.scene;
+      world.save.troops = ['spear', 'spear', 'spear', 'spear', 'archer', 'archer', 'archer', 'knight', 'knight']
+        .map(type => ({ type }));
+      world.save.gold = 500;
+      for (let i = 0; i < 4 && i < world.save.settlements.length; i++) world.save.settlements[i].owner = 'player';
+      world.hero.x = camp.x; world.hero.y = camp.y; world.grace = 0;
+      game.input.injectMouse(640, 360, false);
+      game.input.injectKey('KeyE', true); real(dt); game.input.injectKey('KeyE', false);
+      if (world.screen && world.screen.kind === 'site') { game.input.injectKey('Enter', true); real(dt); game.input.injectKey('Enter', false); }
+      if (world.screen && world.screen.kind === 'brief') { game.input.injectKey('Enter', true); real(dt); game.input.injectKey('Enter', false); }
+      if (game.sceneName !== 'battle') return { reached: false, scene: game.sceneName };
+      const b = game.scene;
+      game.camera.shakeT = 0; game.camera.shakeAmp = 0; game.camera.sx = 0; game.camera.sy = 0;
+      let t = 0;
+      while (b.state === 'intro' && t < 3) { real(dt); t += dt; }
+      let armT = 0;
+      while (b.state === 'deploy' && armT < 0.5) { real(dt); t += dt; armT += dt; }
+      if (b.state === 'deploy') { game.input.injectKey('Enter', true); real(dt); t += dt; game.input.injectKey('Enter', false); }
+      // The policy that produced the stall: a braced line that will not go and get them.
+      for (const [squad, order] of Object.entries({ spear: 'hold', archer: 'hold', knight: 'charge' })) {
+        b.issueCommand(order, squad);
+      }
+      let closingFired = false;
+      while (b.state !== 'end' && t < 300) {
+        real(dt); t += dt;
+        if (b.closing) closingFired = true;
+      }
+      return {
+        reached: true, state: b.state, seconds: Math.round(t),
+        closingFired, closingNow: !!b.closing,
+        longestDeathGap: Math.round(b.time - b.lastDeath),
+      };
+    } finally { game.update = real; }
+  });
+
+  expect(out.reached, `the production camp-raid path did not reach a battle: ${JSON.stringify(out)}`).toBe(true);
+  expect(out.state, `this fight ran ${out.seconds}s without reaching a terminal state`).toBe('end');
+  // The terminator is what ended it, not luck: this exact fixture is the one that used to run
+  // forever. If a future change makes the fight resolve on its own the flag stops firing and
+  // this assertion is the honest place to notice and re-record what the fixture measures.
+  expect(out.closingFired, 'the terminal stall measure never armed on the fixture it was built for').toBe(true);
+  // A clock, not a latch: the fight that ends produces a body, which clears it.
+  expect(out.closingNow, 'the terminal stall flag outlived the stall that set it').toBe(false);
+  assertNoRuntimeErrors(runtimeErrors);
+});

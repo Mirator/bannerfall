@@ -19,6 +19,15 @@ import { UNIT_TYPES } from '../../src/data.js';
 const DT = 1 / 60;
 const TIMEOUT_S = 90;
 
+// Plan 045: the camp-raid window. It was an inline `t < 95` and it was doing two jobs — one
+// of which it did badly. A raid that never ends and a raid that takes 131 seconds both hit it
+// and both were scored as losses, so the timeout column conflated "cannot finish" with "slow".
+// Measured: camp raid seed 7 / c2 resolves honestly at 131s, and seed 7 / c1 used to run past
+// 600s with 541 of them without a death (that one is a real defect, fixed by STALL_TERMINAL).
+// 180s is past every legitimate fight measured here and still bounded, so `unresolved` now
+// means what the budget below assumes it means.
+const RAID_WINDOW_S = 180;
+
 const rep = (type, n) => Array.from({ length: n }, () => ({ type }));
 
 // Composition strengths are matched across fixtures (7 on the shared strength scale)
@@ -142,7 +151,7 @@ async function runSplit(page, fixtureName, orders) {
 // and chargeAll 100, a saturated column with no room left for a regression to show in.
 async function raidSweep(page, orders, seeds, campIds, held = 0) {
   await page.goto('/');
-  return page.evaluate(async ({ orders, seeds, campIds, dt, held }) => {
+  return page.evaluate(async ({ orders, seeds, campIds, dt, held, windowS }) => {
     const { WORLD } = await import('/src/data.js');
     const game = window.__g;
     // Outcomes depend on canvas size (the fit-to-action camera feeds hero aim, which feeds
@@ -204,7 +213,7 @@ async function raidSweep(page, orders, seeds, campIds, held = 0) {
             throw new Error('the deploy confirm did not start the fight: state=' + b.state);
           }
           if (orders) for (const [squad, order] of Object.entries(orders)) b.issueCommand(order, squad);
-          while (b.state !== 'end' && t < 95) { real(dt); t += dt; }
+          while (b.state !== 'end' && t < windowS) { real(dt); t += dt; }
           totals.runs++;
           if (b.victory) totals.wins++;
           totals.lost += b.startTroops - b.troops.length;
@@ -225,7 +234,7 @@ async function raidSweep(page, orders, seeds, campIds, held = 0) {
       unresolved: rows.filter(r => !r.resolved).length,
       rows,
     };
-  }, { orders, seeds, campIds, dt: DT, held });
+  }, { orders, seeds, campIds, dt: DT, held, windowS: RAID_WINDOW_S });
 }
 
 // Plan 044: the paired (McNemar) comparison the sweep should always have used. The policies
@@ -481,7 +490,12 @@ test.describe('stance balance', () => {
     const idle = await raidSweep(page, null, seeds, camps, HELD);
     const chargeAll = await raidSweep(page, { spear: 'charge', archer: 'charge', knight: 'charge' }, seeds, camps, HELD);
     const split = await raidSweep(page, { spear: 'charge', archer: 'hold', knight: 'charge' }, seeds, camps, HELD);
-    const measured = { idle, chargeAll, split };
+    // Plan 045: holdLine joins the sweep. It is the slowest policy and therefore the first to
+    // deadlock — 25/120 raids unresolved pre-042 and 7/120 after it, the highest of any
+    // policy in both — and the sweep ran without it, so the column that mattered most to the
+    // finding this fixture exists for was the one it never measured.
+    const holdLine = await raidSweep(page, { spear: 'hold', archer: 'hold', knight: 'charge' }, seeds, camps, HELD);
+    const measured = { idle, chargeAll, split, holdLine };
 
     // The record, printed whichever way the assertions fall — including the two numbers the
     // old table hid: how many raids never finished, and what the margin's error bar is.
