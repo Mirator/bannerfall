@@ -1835,13 +1835,14 @@ sweep, and the two are now within ten seconds of each other — there is no long
 attack.
 
 On CI the gain is smaller, and CI is what a reviewer waits on. Reported against clusters
-rather than as a pair, because Plan 046 established this fleet spreads +/-20% on QA: the
-sweep step read 362s and 355s under Plan 045's config, 282s / 279s / 278s under Plan 046's,
-and 202s now (-28%); QA read 168s / 167s / 163s under Plan 046's and 145s now (-13%). The QA
-figure is one sample against a noisy instrument, but it is what the mechanism predicts — the
-deadlock probe is the only thing this plan touches in that project, it went 44s to 26s, and
-165 - 18 = 147. Job totals 304s -> 227s. The gap between -44% locally and -28% on CI is the
-runner: four vCPUs behaving like two physical cores return less from four contexts.
+rather than as pairs, because Plan 046 established this fleet spreads +/-20%: the sweep step
+read 362s and 355s under Plan 045's config, 282s / 279s / 278s under Plan 046's, and 202s and
+153s now; QA read 168s / 167s / 163s under Plan 046's and 158s and 145s now. The sweep's two
+runs are 49s apart, which is the fleet rather than the change, but both sit well clear of a
+three-run cluster that spanned four seconds: -36% on the means, -28% at the worst pairing. QA
+is -8% on the means, which is the honest reading of a -13% and a -5% and about what the
+mechanism predicts, since the deadlock probe is the only thing this plan touches there and it
+went 44s to 26s. The gap between -44% locally and -36% on CI is the runner: four vCPUs behaving like two physical cores return less from four contexts.
 
 `scripts/serve.py` also stops printing BrokenPipeError tracebacks. Several contexts now tear
 down their connections at the end of every measurement and the default handler prints a stack

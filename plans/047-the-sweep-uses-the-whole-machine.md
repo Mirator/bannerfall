@@ -101,20 +101,21 @@ within ten seconds of each other, which is the useful end state — there is no 
 check to attack.
 
 **On CI the gain is smaller, and CI is what a reviewer waits on.** Plan 046 established
-that this fleet spreads ±20% on Browser QA, so these are reported against the clusters
-rather than as a pair — and the sweep's clusters have been tight all along:
+that this fleet spreads ±20%, so these are clusters rather than pairs:
 
 | step | Plan 045 config | Plan 046 config | this plan |
 | --- | --- | --- | --- |
-| Balance sweep | 362 s, 355 s | 282 s, 279 s, 278 s | **202 s** |
-| Browser QA | — | 168 s, 167 s, 163 s | **145 s** |
+| Balance sweep | 362 s, 355 s | 282 s, 279 s, 278 s | **202 s, 153 s** |
+| Browser QA | — | 168 s, 167 s, 163 s | **158 s, 145 s** |
 
-−28% on the sweep against a three-run cluster it sits clearly below, and −13% on QA. That
-QA number is one sample and its own cluster is a noisy instrument, but it is the number
-the mechanism predicts: the deadlock probe is the only thing in that project this plan
-touches, it went 44 s to 26 s, and 165 − 18 = 147. Job totals 304 s → 227 s.
+The sweep's two runs are 49 s apart, which is the fleet rather than the change — but both
+sit well clear of a three-run cluster that spanned four seconds, so the direction is not in
+question: **−36% on the means, −28% at the worst pairing.** Browser QA is **−8% on the
+means**, and that is the honest reading of a −13% and a −5%; the mechanism only predicts
+about that much, since the deadlock probe is the only thing this plan touches in that
+project and it went 44 s to 26 s.
 
-The gap between −44% locally and −28% on CI is the runner: four vCPUs that behave like two
+The gap between −44% locally and −36% on CI is the runner: four vCPUs that behave like two
 physical cores return less from four contexts than a box that gives four. The change is
 worth the same either way; the ceiling is not.
 
