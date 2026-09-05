@@ -1513,3 +1513,29 @@ User request: Fix all P1 and P2 findings in subagents, make a plan, implement, o
 - [x] Recapture only the reviewed battle-break baseline through CI; focused visual check passed.
 - [x] Open [PR #34](https://github.com/Mirator/bannerfall/pull/34), which records final full browser/performance/visual and balance results and the merge status. Both checks must pass on the reviewed revision before merge.
 
+
+## UI/UX audit — September 5
+
+User request: audit the game's UI and UX.
+
+Read every drawing path in `main.js`, `world-screens.js`, `battle/hud.js`,
+`world/render-actors.js` and `world/site-menu.js`, then drove the real build headlessly at
+800x500, 1024x600, 1280x720 and 1920x1080 and captured the frames the visual suite does not
+cover: the pause overlay, the settings and credits panels, the armed victory screen, a
+mid-fight melee, the first frame of a new campaign, and the ambush brief a six-second ride
+produces. `critiques/ui-ux-audit-2026-09-05.md` records sixteen findings, four of them P1.
+
+Two are the UI stating something false: the victory screen draws its CONTINUE/MAIN MENU rows
+at `H * 0.885`, inside the banner poles drawn from `H * 0.80`, and the selected row's alpha
+pulse lets a pole show through the primary action; and the deployment panel reads FOLLOW for
+the whole phase while `confirmDeploy()` flips every un-ordered squad to HOLD on the way out.
+Neither is covered by a baseline — the victory baseline is captured at `steps: 1.5`, one tick
+before the rows arm.
+
+Measured while auditing the safety net: `world-overview.png` no longer depicts the build. Its
+own fixture (seed 20260817, 0.5s, DPR 1) now renders `Weaken it (0/4) — Capture or raze 2 more`
+where the baseline reads `(0/7) — Capture settlements · raze camps`, and the visual suite still
+passes 24/24, because a 300x50 chip is under the 1.5% differing-area cap. Layout regressions are
+guarded; HUD copy is not.
+
+No source was changed. The audit is a document.
