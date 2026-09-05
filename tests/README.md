@@ -300,6 +300,26 @@ must never be used to hide an unexplained regression. Visual checks supplement
 semantic QA; keep both the focused `npm run test:visual` and the full `npm test`
 gate green.
 
+### Words are guarded separately (`hud-copy.spec.js`, Plan 043)
+
+`maxDiffPixelRatio: 0.015` is 13,824 pixels at 1280x720 and the campaign's objective chip is
+about 300x50, so a HUD chip's ENTIRE text can change without failing the comparison — which
+is exactly what happened to `world-overview.png`, `world-power-weakened.png` and
+`world-site-town.png`, all of which still carry retired copy while the suite passes. The cap
+cannot be lowered to chip size either: the same suite re-run at `maxDiffPixelRatio: 0`
+reports 197-304 differing pixels on text-light battle frames and 2,700-6,300 on text-heavy
+panels, purely from Chromium build skew against antialiased glyphs.
+
+`tests/e2e/hud-copy.spec.js` covers what the ratio cannot. It wraps `fillText` on
+`CanvasRenderingContext2D.prototype` before the page's scripts run, draws one frame through
+the same seeded fixed-step harness, and asserts the complete ordered list of strings for each
+screen. **Change a player-facing string and its expectation in the same commit** — the list
+is the review surface for wording, the way the PNG is for layout.
+
+It also reaches two screens no baseline can: the pause overlay's armed abandon row, which
+prints a live countdown, and any state that only exists between the fixed steps a baseline is
+captured at.
+
 ## Platform and Steam boundary
 
 `src/platform/platform-contract.js` is the only host-facing contract. The web

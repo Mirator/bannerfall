@@ -1513,3 +1513,66 @@ User request: Fix all P1 and P2 findings in subagents, make a plan, implement, o
 - [x] Recapture only the reviewed battle-break baseline through CI; focused visual check passed.
 - [x] Open [PR #34](https://github.com/Mirator/bannerfall/pull/34), which records final full browser/performance/visual and balance results and the merge status. Both checks must pass on the reviewed revision before merge.
 
+
+## UI/UX audit — September 5
+
+User request: audit the game's UI and UX.
+
+Read every drawing path in `main.js`, `world-screens.js`, `battle/hud.js`,
+`world/render-actors.js` and `world/site-menu.js`, then drove the real build headlessly at
+800x500, 1024x600, 1280x720 and 1920x1080 and captured the frames the visual suite does not
+cover: the pause overlay, the settings and credits panels, the armed victory screen, a
+mid-fight melee, the first frame of a new campaign, and the ambush brief a six-second ride
+produces. `critiques/ui-ux-audit-2026-09-05.md` records sixteen findings, four of them P1.
+
+Two are the UI stating something false: the victory screen draws its CONTINUE/MAIN MENU rows
+at `H * 0.885`, inside the banner poles drawn from `H * 0.80`, and the selected row's alpha
+pulse lets a pole show through the primary action; and the deployment panel reads FOLLOW for
+the whole phase while `confirmDeploy()` flips every un-ordered squad to HOLD on the way out.
+Neither is covered by a baseline — the victory baseline is captured at `steps: 1.5`, one tick
+before the rows arm.
+
+Measured while auditing the safety net: `world-overview.png` no longer depicts the build. Its
+own fixture (seed 20260817, 0.5s, DPR 1) now renders `Weaken it (0/4) — Capture or raze 2 more`
+where the baseline reads `(0/7) — Capture settlements · raze camps`, and the visual suite still
+passes 24/24, because a 300x50 chip is under the 1.5% differing-area cap. Layout regressions are
+guarded; HUD copy is not.
+
+No source was changed. The audit is a document.
+
+## Plan 043 — the copy gate
+
+User request: fix the visual holes the audit found in the gate, then open, push and merge a PR.
+
+The hole, measured rather than argued: the visual suite compares whole canvases at
+`maxDiffPixelRatio: 0.015` — 13,824 pixels at 720p — and the campaign's objective chip is
+about 300x50. Reproducing `world-overview.png`'s own fixture renders `Weaken it (0/4)` /
+`Capture or raze 2 more` where the committed baseline reads `(0/7)` / `Capture settlements ·
+raze camps`, and `npm run test:visual` passed 24/24 throughout. `world-power-weakened.png`
+and `world-site-town.png` carry retired copy too. Re-running the suite at
+`maxDiffPixelRatio: 0` reports 197-304 differing pixels on the text-light battle frames and
+2,700-6,300 on the text-heavy panels with no content change at all, so the cap cannot be
+tightened down to the size of a chip: pixels are the wrong instrument for words.
+
+`tests/e2e/hud-copy.spec.js` is the right one. `fillText` is wrapped on the prototype through
+`addInitScript`, so every string reaching any canvas is recorded in draw order, and the frame
+comes from the same seeded, fixed-step, frozen-update harness the visual suite uses. Seventeen
+tests assert the complete ordered list per screen, which makes the expectation the review
+surface for player-facing wording. Proved it bites rather than assuming: changing
+`Q — save and quit to menu` to `Q — save and exit to menu` fails the pause test with both
+strings printed, and leaves the visual suite green.
+
+Two screens had no baseline at all and now have one: `world-paused.png` (the overlay is drawn
+outside every scene's draw path, so no scene baseline reached it — `settle()` grew a `paused`
+option) and `victory-summary-armed.png` at `steps: 3`, because the existing summary baseline
+is captured at 1.5 and the terminal rows arm one tick later. That second baseline deliberately
+pins a screen that is WRONG — audit finding 1, the rows drawn into the banner poles — so that
+fixing it re-records the PNG instead of going unseen.
+
+Not done here, deliberately: the stale baselines are not re-recorded. `--update-snapshots`
+only rewrites what fails and these pass, so refreshing them needs `--update-snapshots=all`,
+which `AGENTS.md` forbids; the sanctioned path is the `Visual baselines` workflow with a
+PNG-by-PNG review, and the drift measurement above cannot separate copy drift from raster
+skew per file, so that review is a human's.
+
+No production source changed.
