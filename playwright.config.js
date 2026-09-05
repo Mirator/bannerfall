@@ -15,8 +15,10 @@ const isCi = process.env.CI === 'true' || process.env.CI === '1';
 // build waiting to happen. Nothing above 4 vCPU was measured, which is why the cap is not
 // simply `cpus / 2` — raise it with numbers, not with reasoning.
 //
-// Confirmed end to end on CI rather than only here: over the same commit, the Browser QA
-// test step went 226 s -> 163 s and the Balance sweep's 362 s -> 278 s.
+// Those are single-machine numbers ON PURPOSE. The CI fleet spreads +/-20% run to run — the
+// QA step measured anywhere from 159 s to 230 s on unchanged config — so a before-run against
+// an after-run there proves nothing about this setting. What CI does confirm, because its two
+// clusters do not overlap, is the Balance sweep: 362/355 s before, 282/279/278 s after.
 const cores = os.availableParallelism?.() ?? os.cpus().length;
 const workers = Number(process.env.PW_WORKERS) || Math.max(1, Math.min(2, Math.floor(cores / 2)));
 
