@@ -200,3 +200,8 @@ deliberately extracted less than the audit proposed.
 |---|---|---|---|---|---|
 | 042 | Close all nine P1/P2 findings from the September 4 codebase audit | P1/P2 | L | 041 | IMPLEMENTED — three executor worktrees; final gates and merge tracked in [PR #34](https://github.com/Mirator/bannerfall/pull/34) |
 
+## Plan 045 — CI cost
+
+| Plan | Title | Priority | Effort | Depends on | Status |
+|---|---|---|---|---|---|
+| 045 | Make both required checks faster without touching an assertion | P3 | S | — | IMPLEMENTED — two workers, no trace on passing runs, headless-shell-only install |

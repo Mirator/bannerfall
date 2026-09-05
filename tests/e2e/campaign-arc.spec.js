@@ -19,9 +19,11 @@ import { collectRuntimeErrors, assertNoRuntimeErrors } from './test-helpers.js';
 // Plain arithmetic seeds, chosen only for count and not for content.
 const SWEEP_SEEDS = Array.from({ length: 12 }, (_, i) => i + 1);
 
-// The sweep is 48 campaigns and three tests read it. Playwright runs this file in ONE
-// worker (`workers: 1`), so the module-level cache below is shared between them and the
-// measurement is taken once rather than three times.
+// The sweep is 48 campaigns and three tests read it. Playwright gives a whole spec FILE to
+// one worker, so the module-level cache below is shared between the three and the
+// measurement is taken once rather than three times. That is a property of
+// `fullyParallel: false`, NOT of the worker count — the config runs two workers now and the
+// guarantee is unchanged, but turning `fullyParallel` on would silently triple this file.
 let sweepPromise = null;
 function sweep(page) {
   if (!sweepPromise) {

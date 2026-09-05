@@ -35,16 +35,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      # Headless-shell only. `install chromium` fetches Chrome for Testing AND the headless
+      # shell; every run here is headless, so it launches the shell and the full browser is
+      # ~150 MB downloaded to sit unused. Baselines are unaffected — the shell is already the
+      # binary that rendered every committed PNG. A run that ever needs a headed browser will
+      # say so loudly ("Executable doesn't exist"), not drift.
+      - name: Install Chromium headless shell
+        run: npx playwright install --with-deps chromium-headless-shell
       - name: Run the balance sweep
         run: npm run test:balance
       - name: Upload Playwright report on failure

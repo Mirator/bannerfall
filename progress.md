@@ -1657,3 +1657,52 @@ Also removed: the two stale claims that this check cannot go red - the spec head
 
 Gate: `npm test` 270 passed (was 269 - the new probe), `npm run test:balance` 4 passed,
 tooling 20 passed, release cache verified at `r66ae1724dd52`.
+
+## Plan 045 — the CI gate costs less
+
+Both required checks were leaving three of the runner's four cores idle and spending 16% of
+their wall clock tracing tests that pass. Config and workflow files only; no `src/` change,
+no assertion touched, no budget raised, no baseline re-recorded.
+
+Measured from the step timestamps of the last green pair on `main` (`6b45426`): Browser QA
+28s setup + 228s tests, Balance sweep 42s setup + 188s tests. They run as separate
+workflows, so a PR waits on the larger, 4m21s. Setup is 11% of that and the test step is
+the rest.
+
+`workers` is 2 now, derived from the core count and capped. The cap is the measurement, not
+a guess — full `chromium` project on a 4-vCPU box: 258s at one worker, 179s at two, 183s at
+three, 178s at four, while summed per-test CPU climbs 254s -> 665s. Past two workers the
+machine only pays for contention, and that contention runs into the 30s test timeout: the
+slowest ordinary test measures 16.7s at one worker, 18.7s at two and 24.5s at four, with
+`failOnFlakyTests` on. Nothing above 4 vCPU was measured, which is why the cap is 2 rather
+than `cpus / 2`; `PW_WORKERS` overrides it.
+
+`fullyParallel` stays off and is now asserted in `tests/tooling/config-contract.test.js`.
+Playwright gives a whole spec file to one worker, and that — not the worker count — is what
+lets `campaign-arc.spec.js` share one 48-campaign measurement across its three `@sweep`
+tests. The comment in that file and in `tests/README.md` credited `workers: 1` for it, which
+named the wrong invariant; both now name `fullyParallel`.
+
+`trace` is `on-first-retry`, was `retain-on-failure`. The old setting traced all 270 tests
+and deleted 270 traces because they all passed: 179s with it against 151s without, at two
+workers. A genuine failure is retried once in CI and the retry is traced, so it still
+arrives with one; a fail-then-pass goes red through `failOnFlakyTests` with the error, the
+stack and — new here — a failure screenshot, but no trace. That is a trade and it is spelled
+out in the config rather than left to be rediscovered.
+
+All three workflows install `chromium-headless-shell` instead of `chromium`. The latter
+fetches Chrome for Testing AND the shell; every run is headless, so it launches the shell
+and the ~150MB browser was downloaded to sit unused. Baselines are untouched — the shell is
+already what rendered every committed PNG. `actions/checkout` and `actions/setup-node` moved
+to v5, which is what the Node 20 deprecation warning in every run has been asking for.
+
+Result on the same box: `chromium` 258s -> 162s, `balance` 309s -> 188s. Both green, 270 and
+4 expected, 0 unexpected, 0 flaky, and the sweep's third test still returns in 0.1s, which
+is the memoized measurement proving the file-level worker guarantee held.
+
+The balance check is now bounded below by one 185s test. Sharding `chromium` across two
+runners would halve it again at double the runner minutes and a required-check aggregation
+job; recorded in the plan as not done rather than forgotten.
+
+Gate: `npm test` 270 passed, `npm run test:balance` 4 passed, tooling 23 passed (three new
+config-contract tests), release cache verified at `r66ae1724dd52`.
