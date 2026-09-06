@@ -1,14 +1,14 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r6d03cd1c99d9';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r6d03cd1c99d9';
-import { stableSortPrefix } from './spatial-index.js?v=r6d03cd1c99d9';
-import { SQUAD_TYPES, DEPLOY_NO_MANS, FIELD_ART } from './constants.js?v=r6d03cd1c99d9';
-import { atmosphere, mix, rimTint, LIGHT } from '../lighting.js?v=r6d03cd1c99d9';
-import { CROSSING_OPEN_HALF } from './terrain.js?v=r6d03cd1c99d9';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r6d03cd1c99d9';
-import { drawHud } from './hud.js?v=r6d03cd1c99d9';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r16ad0951ca1b';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r16ad0951ca1b';
+import { stableSortPrefix } from './spatial-index.js?v=r16ad0951ca1b';
+import { SQUAD_TYPES, DEPLOY_NO_MANS, FIELD_ART, DECOR_ALPHA, HIGH_GROUND_R } from './constants.js?v=r16ad0951ca1b';
+import { atmosphere, mix, rimTint, LIGHT } from '../lighting.js?v=r16ad0951ca1b';
+import { CROSSING_OPEN_HALF } from './terrain.js?v=r16ad0951ca1b';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r16ad0951ca1b';
+import { drawHud } from './hud.js?v=r16ad0951ca1b';
 
 // ------------------------------------------------------------- drawing
 
@@ -82,8 +82,11 @@ function drawDeployZones(battle, ctx) {
   // the body being placed
   const drag = battle.dragUnit;
   if (drag) {
+    // Plan 049: valid or not, said in the ring rather than by the body silently refusing to
+    // move. `dragBlocked` is published by updateDeployPhase, which already computed it to
+    // decide whether to move the body at all.
     ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = P.hero;
+    ctx.strokeStyle = battle.dragBlocked ? P.enemy : P.hero;
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(drag.x, drag.y, (drag.d ? drag.d.radius : 14) + 10, 0, TAU); ctx.stroke();
   }
@@ -122,6 +125,57 @@ export function drawGuard(battle, ctx, o) {
   }
   ctx.restore();
 }
+// Plan 049, contrast hierarchy Levels 1 and 2: say "look here now" with the ground, not
+// with another overlay. Three cues, each of which draws only in the state it belongs to, so
+// an ordinary fight frame pays nothing:
+//
+//   placing    the GROUND steps back while a body is being dragged, so the line being built
+//              is the brightest thing on screen. One fillRect over the visible world; the
+//              units are drawn after this and keep their full contrast.
+//   selected   a ring under every man of the picked squad. The HUD row already says which
+//              squad the number keys reach; this says WHICH MEN that is, on the field.
+//   alerted    while the other side's commander is committing, a ring under every enemy.
+//              Reads `enemyAlertT`, published by the commander and decayed in the tick
+//              pipeline — presentation never writes it (AGENTS.md).
+function drawFocus(battle, ctx) {
+  const P = battle.palette;
+  const cam = battle.game.camera;
+  if (battle.dragUnit) {
+    const tl = cam.toWorld(0, 0), br = cam.toWorld(cam.w, cam.h);
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = P.ink;
+    ctx.fillRect(Math.min(tl.x, br.x), Math.min(tl.y, br.y), Math.abs(br.x - tl.x), Math.abs(br.y - tl.y));
+    ctx.restore();
+  }
+  const picked = battle.selectedSquad;
+  if (picked) {
+    ctx.save();
+    ctx.strokeStyle = P.hero;
+    ctx.lineWidth = 2.4;
+    ctx.globalAlpha = 0.5 + 0.22 * Math.sin(battle.time * 4);
+    for (const t of battle.troops) {
+      if (t.type !== picked) continue;
+      ctx.beginPath();
+      ctx.ellipse(t.x, t.y + 3, t.d.radius + 8, (t.d.radius + 8) * 0.5, 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (battle.enemyAlertT > 0) {
+    ctx.save();
+    ctx.strokeStyle = P.enemy;
+    ctx.lineWidth = 2.6;
+    ctx.globalAlpha = 0.75 * Math.min(1, battle.enemyAlertT);
+    for (const e of battle.enemies) {
+      ctx.beginPath();
+      ctx.ellipse(e.x, e.y + 3, e.d.radius + 9, (e.d.radius + 9) * 0.5, 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 export function drawScene(battle, ctx) {
   const P = battle.palette;
   battle._alertCount = 0; // per-frame alert cluster-cull registry
@@ -200,6 +254,10 @@ export function drawScene(battle, ctx) {
 
   // Plan 033: deployment ground, under every actor like the objective ring above.
   drawDeployZones(battle, ctx);
+
+  // Plan 049: the contrast hierarchy's top two levels, drawn on the ground under every
+  // actor so nothing floats over the units it is about.
+  drawFocus(battle, ctx);
 
   // Hold banners: one per squad actually holding, drawn from that squad's own anchor.
   // This was gated on the aggregate `command === 'hold'`, which is never 'hold' under a
@@ -444,6 +502,12 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
   for (const p of battle.props) {
     const dynamic = p.kind === 'fire' || p.kind === 'mill' || p.kind === 'river';
     if (dynamicOnly !== dynamic) continue;
+    // Level 4 of the contrast hierarchy: ground decoration is drawn quieter than anything
+    // the player reads to make a decision. Applied around the branch rather than inside each
+    // one because none of the decoration branches touch globalAlpha themselves — the ones
+    // that do (roadPoly, ford) are terrain, and are absent from DECOR_ALPHA.
+    const decorAlpha = DECOR_ALPHA[p.kind];
+    if (decorAlpha) ctx.globalAlpha = decorAlpha;
     if (p.kind === 'riverPoly') {
       // A Brief-derived river: the real sampled polyline, not a straight column through the
       // middle. A thick round-joined stroke approximates the channel at the Brief's real
@@ -547,6 +611,13 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // static-bake terms as
       // woodFloor above.
       ctx.save();
+      // Plan 049: the SLOPE is high ground, and high ground is worth bow range, so the
+      // player has to be able to see where it stops. A pale apron out to HIGH_GROUND_R,
+      // under the collider footprint — the same "draw the zone, do not imply it" rule the
+      // wood floor above already follows. Baked with the static layer, so it is free.
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = P.cream;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * HIGH_GROUND_R, 0, TAU); ctx.fill();
       ctx.globalAlpha = 0.38;
       ctx.fillStyle = P.rockShade;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
@@ -733,5 +804,6 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       }
       ctx.stroke();
     }
+    if (decorAlpha) ctx.globalAlpha = 1;
   }
 }

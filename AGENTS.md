@@ -18,6 +18,7 @@ specific defect or measurement put them there.
 - [Determinism and RNG domains](#determinism-and-rng-domains)
 - [Visual regression](#visual-regression)
 - [Light and art direction](#light-and-art-direction)
+- [Readability and onboarding](#readability-and-onboarding)
 - [Audio](#audio)
 - [Save schema and persistence](#save-schema-and-persistence)
 - [Campaign lifecycle](#campaign-lifecycle)
@@ -516,6 +517,41 @@ after — it is the spec closest to a timeout — not just the `beginPath` budge
 FREE. A richer silhouette drawn as one path per face is cheaper than a simpler one drawn as
 four separate paths, which is why the flat-shaded primitives draw a three-tier tree in fewer
 calls than the two-tier one they replaced. Reach for that before reaching for detail.
+
+## Readability and onboarding
+
+Plan 049. Four contracts that are easy to break by accident:
+
+- **Decoration is tiered, and the tiers are load-bearing.** `SCATTER` (battle/constants.js)
+  holds every area-per-prop divisor — density scales with the field, so add a divisor there
+  rather than a literal at the scatter site. `DECOR_ALPHA` dims what is decoration and
+  deliberately omits terrain, structures and crossings: those are what the player reads, and
+  a decorative rock must never pull the eye harder than a selected squad. `CLEAN_R` and
+  `clearTacticalGround()` clear the removable tiers off both lines, the contact point, the
+  objective and every crossing; it runs after `buildObjectiveState` because it needs the
+  objective. A NEW prop kind is decoration only if you also add it to `CLEARABLE_PROPS`.
+- **Terrain rules take the STRONGEST overlapping value, never the product.**
+  `terrainRangeMulAt`/`terrainCoverAt` max/min rather than multiply: two hills whose slopes
+  touch are one piece of high ground, and the product handed a bow +44% range for standing
+  between two knolls. `terrainSpeedAt` still multiplies, because stacked slow ground legitimately
+  compounds, and it SKIPS zones with no `mul` — a zone that carries only `rangeMul` would
+  otherwise make the product NaN. Both sides read all three rules; a rule one army obeys is a
+  handicap, not terrain. Any change here is a balance change: re-run `npm run test:balance`
+  and record the drift.
+- **The onboarding gate is on the KEYS, not on `issueCommand`.** `updateCommandPhase` checks
+  `commandUnlocked`; the command API itself stays open because the AI, the balance sweep and
+  the legacy QA runner all drive it directly, and a battle that silently refused their orders
+  would change what those measure. Moving the gate into `issueCommand` turns
+  `battlefield-terrain.spec.js`'s camp-raid deadlock fixture red, which is the honest signal
+  that it is in the wrong place.
+- **The lesson is DERIVED from `save.battleCount`, never stored.** `src/tutorial.js` imports
+  nothing and persists nothing, for the same reason perk points are derived: a second counter
+  is one that can drift from the campaign it describes. A fight built without `setup.lesson`
+  gets `NO_LESSON` and unlocks everything, which is every scenario fixture — keep it that way.
+
+`tests/e2e/clarity.spec.js` is the gate for all four. The visual suite cannot see any of it:
+it compares whole canvases at a tolerance that absorbs a scatter of small marks, and it cannot
+press a key.
 
 ## Audio
 

@@ -12,15 +12,16 @@
 //
 // Changing anything here means re-reading that section of AGENTS.md and re-running
 // world-screens.spec.js, campaign-persistence.spec.js and save-schema.spec.js.
-import { WORLD, BALANCE, rollComposition } from '../data.js?v=r6d03cd1c99d9';
-import { dist2, clamp } from '../engine.js?v=r6d03cd1c99d9';
-import { ACTIONS } from '../input-actions.js?v=r6d03cd1c99d9';
-import { buildBriefModel, veteranLine } from '../world-screens.js?v=r6d03cd1c99d9';
-import { sampleBattlefield } from './battlefield-brief.js?v=r6d03cd1c99d9';
-import { FIELD } from '../battle/constants.js?v=r6d03cd1c99d9';
-import { encounterObjective, strongholdModifiers } from '../region.js?v=r6d03cd1c99d9';
-import { awardVeterancy, perkMods } from '../progression.js?v=r6d03cd1c99d9';
-import { performSiteAction } from './site-menu.js?v=r6d03cd1c99d9';
+import { WORLD, BALANCE, rollComposition } from '../data.js?v=r16ad0951ca1b';
+import { lessonFor } from '../tutorial.js?v=r16ad0951ca1b';
+import { dist2, clamp } from '../engine.js?v=r16ad0951ca1b';
+import { ACTIONS } from '../input-actions.js?v=r16ad0951ca1b';
+import { buildBriefModel, veteranLine } from '../world-screens.js?v=r16ad0951ca1b';
+import { sampleBattlefield } from './battlefield-brief.js?v=r16ad0951ca1b';
+import { FIELD } from '../battle/constants.js?v=r16ad0951ca1b';
+import { encounterObjective, strongholdModifiers } from '../region.js?v=r16ad0951ca1b';
+import { awardVeterancy, perkMods } from '../progression.js?v=r16ad0951ca1b';
+import { performSiteAction } from './site-menu.js?v=r16ad0951ca1b';
 
 // Sim-seconds into the assault when an Entrenched hold's reserve arrives.
 const STRONGHOLD_WAVE_AT = 25;
@@ -50,6 +51,10 @@ export function startBattle(world, comp, title, onWinExtra, arena, ambush, party
     biome: world.biomeAt(world.hero.x),
     ambush,
     subtitle,
+    // Plan 049: which commands this fight offers, and which one it is teaching. Derived
+    // from the battle number the line above just incremented — see src/tutorial.js for why
+    // nothing about the onboarding is persisted.
+    lesson: lessonFor(save.battleCount),
     // Plan 021 step 5: setup.brief keys the battle intro's trim so the three
     // scenario('battle_*') visual baselines (never routed through a brief) are
     // provably untouched — only fights reached via confirmBrief() set world.

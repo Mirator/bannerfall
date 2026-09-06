@@ -41,6 +41,7 @@ otherwise.
 | --- | --- |
 | `src/engine.js`, `src/main.js` | fixed-timestep loop, scene switching, input |
 | `src/lighting.js` | the one sun both scenes are lit by: shadow/rim tints, baked ground texture, baked screen grading |
+| `src/tutorial.js` | sequential command onboarding — derived from `save.battleCount`, persists nothing |
 | `src/world.js`, `src/world/` | campaign map: tick pipeline, party AI, terrain, rendering |
 | `src/battle.js`, `src/battle/` | fight scene: ordered phases, combat, separation, objectives, HUD |
 | `src/region.js` | regional conquest model (ownership, specializations, stronghold power, raid cadence) — pure data, single source |
@@ -96,6 +97,11 @@ replacing a delegator with a direct module call silently disables coverage.
   `tests/e2e/qa.spec.js`'s wall clock, not only the `beginPath` budgets, before adding
   anything else that is per-frame and full-screen. And remember `beginPath` is what the
   budgets count — subpaths are free, so more shape does not have to mean more cost.
+- **The onboarding gate is on the keys, not the command API.** `updateCommandPhase` checks
+  `commandUnlocked`; `issueCommand` stays open because the AI, the balance sweep and the QA
+  runner drive it directly. Move the gate and the camp-raid deadlock fixture goes red.
+- **Terrain rules take the strongest overlapping value, not the product**, and any change to
+  them is a balance change — re-run `npm run test:balance` and record the drift.
 - **Audio must not `console.error`.** No sound before a user gesture, no music
   started on a suspended `AudioContext`, and every file named in `src/audio.js`'s
   manifest must exist — an autoplay violation or a 404 fails every spec that calls

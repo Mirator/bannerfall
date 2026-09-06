@@ -6,9 +6,9 @@
 // Every call back into the scene goes through the instance (battle.nearestEnemy,
 // battle.damageEnemy, battle.slotPos, ...) so the ordered seams stay patchable by
 // tests/e2e/world-battle-seams.spec.js and nothing here needs a second import edge.
-import { HERO } from '../data.js?v=r6d03cd1c99d9';
-import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r6d03cd1c99d9';
-import { ACTIONS } from '../input-actions.js?v=r6d03cd1c99d9';
+import { HERO } from '../data.js?v=r16ad0951ca1b';
+import { clamp, lerp, angLerp, dist2, len } from '../engine.js?v=r16ad0951ca1b';
+import { ACTIONS } from '../input-actions.js?v=r16ad0951ca1b';
 import {
   BRACE_SPEED, BRACE_BONUS, BRACE_CHARGE_MUL, BRACE_MEMORY,
   BOW_SPREAD, BOW_SPREAD_BRACED, CHARGE_RECOVER, HOLD_REACH_MELEE, STALL_NO_DEATH, STALL_TERMINAL, ARENA_EDGE,
@@ -16,8 +16,8 @@ import {
   BLIND_SIDESTEP_MAX_ACTIVE, BLIND_SIDESTEP_COOLDOWN,
   CHARGE_SPEED_MUL, WOLF_STALK_R, WOLF_COMMIT_HP, WOLF_RECOIL_T, RALLY_R,
   FRONT_ARC, FLANK_BONUS,
-} from './constants.js?v=r6d03cd1c99d9';
-import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r6d03cd1c99d9';
+} from './constants.js?v=r16ad0951ca1b';
+import { enemyAnchorFor, isIsolated, mustersInLine } from './enemy-command.js?v=r16ad0951ca1b';
 
 // ---------------------------------------------------------------- Plan 029: the rush latch
 // The single predicate both sides' brace reads, and the single place it is written.
@@ -544,13 +544,17 @@ export function updateTroopPhase(battle, dt, h) {
     // troops always defend the commander: any enemy near the hero is fair game
     const heroThreat = battle.nearestEnemy(battle.hero.x, battle.hero.y, 90);
     const stance = squadStanceNow;
+    // Plan 049: high ground lengthens a bow's reach. Sampled ONCE per unit per tick and
+    // reused by every range comparison in this iteration — never per comparison. A melee
+    // body's reach is its weapon, not its eyeline, so elevation does nothing for it.
+    const tRange = t.d.ranged ? t.d.range * battle.terrainRangeMulAt(t.x, t.y) : t.d.range;
     // How far a HELD body reaches for anything at all: its own range if it shoots,
     // HOLD_REACH_MELEE (one spear-line's worth of ground) if it does not. Hoisted because
     // the Break-the-position block below has to honour the same reach — see Plan 040
     // there. The melee half is a named constant so the wolf-stand-band contract in
     // stance-balance.spec.js can assert against the reach a held line actually covers
     // instead of against UNIT_TYPES.spear.range, which is a different number entirely.
-    const holdReach = t.d.ranged ? t.d.range : HOLD_REACH_MELEE;
+    const holdReach = t.d.ranged ? tRange : HOLD_REACH_MELEE;
     if (stance === 'charge') {
       engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, 1e9, dt) : battle.nearestEnemy(t.x, t.y);
     } else if (stance === 'hold') {
@@ -558,7 +562,7 @@ export function updateTroopPhase(battle, dt, h) {
       if (!engage && heroThreat && dist2(t.x, t.y, battle.hero.x, battle.hero.y) < 260 * 260) engage = heroThreat;
       if (!engage) goal = { x: t.holdX, y: t.holdY };
       } else { // follow
-        const maxR = t.d.ranged ? t.d.range * 0.9 : 150;
+        const maxR = t.d.ranged ? tRange * 0.9 : 150;
         engage = t.d.ranged ? pickRangedEnemy(battle, t, t.x, t.y, maxR, dt) : battle.nearestEnemy(t.x, t.y, maxR);
         if (!engage && heroThreat) engage = heroThreat;
         if (!engage) goal = battle.slotPos(t);
@@ -601,7 +605,7 @@ export function updateTroopPhase(battle, dt, h) {
 
     if (engage) {
       const d = Math.sqrt(dist2(t.x, t.y, engage.x, engage.y));
-      const wantR = t.d.ranged ? t.d.range * 0.8 : t.d.range + engage.d.radius - 6;
+      const wantR = t.d.ranged ? tRange * 0.8 : t.d.range + engage.d.radius - 6;
       // Phase 5, mandatory fallback: a ranged unit blind for more than 1.5s stops holding
       // its line (HOLD's stand-ground, or keeping keepAway distance) and advances on its
       // target at normal speed instead, so it walks itself out from behind whatever is
@@ -645,7 +649,7 @@ export function updateTroopPhase(battle, dt, h) {
       // A charge forfeits the bow line: archers ordered forward are running with their
       // bows down, so CHARGE trades the ranged screen for speed instead of keeping both.
       const advancingBow = t.d.ranged && stance === 'charge' && d > wantR;
-      if (t.cd <= 0 && !advancingBow && d < (t.d.ranged ? t.d.range : t.d.range + engage.d.radius + 4)) {
+      if (t.cd <= 0 && !advancingBow && d < (t.d.ranged ? tRange : t.d.range + engage.d.radius + 4)) {
         // A set line receives a charge: melee holding position hit harder against anything
         // that CAME IN AT A RUSH. Plan 029 rebuilt this — the old form read the target's
         // velocity at the instant of the swing, and measured, a body inside spear reach has
@@ -724,7 +728,7 @@ export function updateTroopPhase(battle, dt, h) {
         // Walking back to a hold anchor is likewise not a charge. Terrain is applied
         // after the latch, never inside it.
         if (engage && dirX * (engage.x - t.x) + dirY * (engage.y - t.y) > 0) markRush(t, commanded);
-        const sp = commanded * clamp(d / 40, 0.5, 1.6) * battle.terrainSpeedAt(t.x, t.y);
+        const sp = commanded * clamp(d / 40, 0.5, 1.6) * battle.terrainSpeedAt(t.x, t.y, !!t.d.mounted);
         t.vx = lerp(t.vx, dirX * sp, 1 - Math.exp(-8 * dt));
         t.vy = lerp(t.vy, dirY * sp, 1 - Math.exp(-8 * dt));
         if (!engage) t.facing = angLerp(t.facing, Math.atan2(dirY, dirX), 1 - Math.exp(-6 * dt));
@@ -839,8 +843,11 @@ export function updateEnemyPhase(battle, dt, h) {
       // Phase 4a: sampled once per enemy per tick at its current position, reused for both
       // the approach and keep-away branches below — terrain costs the same to cross either
       // direction.
-      const terrainMul = battle.terrainSpeedAt(e.x, e.y);
-      const wantR = e.d.ranged ? e.d.range * 0.85 : e.d.range + 6;
+      const terrainMul = battle.terrainSpeedAt(e.x, e.y, !!e.d.mounted);
+      // The other side reads the same terrain: an enemy bow on a slope shoots as far as
+      // yours would. A rule only one army obeys is not terrain, it is a handicap.
+      const eRange = e.d.ranged ? e.d.range * battle.terrainRangeMulAt(e.x, e.y) : e.d.range;
+      const wantR = e.d.ranged ? eRange * 0.85 : e.d.range + 6;
       // Phase 5, mandatory fallback: see the matching comment in updateTroopPhase. A raider
       // blind for more than 1.5s stops kiting at range and advances instead, until a shot
       // (below) proves LOS is back and clears blindT.
@@ -968,7 +975,7 @@ export function updateEnemyPhase(battle, dt, h) {
       // Plan 027 mirrors "a charge forfeits the bow line": a raider ordered forward is
       // running with its bow down until it is inside its working range.
       const advancingBow = e.d.ranged && stance === 'charge' && d > wantR;
-      if (e.cd <= 0 && !advancingBow && d < (e.d.ranged ? e.d.range : wantR + 8) &&
+      if (e.cd <= 0 && !advancingBow && d < (e.d.ranged ? eRange : wantR + 8) &&
           (!e.d.ranged || battle.hasLineOfSight(e.x, e.y - 10, to.x, to.y))) {
         e.windupT = e.d.windup; // telegraph
       }

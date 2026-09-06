@@ -2,7 +2,7 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r6d03cd1c99d9';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r16ad0951ca1b';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
 
@@ -385,6 +385,80 @@ export const STEER_COOLDOWN = 0.8;
 // you up, wading a ford costs the most (no structure, you are in the water), woods slow the
 // most of the "solid ground" zones since a blocker line-of-sight-cover kind should also read
 // as a small tactical cost to walk through, scrub barely more than open ground.
+// ---------------------------------------------------------------- Plan 049: detail tiers
+//
+// Every battlefield decoration is one of three things, and only the third is negotiable:
+//
+//   gameplay-critical  hill, hillFoot, woodFloor, scrub, river, road, bridgeSpan, ford,
+//                      house, tent, mill, stake, guard — terrain the player must read.
+//   supporting         boulder, log, stump, crops, reeds, plank, stone — they say what kind
+//                      of place this is, and a field without any reads as a test harness.
+//   pure decoration    tuft, pebbles, bones — ground interest and nothing else.
+//
+// `SCATTER` holds the area-per-prop divisor for each scattered family: a BIGGER number means
+// FEWER of them, and the count still scales with the field so density does not drift as the
+// field grows. The numbers below are roughly 40% thinner than the Plan 024 detail pass they
+// replace, weighted so the purest decoration is cut hardest. What that pass got right is that
+// a bare field reads as a void; what it got wrong is that eighty small marks compete with the
+// eight things the player is actually reading.
+export const SCATTER = Object.freeze({
+  tuft: 70_000,       // was 42_000
+  pebbles: 190_000,   // was 110_000
+  log: 850_000,       // was 500_000
+  stump: 800_000,     // was 450_000
+  boulder: 900_000,   // was 600_000
+  bones: 1_300_000,   // was 700_000
+  // Ground tone, not clutter: fewer and larger, which is the same "prefer large shapes over
+  // small detail" rule the scatter above follows. Since Plan 048 the baked soil texture
+  // carries the fine variation these used to supply on their own.
+  blotch: 78_000,     // was 50_000
+  region: 275_000,    // unchanged — these ARE the large shapes
+});
+
+// Tactical clean zones. Pure decoration and supporting props are removed inside these radii,
+// so the ground where the player deploys, fights and decides is quiet. Roughly one to two
+// formation widths, which is what the ~110-unit deployment spacing makes them.
+export const CLEAN_R = Object.freeze({
+  deploy: 210,     // around each side's line
+  objective: 190,  // the hold ring / the position being broken
+  crossing: 150,   // a bridge or ford is a decision, not a diorama
+  contact: 240,    // the middle of the field, where the two lines meet
+});
+
+// Level 4 of the contrast hierarchy (Plan 049). A decorative rock must never pull the eye
+// harder than a selected squad, an enemy line or a piece of terrain that changes a decision.
+// These props are baked into the static layer, so the dimming costs nothing per frame.
+// Terrain, structures and crossings are deliberately absent: they are Level 3 and read at
+// full strength.
+export const DECOR_ALPHA = Object.freeze({
+  tuft: 0.5, pebbles: 0.45, bones: 0.5,
+  log: 0.75, stump: 0.75, boulder: 0.8, crops: 0.7, reeds: 0.7,
+});
+
+// How long a squad's stance stays on the HUD after the order lands. The permanent stance
+// column it replaces was the same three words repeated on every row of every frame; this
+// shows an order when it is news, and otherwise only for the squad the keys reach.
+export const ORDER_SHOW_T = 2.6;
+
+// ---------------------------------------------------------------- Plan 049: terrain that decides
+//
+// Three rules, each one sentence long, because terrain the player needs a wiki for is not
+// terrain that creates decisions. Both sides obey all three — the enemy commander gets the
+// hill bonus and the wood's cover exactly as the player does.
+//
+//   HIGH GROUND   a bowman on a hill's slope shoots further.
+//   WOODS         anyone under the trees takes less from arrows, and a horse is slower
+//                 there than a man on foot.
+//
+// The hill's own disc is a hard collider — nobody stands ON it — so the high-ground zone is
+// the SLOPE around it: the ring between the collider and HIGH_GROUND_R times its radius,
+// which is the ground a player actually puts a bow line on and the ground the silhouette
+// already reads as raised.
+export const HIGH_GROUND_R = 1.6;      // slope reach, as a multiple of the hill collider
+export const HIGH_GROUND_RANGE = 1.2;  // bow range on the slope
+export const WOOD_COVER = 0.75;        // ranged damage TAKEN under the trees
+export const WOOD_MOUNTED = 0.82;      // extra speed penalty for a mounted man in woods
+
 export const ROAD_SPEED = 1.14;
 export const WOOD_SPEED = 0.80;
 export const SCRUB_SPEED = 0.92;

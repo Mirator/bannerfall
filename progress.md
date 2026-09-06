@@ -1898,3 +1898,55 @@ tolerance absorbs a low-contrast change spread evenly over a frame, which is wor
 about the instrument — it guards composition and layout, not grading.
 
 Gate: `npm test` 271 passed, tooling 23 passed, release cache verified.
+
+## Plan 049 — read the field
+
+A readability and tactical-clarity pass, driven by a written comparison against Thronefall
+(six asks: less decorative noise, terrain that decides, half the permanent UI, sequential
+command teaching, contrast around the action, feedback on the core interactions).
+
+Decoration is now tiered. `SCATTER` holds every area-per-prop divisor in one place and the
+pure-decoration families are 37-46% thinner; `CLEAN_R` and `clearTacticalGround()` strip the
+removable tiers off both deployment lines, the contact point, the objective and every
+crossing; `DECOR_ALPHA` draws what is left at 0.45-0.8, baked into the static layer so the
+dimming is free. Terrain is deliberately absent from all three.
+
+Terrain got three one-sentence rules, obeyed by both sides: a bow on a hill's SLOPE (the ring
+around the collider, since nobody stands on the disc) reaches 20% further and the apron is
+drawn so the rule is visible; ranged damage under the trees is x0.75, sampled where the shaft
+lands; a mounted man takes another x0.82 there. Overlapping zones take the strongest value,
+not the product — two touching slopes were giving a bow +44%. The balance sweep moved at most
+two points (idle 0, chargeAll +1, split +2, holdLine -1), inside the recorded tolerance, so
+the rules change what a POSITION is worth without moving what an ORDER is worth.
+
+The permanent HUD is a roster now: `SPEARS x4 / BOWS x2`, with a stance only for the squad
+the keys reach or while an order is fresh. The panel is 250x~90 where it was 360x~130, and
+the `TAB pick squad / 1 follow 2 charge 3 hold` legend is gone — it duplicated the deployment
+banner on every frame of every fight. The minimap now draws only where the field is bigger
+than the viewport, gated at unit zoom so a fit-to-action camera cannot make it flicker.
+
+Onboarding teaches one command per battle, derived from `save.battleCount` with no schema
+change — the same rule perk points already follow. Battle 1 offers no commands at all;
+follow, charge and hold arrive one per fight after that. The gate is on the KEYS, not on
+`issueCommand`: the AI, the sweep and the QA runner drive that API directly, and gating it
+turned the camp-raid deadlock fixture red because that fixture issues a held line in what is
+battle 1 for its save.
+
+`drawFocus()` carries the top of the contrast hierarchy on the ground: the field steps back
+while a body is dragged, the picked squad wears a ring, the enemy wears one while their
+commander commits. Placement — the most repeated interaction in the game, which produced no
+feedback whatsoever — gets dust, a ring and a click; the three orders stopped feeling
+identical, with CHARGE the loudest thing a player can do; losing a whole squad now says so.
+
+Not built, and recorded in the plan rather than dropped: authored prototype maps and authored
+tutorial encounters. Every battlefield is sampled from the campaign map around the hero
+(Plan 024), so both would fork the architecture; making the sampled terrain matter is what
+this plan did instead.
+
+`tests/e2e/clarity.spec.js` is new: decoration budgets and clean zones, the three terrain
+rules on both the generated map and a synthetic field, the lesson ladder, and the key gate
+against the still-open command API. Nine battle baselines re-recorded and three HUD copy
+lists updated; the world baselines are untouched.
+
+Gate: `npm test` 278 passed, `npm run test:balance` 4 passed, tooling 23 passed, release
+cache verified.
