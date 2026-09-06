@@ -17,6 +17,8 @@ specific defect or measurement put them there.
 - [Performance budgets](#performance-budgets)
 - [Determinism and RNG domains](#determinism-and-rng-domains)
 - [Visual regression](#visual-regression)
+- [Light and art direction](#light-and-art-direction)
+- [Readability and onboarding](#readability-and-onboarding)
 - [Audio](#audio)
 - [Save schema and persistence](#save-schema-and-persistence)
 - [Campaign lifecycle](#campaign-lifecycle)
@@ -472,6 +474,84 @@ with the suite green. Player-facing STRINGS are gated by
 asserts the complete ordered list per screen. Change a string and its expectation in
 the same commit. Do not answer a copy failure by loosening the list; do not raise
 `maxDiffPixelRatio` to absorb one either.
+
+## Light and art direction
+
+`src/lighting.js` (Plan 048) holds the one sun both scenes are lit by, and imports nothing —
+`engine.js`, both scene renderers and the world's art-direction contract read it, and with no
+bundler an import cycle here would be a real hazard. It owns three things:
+
+- **`LIGHT`** — the sun's direction (`engine.js`'s cast-shadow offsets derive from it, so the
+  shapes and the grading cannot disagree), the warm key, the cool tone a shadow takes, and how
+  far each family is pulled toward those two.
+- **`shadowTint`/`rimTint`/`mix`** — `shadow()` calls `shadowTint` for every cast shadow in the
+  game. It pulls the caller's colour toward the cool tone and then CLAMPS the result so it can
+  never come out brighter than what was asked for. Do not remove the clamp: the night biome's
+  ground shade is darker than the cool tint, and without it every night shadow is a pale blob
+  on dark grass. `rimTint` takes an optional key colour, and the battle scene passes the
+  biome's own lit tone — the night field is lit by a cold moon.
+- **`groundTile`/`groundPattern`/`atmosphere`** — the baked soil texture and the baked screen
+  grading. Both are BAKED, and both caches are deliberate:
+  - Soil tiles are cached at MODULE level, keyed by spec, because the suites construct
+    hundreds of worlds and battles and a per-instance cache re-baked the same image for each.
+    The tile is deterministic from its own local LCG: presentation must never draw on `simRng`
+    or `fxRng`.
+  - The campaign map's tile carries `PAL.world.ground` as its own opaque background, so ONE
+    fill is the backdrop clear, the ground colour and the texture. Do not reintroduce a
+    separate screen-space clear under it — the ground fill overscans a full camera in every
+    direction and the clear was painted and covered every frame.
+  - The battlefield's tile is baked into the static prop tiles in `battle.js`, never painted
+    per frame.
+  - `atmosphere()` bakes its gradient into a VIEWPORT-SIZED bitmap and blits it 1:1. This is
+    measured, not stylistic: a radial gradient costs a square root per destination pixel and
+    CI renders in a software rasterizer, so the live-gradient version cost the legacy QA
+    runner 3.7 s of its 30 s timeout. Plan 048 §3 has the table. Do not replace the blit with
+    a live gradient, a scaled-up small bitmap, or a `multiply` composite without re-running
+    that measurement.
+
+Anything added here is per-frame and full-screen by nature, so it is the most expensive kind
+of change this renderer can take. Measure `tests/e2e/qa.spec.js`'s wall clock before and
+after — it is the spec closest to a timeout — not just the `beginPath` budgets.
+
+`beginPath` is what the structural budgets in `performance.spec.js` count, and SUBPATHS ARE
+FREE. A richer silhouette drawn as one path per face is cheaper than a simpler one drawn as
+four separate paths, which is why the flat-shaded primitives draw a three-tier tree in fewer
+calls than the two-tier one they replaced. Reach for that before reaching for detail.
+
+## Readability and onboarding
+
+Plan 049. Four contracts that are easy to break by accident:
+
+- **Decoration is tiered, and the tiers are load-bearing.** `SCATTER` (battle/constants.js)
+  holds every area-per-prop divisor — density scales with the field, so add a divisor there
+  rather than a literal at the scatter site. `DECOR_ALPHA` dims what is decoration and
+  deliberately omits terrain, structures and crossings: those are what the player reads, and
+  a decorative rock must never pull the eye harder than a selected squad. `CLEAN_R` and
+  `clearTacticalGround()` clear the removable tiers off both lines, the contact point, the
+  objective and every crossing; it runs after `buildObjectiveState` because it needs the
+  objective. A NEW prop kind is decoration only if you also add it to `CLEARABLE_PROPS`.
+- **Terrain rules take the STRONGEST overlapping value, never the product.**
+  `terrainRangeMulAt`/`terrainCoverAt` max/min rather than multiply: two hills whose slopes
+  touch are one piece of high ground, and the product handed a bow +44% range for standing
+  between two knolls. `terrainSpeedAt` still multiplies, because stacked slow ground legitimately
+  compounds, and it SKIPS zones with no `mul` — a zone that carries only `rangeMul` would
+  otherwise make the product NaN. Both sides read all three rules; a rule one army obeys is a
+  handicap, not terrain. Any change here is a balance change: re-run `npm run test:balance`
+  and record the drift.
+- **The onboarding gate is on the KEYS, not on `issueCommand`.** `updateCommandPhase` checks
+  `commandUnlocked`; the command API itself stays open because the AI, the balance sweep and
+  the legacy QA runner all drive it directly, and a battle that silently refused their orders
+  would change what those measure. Moving the gate into `issueCommand` turns
+  `battlefield-terrain.spec.js`'s camp-raid deadlock fixture red, which is the honest signal
+  that it is in the wrong place.
+- **The lesson is DERIVED from `save.battleCount`, never stored.** `src/tutorial.js` imports
+  nothing and persists nothing, for the same reason perk points are derived: a second counter
+  is one that can drift from the campaign it describes. A fight built without `setup.lesson`
+  gets `NO_LESSON` and unlocks everything, which is every scenario fixture — keep it that way.
+
+`tests/e2e/clarity.spec.js` is the gate for all four. The visual suite cannot see any of it:
+it compares whole canvases at a tolerance that absorbs a scatter of small marks, and it cannot
+press a key.
 
 ## Audio
 

@@ -13,8 +13,8 @@ export const WORLD_ART = freeze({
     forestFloor: '#C98633', highlandFloor: '#C98536', riparian: '#B98948',
     tree: '#467F43', treeDark: '#255A38', treeEast: '#356B3D',
     rock: '#D9D4C6', rockDark: '#777688',
-    road: '#C29D67', roadShadow: '#8F6537',
-    water: '#2C9DB5', waterDeep: '#278BA5', waterLight: '#66C7D5', bank: '#477F82', sand: '#D8B66F',
+    road: '#CDA773', roadShadow: '#8A5F32',
+    water: '#2C9DB5', waterDeep: '#278BA5', waterLight: '#8FE0EA', waterRim: '#1B6E88', bank: '#477F82', sand: '#D8B66F',
     field: '#D49843', furrow: '#B87D37',
     enemy: '#C23A2E', hero: '#FFD34D', friendly: '#24569A',
   }),
@@ -33,9 +33,12 @@ export const WORLD_ART = freeze({
     direction: 'down-right',
     terrainAlpha: 0.16, smallAlpha: 0.46, treeAlpha: 0.58,
     landmarkAlpha: 0.72, mountainAlpha: 0.28,
+    // A second, tighter ellipse right under a landmark: contact occlusion, so a village
+    // sits ON the ground instead of hovering over one long soft smear.
+    landmarkCore: 0.55,
   }),
   roads: freeze({
-    alpha: 1, shadowExtra: 1.8, shadowAlpha: 0.12, sectionLength: 72,
+    alpha: 1, shadowExtra: 4.5, shadowAlpha: 0.24, sectionLength: 72,
     edgeFade: 64, hudFade: 46,
     widths: freeze({ minor: 5.5, secondary: 7.5, major: 10.5 }),
     endpoints: freeze({ village: 5, major: 13 }),
@@ -45,6 +48,10 @@ export const WORLD_ART = freeze({
     minWidth: 36, maxWidth: 68, transitionLength: 150,
     bankShadow: 4, groundBandExtra: 18,
     highlightWidth: 7, highlightAlpha: 0.42, highlightDash: freeze([170, 58]),
+    // The waterline: a pale shallow shelf inside the bank, and a cool rim ON it. Drawn as
+    // strokes of the cached water path — inset by half their own width, which is why the
+    // shelf is wide and soft and the rim is thin and dark.
+    shelfWidth: 11, shelfAlpha: 0.22, rimWidth: 3.5, rimAlpha: 0.42,
   }),
   clearance: freeze({ village: 125, town: 150, camp: 120, stronghold: 150 }),
   clusters: freeze({
@@ -64,6 +71,27 @@ export const WORLD_ART = freeze({
     resourceW: 240, resourceH: 36, objectiveW: 300, objectiveH: 56,
     toastH: 34,
   }),
+  // Ground texture and screen grading (see src/lighting.js). The texture is one repeating
+  // pattern painted in a single fillRect over the whole ground plane, so a bare ochre field
+  // carries soil variation instead of reading as one slab of paint; the grading is three
+  // cached gradients. Neither costs a beginPath against the world render budget.
+  // Ground texture: ONE repeating tile, painted over the visible ground in a single
+  // fillRect. It was two tiles at different periods, which hid the repeat better — but a
+  // viewport-sized pattern fill measured about four milliseconds per frame in the software
+  // rasterizer CI renders with, and the second layer was not worth a second one of those.
+  // The repeat is instead broken up by mixing four mark sizes into one large tile, and by
+  // keeping the whole thing low-contrast: it exists to stop a bare ochre field reading as
+  // one slab of paint, not to be looked at.
+  ground: freeze({
+    tile: 768, seed: 0x5EED17,
+    marks: freeze([
+      freeze({ count: 34, r: 62, flat: 0.52, color: '#C57F2A', alpha: 0.08 }),
+      freeze({ count: 26, r: 44, flat: 0.46, color: '#FFC978', alpha: 0.07 }),
+      freeze({ count: 44, r: 17, flat: 0.42, color: '#A96A22', alpha: 0.06 }),
+      freeze({ count: 30, r: 11, flat: 0.34, color: '#6E8C3A', alpha: 0.055 }),
+    ]),
+  }),
+  atmosphere: freeze({ key: 'world', sun: 0.1, shade: 0.09, vignette: 0.3 }),
   framing: freeze({
     // When the hero is exactly on an interaction coordinate, lift the presentation
     // token above the landmark. Simulation and hover coordinates stay untouched.

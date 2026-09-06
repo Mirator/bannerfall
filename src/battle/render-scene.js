@@ -1,13 +1,14 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r0254bc45c5c3';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r0254bc45c5c3';
-import { stableSortPrefix } from './spatial-index.js?v=r0254bc45c5c3';
-import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=r0254bc45c5c3';
-import { CROSSING_OPEN_HALF } from './terrain.js?v=r0254bc45c5c3';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r0254bc45c5c3';
-import { drawHud } from './hud.js?v=r0254bc45c5c3';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r16ad0951ca1b';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r16ad0951ca1b';
+import { stableSortPrefix } from './spatial-index.js?v=r16ad0951ca1b';
+import { SQUAD_TYPES, DEPLOY_NO_MANS, FIELD_ART, DECOR_ALPHA, HIGH_GROUND_R } from './constants.js?v=r16ad0951ca1b';
+import { atmosphere, mix, rimTint, LIGHT } from '../lighting.js?v=r16ad0951ca1b';
+import { CROSSING_OPEN_HALF } from './terrain.js?v=r16ad0951ca1b';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r16ad0951ca1b';
+import { drawHud } from './hud.js?v=r16ad0951ca1b';
 
 // ------------------------------------------------------------- drawing
 
@@ -81,8 +82,11 @@ function drawDeployZones(battle, ctx) {
   // the body being placed
   const drag = battle.dragUnit;
   if (drag) {
+    // Plan 049: valid or not, said in the ring rather than by the body silently refusing to
+    // move. `dragBlocked` is published by updateDeployPhase, which already computed it to
+    // decide whether to move the body at all.
     ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = P.hero;
+    ctx.strokeStyle = battle.dragBlocked ? P.enemy : P.hero;
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(drag.x, drag.y, (drag.d ? drag.d.radius : 14) + 10, 0, TAU); ctx.stroke();
   }
@@ -121,6 +125,57 @@ export function drawGuard(battle, ctx, o) {
   }
   ctx.restore();
 }
+// Plan 049, contrast hierarchy Levels 1 and 2: say "look here now" with the ground, not
+// with another overlay. Three cues, each of which draws only in the state it belongs to, so
+// an ordinary fight frame pays nothing:
+//
+//   placing    the GROUND steps back while a body is being dragged, so the line being built
+//              is the brightest thing on screen. One fillRect over the visible world; the
+//              units are drawn after this and keep their full contrast.
+//   selected   a ring under every man of the picked squad. The HUD row already says which
+//              squad the number keys reach; this says WHICH MEN that is, on the field.
+//   alerted    while the other side's commander is committing, a ring under every enemy.
+//              Reads `enemyAlertT`, published by the commander and decayed in the tick
+//              pipeline — presentation never writes it (AGENTS.md).
+function drawFocus(battle, ctx) {
+  const P = battle.palette;
+  const cam = battle.game.camera;
+  if (battle.dragUnit) {
+    const tl = cam.toWorld(0, 0), br = cam.toWorld(cam.w, cam.h);
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = P.ink;
+    ctx.fillRect(Math.min(tl.x, br.x), Math.min(tl.y, br.y), Math.abs(br.x - tl.x), Math.abs(br.y - tl.y));
+    ctx.restore();
+  }
+  const picked = battle.selectedSquad;
+  if (picked) {
+    ctx.save();
+    ctx.strokeStyle = P.hero;
+    ctx.lineWidth = 2.4;
+    ctx.globalAlpha = 0.5 + 0.22 * Math.sin(battle.time * 4);
+    for (const t of battle.troops) {
+      if (t.type !== picked) continue;
+      ctx.beginPath();
+      ctx.ellipse(t.x, t.y + 3, t.d.radius + 8, (t.d.radius + 8) * 0.5, 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (battle.enemyAlertT > 0) {
+    ctx.save();
+    ctx.strokeStyle = P.enemy;
+    ctx.lineWidth = 2.6;
+    ctx.globalAlpha = 0.75 * Math.min(1, battle.enemyAlertT);
+    for (const e of battle.enemies) {
+      ctx.beginPath();
+      ctx.ellipse(e.x, e.y + 3, e.d.radius + 9, (e.d.radius + 9) * 0.5, 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 export function drawScene(battle, ctx) {
   const P = battle.palette;
   battle._alertCount = 0; // per-frame alert cluster-cull registry
@@ -159,19 +214,26 @@ export function drawScene(battle, ctx) {
   ctx.restore(); // no edge stroke at all: a line across same-biome ground is a seam, not art
   // per-scene light grading: one broad diagonal LIGHT band across the field (the sun falls
   // somewhere) + stepped shade wedges in the far corners — scene lighting, drawn flat
+  // Held deliberately low. These authored wedges used to carry the scene's whole sense of
+  // light on their own; the graded sun pass at the end of the frame now does that, and at
+  // their old strength the two together cut hard diagonal facets across the field.
   ctx.save();
-  ctx.globalAlpha = 0.10;
+  ctx.globalAlpha = 0.05;
   ctx.fillStyle = '#FFF6E0';
   ctx.fill(battle._staticPaths.light);
   ctx.fillStyle = P.ink;
-  ctx.globalAlpha = 0.10;
+  ctx.globalAlpha = 0.06;
   ctx.fill(battle._staticPaths.shadeNear);
-  ctx.globalAlpha = 0.07;
+  ctx.globalAlpha = 0.045;
   ctx.fill(battle._staticPaths.shadeFar);
   ctx.restore();
   // blotches
   ctx.fillStyle = P.groundShade;
   ctx.fill(battle._staticPaths.blotches);
+  // The island's soil texture is baked into the static prop tiles (see battle.js), not
+  // painted here: a full-island pattern fill measured ~7 ms per frame in the software
+  // rasterizer, and it never changes.
+  const fieldArt = FIELD_ART[battle.biome] || FIELD_ART.rose;
   // Plan 024 Phase 6d: the static prop layer is a 2x2 grid of bounded canvases (built once
   // in the Battle constructor), not one arena-sized bitmap. Blit only the tiles the camera
   // can actually see this frame — cheap because there are only ever 4 — using the same
@@ -192,6 +254,10 @@ export function drawScene(battle, ctx) {
 
   // Plan 033: deployment ground, under every actor like the objective ring above.
   drawDeployZones(battle, ctx);
+
+  // Plan 049: the contrast hierarchy's top two levels, drawn on the ground under every
+  // actor so nothing floats over the units it is about.
+  drawFocus(battle, ctx);
 
   // Hold banners: one per squad actually holding, drawn from that squad's own anchor.
   // This was gated on the aggregate `command === 'hold'`, which is never 'hold' under a
@@ -321,6 +387,12 @@ export function drawScene(battle, ctx) {
 
   // HUD (screen space)
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Sun grading: warm key from the sun's corner, cool counter-shade opposite, and a
+  // vignette to settle the frame — the same three cached gradients the campaign map uses,
+  // so both scenes read as one world at one hour. Under the clouds and the HUD, so nothing
+  // the player has to read is tinted. The night field's key is a cold moon instead.
+  battle._artGrade = battle._artGrade || {};
+  atmosphere(ctx, battle._artGrade, battle.game.camera.w, battle.game.camera.h, fieldArt);
   // corner cloud vignette — the same atmosphere motif as the menu, carried into gameplay
   const cw = battle.game.camera.w, ch = battle.game.camera.h;
   ctx.fillStyle = 'rgba(255,246,227,0.92)';
@@ -369,9 +441,11 @@ export function drawCentroidBalloon(battle, ctx, group, icon, ink, paper, lift, 
 export function drawObstacle(battle, ctx, o) {
   const P = battle.palette;
   if (o.kind === 'none') return;
-  if (o.kind === 'tree') tree(ctx, o.x, o.y, o.r * 1.15, P.tree, P.treeShade, P.groundShade);
+  // `P.cream` is the biome's own lit tone, handed on as the rim key: the night field is lit
+  // by a cold moon, and a warm rim there reads as a lighting error rather than a highlight.
+  if (o.kind === 'tree') tree(ctx, o.x, o.y, o.r * 1.15, P.tree, P.treeShade, P.groundShade, 1, P.cream);
   else if (o.kind === 'hill') drawHillTerrain(ctx, o.x, o.y, o.r * 0.7, P);
-  else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot);
+  else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot, 1, P.cream);
 }
 
 // Plan 024 Phase 6c: a battlefield hill needs to read as TERRAIN units fight around, not a
@@ -393,22 +467,34 @@ function drawHillTerrain(ctx, x, y, s, P) {
   const ax = x - s * 0.12;
   const apex = [ax, y - s], footL = [x - s, y + s * 0.4], footR = [x + s * 1.1, y + s * 0.42];
   const outcropPeak = [x + s * 0.78, y - s * 0.18], outcropL = [x + s * 0.55, y + s * 0.42], outcropR = [x + s * 1.25, y + s * 0.42];
-  // filled rock body
-  ctx.fillStyle = P.rock;
-  ctx.beginPath(); ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(outcropL[0], outcropL[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]); ctx.lineTo(outcropR[0], outcropR[1]); ctx.closePath(); ctx.fill();
-  // sun-side wedge toward the global light (down-right), the ground's own second tone
-  ctx.save();
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = P.groundShade;
+  // A hill is RAISED GROUND, so its body is the ground's own colour lifted toward the sun,
+  // not `P.rock`: filled cream, it read as a sand-coloured sticker laid on the grass rather
+  // than as a rise in the field the units are fighting on. Body and outcrop share one path.
+  ctx.fillStyle = mix(P.ground, LIGHT.key, 0.2);
+  ctx.beginPath();
+  ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath();
+  ctx.moveTo(outcropL[0], outcropL[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]); ctx.lineTo(outcropR[0], outcropR[1]); ctx.closePath();
+  ctx.fill();
+  // shade wedge on the face turned away from the sun — a solid computed tone, never alpha
+  ctx.fillStyle = mix(P.groundShade, LIGHT.cool, 0.28);
   ctx.beginPath(); ctx.moveTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.lineTo(x + s * 0.28, y + s * 0.42); ctx.closePath(); ctx.fill();
-  ctx.restore();
+  // rocky crown: the one place the bare stone shows through, so the rise still reads as terrain
+  ctx.fillStyle = P.rock;
+  ctx.beginPath();
+  ctx.moveTo(apex[0], apex[1]); ctx.lineTo(ax - s * 0.26, y - s * 0.6); ctx.lineTo(ax + s * 0.1, y - s * 0.52);
+  ctx.lineTo(ax + s * 0.3, y - s * 0.66); ctx.closePath(); ctx.fill();
   // ink rim: outlines the whole silhouette so it holds together as a solid landform
   ctx.strokeStyle = P.ink; ctx.lineWidth = 3; ctx.lineJoin = 'round';
   ctx.beginPath();
   ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]);
   ctx.lineTo(outcropR[0], outcropR[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath();
   ctx.stroke();
+  // and the sun rakes the left ridge, the same edge every other standing thing catches it on
+  ctx.save();
+  ctx.globalAlpha *= 0.5;
+  ctx.strokeStyle = rimTint(P.ground); ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(apex[0], apex[1]); ctx.lineTo(x - s * 0.72, y + s * 0.28); ctx.stroke();
+  ctx.restore();
 }
 
 export function drawProps(battle, ctx, dynamicOnly = false) {
@@ -416,6 +502,12 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
   for (const p of battle.props) {
     const dynamic = p.kind === 'fire' || p.kind === 'mill' || p.kind === 'river';
     if (dynamicOnly !== dynamic) continue;
+    // Level 4 of the contrast hierarchy: ground decoration is drawn quieter than anything
+    // the player reads to make a decision. Applied around the branch rather than inside each
+    // one because none of the decoration branches touch globalAlpha themselves — the ones
+    // that do (roadPoly, ford) are terrain, and are absent from DECOR_ALPHA.
+    const decorAlpha = DECOR_ALPHA[p.kind];
+    if (decorAlpha) ctx.globalAlpha = decorAlpha;
     if (p.kind === 'riverPoly') {
       // A Brief-derived river: the real sampled polyline, not a straight column through the
       // middle. A thick round-joined stroke approximates the channel at the Brief's real
@@ -519,6 +611,13 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       // static-bake terms as
       // woodFloor above.
       ctx.save();
+      // Plan 049: the SLOPE is high ground, and high ground is worth bow range, so the
+      // player has to be able to see where it stops. A pale apron out to HIGH_GROUND_R,
+      // under the collider footprint — the same "draw the zone, do not imply it" rule the
+      // wood floor above already follows. Baked with the static layer, so it is free.
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = P.cream;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r * HIGH_GROUND_R, 0, TAU); ctx.fill();
       ctx.globalAlpha = 0.38;
       ctx.fillStyle = P.rockShade;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU); ctx.fill();
@@ -705,5 +804,6 @@ export function drawProps(battle, ctx, dynamicOnly = false) {
       }
       ctx.stroke();
     }
+    if (decorAlpha) ctx.globalAlpha = 1;
   }
 }

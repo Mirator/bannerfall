@@ -21,8 +21,11 @@
 // never from `fxRng` (decoration only). The pre-existing area-scaled rock/tree scatter below
 // keeps using `simRng` exactly as it did before this phase — it is not new, and its draw count
 // and order are unchanged, so it does not shift anything downstream.
-import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r0254bc45c5c3';
-import { ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED } from './constants.js?v=r0254bc45c5c3';
+import { TAU, dist2, clamp, distToSegment, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r16ad0951ca1b';
+import {
+  ENGAGE_GAP, ROAD_SPEED, WOOD_SPEED, SCRUB_SPEED, FORD_SPEED, SCATTER,
+  HIGH_GROUND_R, HIGH_GROUND_RANGE, WOOD_COVER, WOOD_MOUNTED,
+} from './constants.js?v=r16ad0951ca1b';
 
 // See the corridor-safety comment above the hill loop in buildFromBrief for the measurement
 // behind these two numbers.
@@ -93,25 +96,25 @@ export function buildTerrain(battle, field) {
 // `simRng` or the terrain stream, and none of them push an obstacle, zone, or blocker.
 function addGroundDetail(battle, fxRng) {
   const W = battle.W, H = battle.H, area = W * H;
-  const logCount = Math.round(area / 500_000);
+  const logCount = Math.round(area / SCATTER.log);
   for (let i = 0; i < logCount; i++) {
     battle.props.push({
       kind: 'log', x: 100 + fxRng() * (W - 200), y: 100 + fxRng() * (H - 200),
       s: 14 + fxRng() * 8, rot: fxRng() * TAU,
     });
   }
-  const stumpCount = Math.round(area / 450_000);
+  const stumpCount = Math.round(area / SCATTER.stump);
   for (let i = 0; i < stumpCount; i++) {
     battle.props.push({ kind: 'stump', x: 100 + fxRng() * (W - 200), y: 100 + fxRng() * (H - 200), s: 12 + fxRng() * 6 });
   }
-  const boulderCount = Math.round(area / 600_000);
+  const boulderCount = Math.round(area / SCATTER.boulder);
   for (let i = 0; i < boulderCount; i++) {
     battle.props.push({
       kind: 'boulder', x: 100 + fxRng() * (W - 200), y: 100 + fxRng() * (H - 200),
       s: 20 + fxRng() * 14, rot: fxRng() * TAU,
     });
   }
-  const boneCount = Math.round(area / 700_000);
+  const boneCount = Math.round(area / SCATTER.bones);
   for (let i = 0; i < boneCount; i++) {
     battle.props.push({
       kind: 'bones', x: 100 + fxRng() * (W - 200), y: 100 + fxRng() * (H - 200),
@@ -163,12 +166,16 @@ function scatterCrops(battle, cx, cy, fxRng) {
 // measured zone counts are 10-15 per brief-derived fight (plans/024's measurement table), so a
 // linear scan is cheap and a spatial index would be pure overhead. Briefless template fights
 // carry zero zones, so this loop is a single length check and returns 1 immediately.
-export function terrainSpeedAt(battle, x, y) {
+export function terrainSpeedAt(battle, x, y, mounted = false) {
   const zones = battle.zones;
   if (zones.length === 0) return 1;
   let mul = 1;
   for (let i = 0; i < zones.length; i++) {
     const z = zones[i];
+    // Plan 049: not every zone is a speed zone any more — high ground carries a range
+    // multiplier and no speed term at all — so a zone without `mul` is skipped here
+    // rather than multiplying the product by undefined.
+    if (!z.mul) continue;
     if (z.pts) {
       // Polyline strip (road). bbox is computed once, lazily, and cached on the zone object
       // itself — cheap because there are only ever one or two road strips per fight.
@@ -179,10 +186,47 @@ export function terrainSpeedAt(battle, x, y) {
     } else {
       // Circle (wood, scrub, ford).
       if (x < z.x - z.r || x > z.x + z.r || y < z.y - z.r || y > z.y + z.r) continue;
-      if (dist2(x, y, z.x, z.y) <= z.r * z.r) mul *= z.mul;
+      if (dist2(x, y, z.x, z.y) <= z.r * z.r) mul *= mounted && z.mountedMul ? z.mul * z.mountedMul : z.mul;
     }
   }
-  return clamp(mul, 0.55, 1.2);
+  // The floor drops for a mounted man because the wood's extra penalty is exactly the rule
+  // that is supposed to bite: a horse in trees should be slower than the old floor allowed.
+  return clamp(mul, mounted ? 0.45 : 0.55, 1.2);
+}
+
+// Plan 049: the two non-speed terrain reads. Both are circle-only — no terrain that carries
+// them is a strip — and both bbox-reject first, the same shape as the speed scan above.
+//
+// `terrainRangeMulAt` is sampled ONCE per ranged unit per tick by the AI phases and reused
+// for every range comparison in that unit's iteration; it is never called per comparison.
+export function terrainRangeMulAt(battle, x, y) {
+  const zones = battle.zones;
+  let mul = 1;
+  for (let i = 0; i < zones.length; i++) {
+    const z = zones[i];
+    if (!z.rangeMul || z.pts) continue;
+    if (x < z.x - z.r || x > z.x + z.r || y < z.y - z.r || y > z.y + z.r) continue;
+    // STRONGEST, not the product. Two hills whose slopes overlap are one piece of high
+    // ground, not twice as high — the product gave a bow standing between a pair of knolls
+    // +44% range, which is a map-generation accident rather than a decision the player made.
+    if (dist2(x, y, z.x, z.y) <= z.r * z.r && z.rangeMul > mul) mul = z.rangeMul;
+  }
+  return mul;
+}
+
+// `terrainCoverAt` is sampled only where a shaft actually lands, which is a handful of times
+// a second even in a large fight.
+export function terrainCoverAt(battle, x, y) {
+  const zones = battle.zones;
+  let mul = 1;
+  for (let i = 0; i < zones.length; i++) {
+    const z = zones[i];
+    if (!z.cover || z.pts) continue;
+    if (x < z.x - z.r || x > z.x + z.r || y < z.y - z.r || y > z.y + z.r) continue;
+    // Strongest cover wins, for the same reason: overlapping thickets are one wood.
+    if (dist2(x, y, z.x, z.y) <= z.r * z.r && z.cover < mul) mul = z.cover;
+  }
+  return mul;
 }
 
 function computeStripBBox(z) {
@@ -585,11 +629,14 @@ function buildFromBrief(battle, field, terrainRng, fxRng) {
     // (and LOS blocker) is this disc — the footprint prop is what makes the circle units
     // path around, and arrows stop at, the circle the player sees. Static, baked once.
     battle.props.push({ kind: 'hillFoot', x: h.x, y: h.y, r });
+    // Plan 049: the slope is high ground. The disc itself is a hard collider, so the zone
+    // that matters is the ring around it — the ground a bow line can actually stand on.
+    battle.zones.push({ kind: 'high', x: h.x, y: h.y, r: r * HIGH_GROUND_R, rangeMul: HIGH_GROUND_RANGE });
   }
 
   // ---- Woods: zone + blocker (0.8x radius) + 4-8 tree props, only the 2 largest collide --
   for (const w of field.woods) {
-    battle.zones.push({ kind: 'wood', x: w.x, y: w.y, r: w.r, mul: WOOD_SPEED });
+    battle.zones.push({ kind: 'wood', x: w.x, y: w.y, r: w.r, mul: WOOD_SPEED, cover: WOOD_COVER, mountedMul: WOOD_MOUNTED });
     battle.blockers.push({ x: w.x, y: w.y, r: w.r * 0.8 });
     // Plan 034: the zone's whole reach, drawn — the slow ground and the arrow cover used to
     // be an invisible circle implied by a handful of trees. Pushed before this clump's

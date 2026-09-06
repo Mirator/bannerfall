@@ -284,17 +284,23 @@ test('the specialization choice states each permanent benefit and holds its arm'
 
 // The battle HUD's squad rows and the deployment instruction line. Both are keyboard
 // contracts written in prose: if a key is rebound or a stance renamed, this fails.
+//
+// Plan 049 is why these lists are short. The permanent panel used to print a stance word on
+// every row plus the whole key legend underneath, and the deployment line stated the drag,
+// all three commands and the advance key in one sentence — the same three commands, twice,
+// on the first screen of the game. What is left is the roster; a stance prints only for the
+// squad the keys reach or while an order is fresh, and the deployment line teaches one
+// thing at a time (src/tutorial.js).
 test('the battle HUD names each squad, its order and the deployment keys', async ({ page }) => {
   const errors = collectRuntimeErrors(page);
   const text = await drawnText(page, 'battle_big', { steps: 1.5 });
   expect(text).toEqual([
     'Warband 14   ·   Slain 0/11',
-    'SPEARS', '7', 'FOLLOW',
-    'BOWS', '4', 'FOLLOW',
-    'HORSE', '3', 'FOLLOW',
-    'TAB pick squad  ·  1 follow  2 charge  3 hold',
+    'SPEARS \u00d77',
+    'BOWS \u00d74',
+    'HORSE \u00d73',
     'FORM YOUR LINE',
-    'drag a man to place him · 1 follow 2 charge 3 hold · E sounds the advance',
+    'drag a man to place him',
   ]);
   await drainRuntimeErrors(page);
   assertNoRuntimeErrors(errors);
@@ -309,11 +315,10 @@ test('the hold objective panel states the requirement and the clock', async ({ p
     'OBJECTIVE · HOLD THE GROUND',
     'No squad inside!',
     '35s',
-    'SPEARS', '3', 'FOLLOW',
-    'BOWS', '1', 'FOLLOW',
-    'TAB pick squad  ·  1 follow  2 charge  3 hold',
+    'SPEARS \u00d73',
+    'BOWS \u00d71',
     'FORM YOUR LINE',
-    'drag a man to place him · 1 follow 2 charge 3 hold · E sounds the advance',
+    'drag a man to place him',
   ]);
   await drainRuntimeErrors(page);
   assertNoRuntimeErrors(errors);
@@ -475,12 +480,11 @@ test('the break objective panel counts the guards still standing', async ({ page
     'Warband 4   ·   Slain 0/3',
     'OBJECTIVE · BREAK THE POSITION',
     '2 guards standing',
-    'SPEARS', '2', 'FOLLOW',
-    'BOWS', '1', 'FOLLOW',
-    'HORSE', '1', 'FOLLOW',
-    'TAB pick squad  ·  1 follow  2 charge  3 hold',
+    'SPEARS \u00d72',
+    'BOWS \u00d71',
+    'HORSE \u00d71',
     'FORM YOUR LINE',
-    'drag a man to place him · 1 follow 2 charge 3 hold · E sounds the advance',
+    'drag a man to place him',
   ]);
   await drainRuntimeErrors(page);
   assertNoRuntimeErrors(errors);

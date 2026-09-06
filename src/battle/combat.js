@@ -1,10 +1,10 @@
 // What a hit does and how a fight ends: damage application on both sides, arrow spawning,
 // and the win/loss/retreat resolution. Separated from the AI phases that decide to swing
 // and from the tick loop that orders them.
-import { lootFor } from '../data.js?v=r0254bc45c5c3';
-import { len } from '../engine.js?v=r0254bc45c5c3';
-import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r0254bc45c5c3';
-import { objectiveVictory } from './objectives.js?v=r0254bc45c5c3';
+import { lootFor } from '../data.js?v=r16ad0951ca1b';
+import { len } from '../engine.js?v=r16ad0951ca1b';
+import { BOW_SPREAD, CHARGE_EXPOSURE } from './constants.js?v=r16ad0951ca1b';
+import { objectiveVictory } from './objectives.js?v=r16ad0951ca1b';
 
 export function damageEnemy(battle, e, dmg, kx, ky, source) {
   const P = battle.palette;

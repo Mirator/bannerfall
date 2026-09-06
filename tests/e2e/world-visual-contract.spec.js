@@ -14,7 +14,8 @@ test('all world asset families share the art-direction scale and shadow contract
   expect(WORLD_ART.scale.village).toMatchObject({ min: 130, max: 160 });
   expect(WORLD_ART.scale.fort).toMatchObject({ min: 170, max: 210 });
   expect(Object.keys(WORLD_ART.shadow).sort()).toEqual([
-    'direction', 'landmarkAlpha', 'mountainAlpha', 'smallAlpha', 'terrainAlpha', 'treeAlpha',
+    'direction', 'landmarkAlpha', 'landmarkCore', 'mountainAlpha', 'smallAlpha',
+    'terrainAlpha', 'treeAlpha',
   ]);
 
   const here = fileURLToPath(new URL('../../src/world/render-scene.js', import.meta.url));

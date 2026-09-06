@@ -2,42 +2,44 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=r0254bc45c5c3';
-import { perkMods } from './progression.js?v=r0254bc45c5c3';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r0254bc45c5c3';
-import { SpatialGrid } from './battle/spatial-index.js?v=r0254bc45c5c3';
-import { ACTIONS } from './input-actions.js?v=r0254bc45c5c3';
+} from './data.js?v=r16ad0951ca1b';
+import { perkMods } from './progression.js?v=r16ad0951ca1b';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r16ad0951ca1b';
+import { SpatialGrid } from './battle/spatial-index.js?v=r16ad0951ca1b';
+import { ACTIONS } from './input-actions.js?v=r16ad0951ca1b';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
-  DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
-} from './battle/constants.js?v=r0254bc45c5c3';
+  DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T, FIELD_ART, fieldGround, SCATTER, CLEAN_R, ORDER_SHOW_T,
+} from './battle/constants.js?v=r16ad0951ca1b';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
-  hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=r0254bc45c5c3';
-import { drawScene, drawProps } from './battle/render-scene.js?v=r0254bc45c5c3';
+  hasLineOfSight as losCheck, terrainRangeMulAt as terrainRangeMul, terrainCoverAt as terrainCover,
+} from './battle/terrain.js?v=r16ad0951ca1b';
+import { commandUnlocked, NO_LESSON } from './tutorial.js?v=r16ad0951ca1b';
+import { groundTile } from './lighting.js?v=r16ad0951ca1b';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r16ad0951ca1b';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=r0254bc45c5c3';
+} from './battle/separation.js?v=r16ad0951ca1b';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=r0254bc45c5c3';
+} from './battle/ai-phases.js?v=r16ad0951ca1b';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=r0254bc45c5c3';
+} from './battle/combat.js?v=r16ad0951ca1b';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=r0254bc45c5c3';
+} from './battle/objectives.js?v=r16ad0951ca1b';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
   placeEnemyDeployment as placeEnemyLine,
-} from './battle/enemy-command.js?v=r0254bc45c5c3';
+} from './battle/enemy-command.js?v=r16ad0951ca1b';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -46,6 +48,32 @@ function roundedPath(x, y, w, h, r) {
   p.lineTo(x + r, y + h); p.quadraticCurveTo(x, y + h, x, y + h - r);
   p.lineTo(x, y + r); p.quadraticCurveTo(x, y, x + r, y); p.closePath();
   return p;
+}
+
+// Prop kinds that may be removed from a tactical clean zone. Everything absent from this
+// set is terrain, a structure or a crossing — things the player reads to make a decision,
+// which must look the same wherever they happen to fall.
+const CLEARABLE_PROPS = new Set(['tuft', 'pebbles', 'bones', 'log', 'stump', 'boulder', 'crops', 'reeds']);
+
+function clearTacticalGround(battle, enemyCx, enemyCy) {
+  const zones = [
+    { x: battle.hero.x, y: battle.hero.y, r: CLEAN_R.deploy },
+    { x: enemyCx, y: enemyCy, r: CLEAN_R.deploy },
+    { x: (battle.hero.x + enemyCx) / 2, y: (battle.hero.y + enemyCy) / 2, r: CLEAN_R.contact },
+  ];
+  const o = battle.objective;
+  if (o && o.x != null) zones.push({ x: o.x, y: o.y, r: (o.r || 0) + CLEAN_R.objective });
+  for (const target of battle.objectiveTargets || []) {
+    zones.push({ x: target.x, y: target.y, r: CLEAN_R.objective });
+  }
+  for (const p of battle.props) {
+    if (p.kind === 'bridgeSpan' || p.kind === 'ford') zones.push({ x: p.x, y: p.y, r: CLEAN_R.crossing });
+  }
+  battle.props = battle.props.filter(p => {
+    if (!CLEARABLE_PROPS.has(p.kind)) return true;
+    for (const z of zones) if (dist2(p.x, p.y, z.x, z.y) < z.r * z.r) return false;
+    return true;
+  });
 }
 
 export class Battle {
@@ -90,11 +118,27 @@ export class Battle {
     // `this.command` remains the all-squads aggregate that the QA and input-action
     // contracts assert on; a per-squad order only ever narrows what it describes.
     this.squads = Object.create(null);
-    for (const type of SQUAD_TYPES) this.squads[type] = { stance: 'follow', holdX: null, holdY: null };
+    // `orderT` counts down after an order lands: the HUD shows a squad's stance while it
+    // is fresh and for the squad the number keys currently reach, instead of keeping a
+    // permanent stance column for every squad (Plan 049).
+    for (const type of SQUAD_TYPES) this.squads[type] = { stance: 'follow', holdX: null, holdY: null, orderT: 0 };
     this.selectedSquad = null;   // null = the whole warband
 
     this.command = 'follow';
     this.commandFlash = { text: '', t: 0 };
+    // Plan 049: how long the other side's commitment stays marked on the field. Written by
+    // the enemy commander (enemy-command.js) and decayed in the tick pipeline below;
+    // render-scene.js's drawFocus only ever READS it.
+    this.enemyAlertT = 0;
+    // Plan 049: which commands this fight offers and which one it is teaching. Read-only
+    // input, derived by the campaign from its own battle count; Battle never writes it back.
+    this.lesson = setup.lesson || NO_LESSON;
+    this.lessonUsed = false;
+    this.everPlaced = false;   // has the player dragged a body during this deployment?
+    this.dragBlocked = false;  // the drag is over ground no body can stand on
+    // Which squads had a body last tick, so the tick that empties one can say so exactly
+    // once. Built after the roster below spawns, in the same constructor.
+    this._squadHad = Object.create(null);
     this.projectiles = [];
     this.time = 0;
     this._allUnits = [];
@@ -151,17 +195,18 @@ export class Battle {
     // AGENTS.md's battlefield section for why the briefless path is a normal, supported case).
     buildTerrain(this, setup.field);
     const fxRng = this.fxRng;
-    // ground interest everywhere: grass tufts + pebble scatters so no region reads as a
-    // flat colored rectangle (the critics' "battle void") — non-colliding, drawn under units
-    // scatter counts are derived from area, not fixed, so density (props per square unit)
-    // stays constant as the field size changes rather than the field reading sparser
-    // or denser than the original 1250x880 tuning as it grows.
+    // Ground interest everywhere: grass tufts + pebble scatters so no region reads as a
+    // flat coloured rectangle (the critics' "battle void") — non-colliding, drawn under
+    // units. Counts are derived from area, not fixed, so density stays constant as the
+    // field grows. Plan 049 moved every divisor into SCATTER and thinned them ~40%: the
+    // void was real, but so was the opposite failure, where eighty small marks compete for
+    // attention with the eight things the player is actually reading.
     const area = this.W * this.H;
-    const tuftCount = Math.round(area / 42_000);
+    const tuftCount = Math.round(area / SCATTER.tuft);
     for (let i = 0; i < tuftCount; i++) {
       this.props.push({ kind: 'tuft', x: 60 + fxRng() * (this.W - 120), y: 60 + fxRng() * (this.H - 120), s: 5 + fxRng() * 4, rot: fxRng() * 0.8 - 0.4 });
     }
-    const pebbleCount = Math.round(area / 110_000);
+    const pebbleCount = Math.round(area / SCATTER.pebbles);
     for (let i = 0; i < pebbleCount; i++) {
       this.props.push({ kind: 'pebbles', x: 80 + fxRng() * (this.W - 160), y: 80 + fxRng() * (this.H - 160), s: 3 + fxRng() * 3, rot: fxRng() * TAU });
     }
@@ -186,6 +231,13 @@ export class Battle {
     // built once the obstacle field above is final, so placement scans see the real
     // terrain. Elimination fights (no descriptor) build null state and cost nothing.
     buildObjectiveState(this);
+    // Plan 049: tactical clean zones. Decoration is stripped from the ground the player
+    // deploys on, fights over and decides at — both lines, the objective, every crossing,
+    // and the contact point between the two. Runs HERE because it needs the objective,
+    // which needs the final obstacle field. Gameplay-critical props (terrain, structures,
+    // crossings) are never touched: what goes is ground interest that happens to sit where
+    // the player is trying to read a formation.
+    clearTacticalGround(this, enemyCx, enemyCy);
     // Stronghold reserve waves (Entrenched holds) — plain data until due.
     this.pendingWaves = setup.waves && setup.waves.length
       ? setup.waves.map(w => ({ at: w.at, comp: [...w.comp] })) : null;
@@ -199,10 +251,10 @@ export class Battle {
     // after this point: a guard is a structure and does not move, so those must stay fixed.
     this._objectiveEngageScratch = { x: 0, y: 0, vx: 0, vy: 0, isObjective: true, objRef: null, d: { radius: 0 } };
     this.blotches = [];
-    const blotchCount = Math.round(area / 50_000);
+    const blotchCount = Math.round(area / SCATTER.blotch);
     for (let i = 0; i < blotchCount; i++) {
       const pts = [];
-      const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 16 + fxRng() * 42;
+      const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 22 + fxRng() * 48;
       const n = 5 + (fxRng() * 3 | 0);
       for (let j = 0; j < n; j++) {
         const a = j / n * TAU;
@@ -212,7 +264,7 @@ export class Battle {
     }
     // large second-tone terrain regions: the ground is a place, not a colored rectangle
     this.regions = [];
-    const regionCount = Math.round(area / 275_000);
+    const regionCount = Math.round(area / SCATTER.region);
     for (let i = 0; i < regionCount; i++) {
       const pts = [];
       const cx = fxRng() * this.W, cy = fxRng() * this.H, s = 220 + fxRng() * 280;
@@ -271,6 +323,16 @@ export class Battle {
         tileCanvas.width = wx1 - wx0; tileCanvas.height = wy1 - wy0;
         const tileCtx = tileCanvas.getContext('2d');
         tileCtx.translate(-wx0, -wy0);
+        // Soil texture is baked in with the props, not painted per frame. Filling a Path2D
+        // with a repeating CanvasPattern over the whole island cost ~7 ms per frame in the
+        // software rasterizer CI runs on — it belongs in the layer that is drawn once.
+        const fieldArt = FIELD_ART[this.biome] || FIELD_ART.rose;
+        tileCtx.save();
+        tileCtx.globalAlpha = fieldArt.texture;
+        tileCtx.fillStyle = tileCtx.createPattern(
+          groundTile(this.biome, fieldGround(this.palette, this.biome)), 'repeat');
+        tileCtx.fill(this._staticPaths.islandGround);
+        tileCtx.restore();
         drawProps(this, tileCtx, false);
         this._staticTiles.push({ canvas: tileCanvas, wx: wx0, wy: wy0, ww: tileCanvas.width, wh: tileCanvas.height });
       }
@@ -300,6 +362,7 @@ export class Battle {
     });
     this.totalEnemies = this.enemies.length;
     this.startTroops = this.troops.length;
+    for (const type of SQUAD_TYPES) this._squadHad[type] = this.troops.some(t => t.type === type);
     // Plan 027: the other side gets squads and a commander, built from the same battle seed
     // so nothing about it is persisted — a battle is not resumable and the commander is
     // reconstructible, exactly like simRng/fxRng. Its RNG stream is separate from simRng, so
@@ -470,6 +533,7 @@ export class Battle {
 
   issueCommand(cmd, squadType = null) {
     const P = this.palette;
+    if (cmd === this.lesson.teach) this.lessonUsed = true;
     // An order aimed at a squad with nobody left in it is a misfire, not a command. It used
     // to set a stance on zero troops while still flashing HOLD and sounding the horn, so the
     // player believed they had commanded an army they no longer had.
@@ -483,7 +547,7 @@ export class Battle {
     // Re-issuing a pre-fight order acknowledges the choice; live repeats are no-ops
     // except for HOLD, which re-anchors the line.
     if (!preDeploy && cmd !== 'hold' && targets.every(type => this.squads[type].stance === cmd)) return;
-    for (const type of targets) this.squads[type].stance = cmd;
+    for (const type of targets) { this.squads[type].stance = cmd; this.squads[type].orderT = ORDER_SHOW_T; }
     this.command = this.aggregateStance();
     const sfx = this.game.sfx;
     if (cmd === 'charge') { sfx.horn(196); this.commandFlash = { text: 'CHARGE!', t: 0.9 }; }
@@ -497,10 +561,21 @@ export class Battle {
       // Each squad anchors its own banner where the commander stood when it was ordered.
       for (const type of targets) { this.squads[type].holdX = this.hero.x; this.squads[type].holdY = this.hero.y; }
     }
+    // Plan 049: the three orders must not feel the same. They used to share one cream ring
+    // per body, which made CHARGE — the order the whole fight turns on — land exactly as
+    // softly as re-issuing FOLLOW. Charge is the loudest thing a player can do, so it gets
+    // the widest ring, dust off the back foot and a shove of the camera; HOLD reads as
+    // setting rather than launching, tighter and in the colour the HUD already uses for a
+    // braced line; FOLLOW stays the quiet acknowledgement it was.
+    const fx = cmd === 'charge' ? { r: 30, color: P.hero, life: 0.42, width: 3, dust: 4 }
+      : cmd === 'hold' ? { r: 13, color: P.hp, life: 0.3, width: 3, dust: 0 }
+        : { r: 16, color: P.cream, life: 0.3, width: 2, dust: 0 };
     for (const t of this.troops) {
       if (squadType && t.type !== squadType) continue;
-      this.particles.ring(t.x, t.y, 16, P.cream, 0.3, 2);
+      this.particles.ring(t.x, t.y, fx.r, fx.color, fx.life, fx.width);
+      if (fx.dust) this.particles.dust(t.x, t.y + 6, P.groundShade, fx.dust, this.fxRng);
     }
+    if (cmd === 'charge') this.game.camera.shake(3.5, 0.22);
   }
 
   nearestEnemy(x, y, maxR = 1e9) {
@@ -551,6 +626,7 @@ export class Battle {
     if (this.state === 'deploy') {
       this.updateDeployPhase(dt);
       if (this.commandFlash.t > 0) this.commandFlash.t -= dt;
+      if (this.enemyAlertT > 0) this.enemyAlertT -= dt;
       // The camera holds still while a body is being dragged: the fit-to-action camera
       // follows the dragged body, which shifts toWorld(cursor) next frame and closes a
       // feedback loop (measured 1.4-8.7x over-travel before the clamps arrest it). Frozen,
@@ -604,7 +680,19 @@ export class Battle {
       if (dist2(mw.x, mw.y, this.hero.x, this.hero.y) < bd) best = this.hero;
       this.dragUnit = best;
     }
-    if (!inp.mouse.down) this.dragUnit = null;
+    if (!inp.mouse.down) {
+      // Plan 049: the drop is the single most repeated interaction in the game and it used
+      // to produce nothing at all — the body simply stopped following the cursor. A puff of
+      // dust, a ring at the boots and a short click say "that man is placed there".
+      if (this.dragUnit) {
+        const P2 = this.palette;
+        this.particles.dust(this.dragUnit.x, this.dragUnit.y + 6, P2.groundShade, 4, this.fxRng);
+        this.particles.ring(this.dragUnit.x, this.dragUnit.y + 2, 15, P2.cream, 0.24, 2);
+        this.game.sfx.play('uiMove');
+      }
+      this.dragUnit = null;
+      this.dragBlocked = false;
+    }
     if (this.dragUnit) {
       const p = this.clampToDeployZone(mw.x, mw.y);
       // Plan 034: never place a body inside a collider. The river wall is the sharp case —
@@ -621,7 +709,9 @@ export class Battle {
       if (!blocked) {
         this.dragUnit.x = p.x; this.dragUnit.y = p.y;
         this.dragUnit.vx = 0; this.dragUnit.vy = 0;
+        this.everPlaced = true;
       }
+      this.dragBlocked = blocked;
     }
     if (this.deployArmT <= 0 && inp.pressedAction(ACTIONS.CONFIRM)) this.confirmDeploy();
   }
@@ -713,6 +803,7 @@ export class Battle {
     this._enemyGrid.rebuild(this.enemies);
     this.updateProjectilePhase(dt, h);
     this.updateStalematePhase();
+    this.updateSquadLossPhase();
     // Milestone 025 Slice C: objective advance sits between stalemate and result so
     // resolveBattleResult() — the single terminal decision point — always judges
     // this tick's objective status.
@@ -723,6 +814,11 @@ export class Battle {
 
   updatePresentationPhase(dt) {
     if (this.commandFlash.t > 0) this.commandFlash.t -= dt;
+    if (this.enemyAlertT > 0) this.enemyAlertT -= dt;
+    for (const type of SQUAD_TYPES) {
+      const squad = this.squads[type];
+      if (squad.orderT > 0) squad.orderT -= dt;
+    }
     this.updateCamera(dt);
     this.particles.update(dt);
   }
@@ -735,17 +831,21 @@ export class Battle {
       if (p.t >= p.T) {
         const hx = p.tx, hy = p.ty;
         this.particles.dust(hx, hy, P.groundShade, 1, this.fxRng);
+        // Plan 049: the trees blunt what lands under them. Sampled where the shaft actually
+        // lands rather than per shooter, which is a handful of samples a second even in a
+        // large fight, and it means cover is a property of the ground the TARGET stands on.
+        const cover = this.terrainCoverAt(hx, hy);
         if (p.friendly) {
           const e = this.nearestEnemy(hx, hy, 16);
           // Plan 029: the shooter's declared counter is resolved against the body the
           // arrow actually found, not the one it was aimed at.
-          if (e) this.damageEnemy(e, arrowDamage(this, p, e.type), 0, 0, 'troop');
+          if (e) this.damageEnemy(e, arrowDamage(this, p, e.type) * cover, 0, 0, 'troop');
         } else if (dist2(hx, hy, h.x, h.y) < 16 * 16 && h.iframesT <= 0) {
-          this.damageFriendly(h, true, p.dmg, { x: hx, y: hy, type: p.srcType });
+          this.damageFriendly(h, true, p.dmg * cover, { x: hx, y: hy, type: p.srcType });
         } else {
           let hit = null, bd = 16 * 16;
           for (const t of this.troops) { const dd = dist2(hx, hy, t.x, t.y); if (dd < bd) { bd = dd; hit = t; } }
-          if (hit) this.damageFriendly(hit, false, p.dmg);
+          if (hit) this.damageFriendly(hit, false, p.dmg * cover);
         }
         this.projectiles.splice(i, 1);
       }
@@ -771,13 +871,21 @@ export class Battle {
     this.game.invalidate();
   }
 
+  // Plan 049: the onboarding gate lives HERE, on the keys, and not inside issueCommand.
+  // A command the campaign has not taught yet is absent for the PLAYER — the key does
+  // nothing and the HUD never mentions it, so nobody is looking at a control wondering what
+  // it would do. It is deliberately not a gate on the command API itself: the AI, the
+  // balance sweep and the legacy QA runner all call issueCommand directly, and a battle
+  // that silently refused their orders would change what those measure rather than what a
+  // new player is taught. A fight built without a lesson unlocks everything anyway.
   updateCommandPhase(inp) {
-    if (inp.pressedAction(ACTIONS.SQUAD_CYCLE)) this.cycleSquad();
+    const lesson = this.lesson;
+    if (lesson.unlocked.length && inp.pressedAction(ACTIONS.SQUAD_CYCLE)) this.cycleSquad();
     // A selected squad narrows the order; with ALL selected these behave exactly as
     // before, which is what the legacy QA and input-action contracts assert.
-    if (inp.pressedAction(ACTIONS.COMMAND_FOLLOW)) this.issueCommand('follow', this.selectedSquad);
-    if (inp.pressedAction(ACTIONS.COMMAND_CHARGE)) this.issueCommand('charge', this.selectedSquad);
-    if (inp.pressedAction(ACTIONS.COMMAND_HOLD)) this.issueCommand('hold', this.selectedSquad);
+    if (commandUnlocked(lesson, 'follow') && inp.pressedAction(ACTIONS.COMMAND_FOLLOW)) this.issueCommand('follow', this.selectedSquad);
+    if (commandUnlocked(lesson, 'charge') && inp.pressedAction(ACTIONS.COMMAND_CHARGE)) this.issueCommand('charge', this.selectedSquad);
+    if (commandUnlocked(lesson, 'hold') && inp.pressedAction(ACTIONS.COMMAND_HOLD)) this.issueCommand('hold', this.selectedSquad);
   }
 
   // Fit-to-action camera: frame hero + all living units, clamp inside the arena.
@@ -896,6 +1004,22 @@ export class Battle {
     assignSlotsForEnemies(this);
   }
 
+  // Plan 049, effect priority: losing a whole squad is a bigger event than losing a man, and
+  // it used to be indistinguishable — the last body of a line fell with the same small
+  // effect as the first, and the roster row simply disappeared. One cue, once, per squad.
+  updateSquadLossPhase() {
+    for (const type of SQUAD_TYPES) {
+      const had = this._squadHad[type];
+      const alive = this.troops.some(t => t.type === type);
+      if (had && !alive) {
+        this.commandFlash = { text: `${SQUAD_LABELS[type]} BROKEN`, t: 1.1 };
+        this.game.sfx.horn(110);
+        this.game.camera.shake(4, 0.3);
+      }
+      this._squadHad[type] = alive;
+    }
+  }
+
   updateStalematePhase() {
     stalematePhase(this);
   }
@@ -951,8 +1075,18 @@ export class Battle {
   // Terrain queries live in battle/terrain.js; both stay methods because ai-phases.js calls
   // them off the instance every tick per unit, and world-battle-seams-style tests reach
   // named instance methods rather than the module functions directly (AGENTS.md).
-  terrainSpeedAt(x, y) {
-    return terrainSpeed(this, x, y);
+  terrainSpeedAt(x, y, mounted = false) {
+    return terrainSpeed(this, x, y, mounted);
+  }
+
+  // Plan 049: high ground lengthens a bow's reach; the trees blunt what lands under them.
+  // Delegating seams like the speed query above, for the same reason.
+  terrainRangeMulAt(x, y) {
+    return terrainRangeMul(this, x, y);
+  }
+
+  terrainCoverAt(x, y) {
+    return terrainCover(this, x, y);
   }
 
   crossingWaypoint(x, y, tx, ty) {

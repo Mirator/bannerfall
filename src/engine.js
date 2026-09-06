@@ -1,6 +1,7 @@
 // Shared engine: math, RNG, input, camera, particles, flat-shaded drawing helpers.
 // Audio lives in src/audio.js and imports from here; never the other way round.
-import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r0254bc45c5c3';
+import { ACTIONS, DEFAULT_BINDINGS } from './input-actions.js?v=r16ad0951ca1b';
+import { LIGHT, mix, shadowTint, rimTint } from './lighting.js?v=r16ad0951ca1b';
 
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -294,16 +295,20 @@ export function shade(hex, f) {
 }
 
 // ---------------------------------------------------------------- Flat-shaded drawing helpers
-// One consistent global light direction for every cast shadow in the game (down-right, matches
-// the old fixed offset's angle) — Thronefall reads readable because every shadow leans one way.
-const LIGHT_ANGLE = Math.atan2(0.16, 0.30);
+// One consistent global light direction for every cast shadow in the game (down-right, away
+// from the up-left sun declared in `lighting.js`) — Thronefall reads readable because every
+// shadow leans one way. The angle lives there so the grading and the shapes cannot disagree.
+const LIGHT_ANGLE = LIGHT.angle;
 const LIGHT_COS = Math.cos(LIGHT_ANGLE), LIGHT_SIN = Math.sin(LIGHT_ANGLE);
 
-// Hard-edged cast shadow for a "standing" object of given height: a flat ellipse stretched away
-// from the object along the shared light direction, growing with height, rather than a soft
-// centered contact blob.
-export function shadow(ctx, x, y, r, h, color, alpha = 1) {
-  ctx.fillStyle = color;
+// Cast shadow for a "standing" object of given height: a flat ellipse stretched away from the
+// object along the shared light direction, growing with height, rather than a soft centered
+// contact blob. The caller's colour is pulled toward the shared cool shadow tone — a shadow
+// that is merely a darker copy of the ground is the clearest "flat vector art" tell there is.
+// `core` adds a second, tighter ellipse right under the object: real contact occlusion, paid
+// for only by the handful of landmark-scale things that ask for it.
+export function shadow(ctx, x, y, r, h, color, alpha = 1, core = 0) {
+  ctx.fillStyle = shadowTint(color);
   const len = h * 0.55;
   ctx.save();
   ctx.globalAlpha *= alpha;
@@ -313,22 +318,58 @@ export function shadow(ctx, x, y, r, h, color, alpha = 1) {
   ctx.ellipse(0, 0, r * 1.05 + len * 0.62, r * 0.48 + h * 0.06, 0, 0, TAU);
   ctx.fill();
   ctx.restore();
-}
-
-// Thronefall-style two-tone triangle tree (stacked)
-export function tree(ctx, x, y, s, light, dark, trunk, shadowAlpha = 1) {
-  shadow(ctx, x, y, s * 0.5, s * 1.3, trunk, shadowAlpha);
-  for (let i = 0; i < 2; i++) {
-    const yy = y - i * s * 0.55, ss = s * (1 - i * 0.28);
-    ctx.fillStyle = dark;
-    ctx.beginPath(); ctx.moveTo(x, yy - ss * 1.15); ctx.lineTo(x + ss * 0.62, yy); ctx.lineTo(x, yy + ss * 0.1); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = light;
-    ctx.beginPath(); ctx.moveTo(x, yy - ss * 1.15); ctx.lineTo(x - ss * 0.62, yy); ctx.lineTo(x, yy + ss * 0.1); ctx.closePath(); ctx.fill();
+  if (core > 0) {
+    ctx.save();
+    ctx.globalAlpha *= alpha * core;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 0.72, r * 0.3 + h * 0.03, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   }
 }
 
-// Two-tone rock
-export function rock(ctx, x, y, s, light, dark, shadowC, rot = 0.3, shadowAlpha = 1) {
+// Flat-shaded conifer: a three-tier silhouette with a trunk, a sunlit left face and a warm
+// rim along the lit edge. Every tier of a face lives in ONE path — `beginPath` is what the
+// structural render budgets count, and subpaths are free — so this draws a richer tree in
+// four paths where the old two-tone pair of cones took five.
+export function tree(ctx, x, y, s, light, dark, trunk, shadowAlpha = 1, key = LIGHT.key) {
+  shadow(ctx, x, y, s * 0.5, s * 1.3, trunk, shadowAlpha);
+  // trunk: a stub of bark under the canopy, so the tree stands on the ground plane
+  ctx.fillStyle = mix(dark, LIGHT.cool, 0.25);
+  ctx.fillRect(x - s * 0.09, y - s * 0.1, s * 0.18, s * 0.3);
+  const tiers = [[0, 1], [0.52, 0.76], [0.92, 0.52]];
+  // shaded half — the whole canopy in one path
+  ctx.fillStyle = dark;
+  ctx.beginPath();
+  for (const [lift, k] of tiers) {
+    const yy = y - lift * s, ss = s * k;
+    ctx.moveTo(x, yy - ss * 1.15); ctx.lineTo(x + ss * 0.62, yy); ctx.lineTo(x, yy + ss * 0.12);
+    ctx.closePath();
+  }
+  ctx.fill();
+  // sunlit half
+  ctx.fillStyle = light;
+  ctx.beginPath();
+  for (const [lift, k] of tiers) {
+    const yy = y - lift * s, ss = s * k;
+    ctx.moveTo(x, yy - ss * 1.15); ctx.lineTo(x - ss * 0.62, yy); ctx.lineTo(x, yy + ss * 0.12);
+    ctx.closePath();
+  }
+  ctx.fill();
+  // rim: the sun catches the upper-left edge of every tier
+  ctx.strokeStyle = rimTint(light, key);
+  ctx.lineWidth = Math.max(1, s * 0.075);
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (const [lift, k] of tiers) {
+    const yy = y - lift * s, ss = s * k;
+    ctx.moveTo(x - ss * 0.62, yy); ctx.lineTo(x, yy - ss * 1.15);
+  }
+  ctx.stroke();
+}
+
+// Flat-shaded boulder: shaded body, a sunlit top facet and a warm rim on the lit edge.
+export function rock(ctx, x, y, s, light, dark, shadowC, rot = 0.3, shadowAlpha = 1, key = LIGHT.key) {
   shadow(ctx, x, y + s * 0.2, s * 0.9, s * 0.8, shadowC, shadowAlpha);
   const pts = [];
   for (let i = 0; i < 6; i++) {
@@ -336,38 +377,54 @@ export function rock(ctx, x, y, s, light, dark, shadowC, rot = 0.3, shadowAlpha 
     const r = s * (0.75 + 0.3 * Math.sin(i * 2.7));
     pts.push([x + Math.cos(a) * r, y + Math.sin(a) * r * 0.72 - s * 0.3]);
   }
-  ctx.fillStyle = dark;
+  ctx.fillStyle = mix(dark, LIGHT.cool, 0.22);
   ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
   for (const p of pts) ctx.lineTo(p[0], p[1]);
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = light;
   ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); ctx.lineTo(pts[1][0], pts[1][1]); ctx.lineTo(pts[2][0], pts[2][1]);
   ctx.lineTo(x, y - s * 0.55); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = rimTint(light, key);
+  ctx.lineWidth = Math.max(1, s * 0.09);
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(pts[2][0], pts[2][1]); ctx.lineTo(x, y - s * 0.55); ctx.lineTo(pts[0][0], pts[0][1]);
+  ctx.stroke();
 }
 
-// Mountain cluster (for world map) — three tones: shadow face, lit face, snow cap.
-// One extra facet is what separates "volumetric rock" from "flat triangle" at a glance.
+// Mountain cluster (for world map) — cool shadow face, warm lit face, snow cap and a sunlit
+// ridge. The extra facets are what separate "volumetric rock" from "flat triangle" at a glance.
 export function mountain(ctx, x, y, s, ink, cream, shadowAlpha = 0.25) {
   // cast shadow first — mountains obey the same up-left light as every other standing object
   ctx.save();
   ctx.globalAlpha *= shadowAlpha;
-  ctx.fillStyle = ink;
+  ctx.fillStyle = shadowTint(ink);
   ctx.beginPath(); ctx.moveTo(x - s * 0.6, y + s * 0.42); ctx.lineTo(x + s * 1.75, y + s * 0.42);
   ctx.lineTo(x + s * 1.15, y + s * 0.62); ctx.lineTo(x - s * 0.4, y + s * 0.62); ctx.closePath(); ctx.fill();
   ctx.restore();
-  // asymmetric apex + a small shadow-side outcrop: a rock formation, not a triangle icon
+  // asymmetric apex + a small shadow-side outcrop: a rock formation, not a triangle icon.
+  // Body and outcrop share one path — subpaths are free, `beginPath` is what is budgeted.
   const ax = x - s * 0.12;
-  ctx.fillStyle = ink;
-  ctx.beginPath(); ctx.moveTo(x - s, y + s * 0.4); ctx.lineTo(ax, y - s); ctx.lineTo(x + s * 1.1, y + s * 0.42); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(x + s * 0.55, y + s * 0.42); ctx.lineTo(x + s * 0.78, y - s * 0.18); ctx.lineTo(x + s * 1.25, y + s * 0.42); ctx.closePath(); ctx.fill();
-  // lit face (toward the global light: down-right) — a mid-tone wedge on the right side
-  ctx.save();
-  ctx.globalAlpha = 0.30;
-  ctx.fillStyle = cream;
-  ctx.beginPath(); ctx.moveTo(ax, y - s); ctx.lineTo(x + s * 1.1, y + s * 0.42); ctx.lineTo(x + s * 0.28, y + s * 0.42); ctx.closePath(); ctx.fill();
-  ctx.restore();
+  ctx.fillStyle = mix(ink, LIGHT.cool, 0.3);
+  ctx.beginPath();
+  ctx.moveTo(x - s, y + s * 0.4); ctx.lineTo(ax, y - s); ctx.lineTo(x + s * 1.1, y + s * 0.42); ctx.closePath();
+  ctx.moveTo(x + s * 0.55, y + s * 0.42); ctx.lineTo(x + s * 0.78, y - s * 0.18); ctx.lineTo(x + s * 1.25, y + s * 0.42); ctx.closePath();
+  ctx.fill();
+  // lit face, toward the sun: a mid-tone wedge climbing the left flank to the apex
+  ctx.fillStyle = mix(ink, cream, 0.26);
+  ctx.beginPath(); ctx.moveTo(ax, y - s); ctx.lineTo(x - s, y + s * 0.4); ctx.lineTo(x - s * 0.16, y + s * 0.41); ctx.closePath(); ctx.fill();
+  // snow: a lit cap and its own shaded facet, so the summit has a form of its own
   ctx.fillStyle = cream;
   ctx.beginPath(); ctx.moveTo(ax, y - s); ctx.lineTo(ax - s * 0.34, y - s * 0.42); ctx.lineTo(ax + 2, y - s * 0.34); ctx.lineTo(ax + s * 0.4, y - s * 0.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = mix(cream, LIGHT.cool, 0.3);
+  ctx.beginPath(); ctx.moveTo(ax, y - s); ctx.lineTo(ax + s * 0.4, y - s * 0.5); ctx.lineTo(ax + s * 0.16, y - s * 0.36); ctx.closePath(); ctx.fill();
+  // sunlit ridge line from apex to the left foot — the one edge the sun rakes
+  ctx.save();
+  ctx.globalAlpha *= 0.55;
+  ctx.strokeStyle = rimTint(cream);
+  ctx.lineWidth = Math.max(1.5, s * 0.022);
+  ctx.beginPath(); ctx.moveTo(ax, y - s); ctx.lineTo(x - s * 0.68, y + s * 0.28); ctx.stroke();
+  ctx.restore();
 }
 
 // Rounded rect

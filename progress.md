@@ -1853,3 +1853,100 @@ for each, which filled CI logs with what look like failures and are not.
 Gate: `npm test` 271 passed, `npm run test:balance` 4 passed, tooling 23 passed, release
 cache verified at `r0254bc45c5c3`.
 
+
+## Plan 048 — one sun for both scenes
+
+Art-direction pass against the Thronefall reference. The gap was light, not detail: both
+scenes painted flat colour on flat colour and cast shadows that were the surface colour a
+little darker. `src/lighting.js` now holds the one sun both scenes read — its direction
+(which `engine.js`'s shadow offsets already derived from), the warm key, the cool tone a
+shadow takes — plus the two shared pieces of machinery: a baked, seamless ground-texture tile
+and a baked screen-grading overlay.
+
+The campaign map's tile carries the ground colour itself, so one fill now does what three
+did: the screen-space ink clear (dead paint — the ground rect overscans a full camera in
+every direction, so no navy was ever visible under it), the ground rect, and a texture layer.
+The battlefield's tile derives from the live biome palette and is baked into the static prop
+layer. `shadow()` pulls its colour toward the cool tone and clamps the result so it can never
+come out brighter than the caller asked — without the clamp the night biome's shadows went
+pale, since its ground shade is darker than the tint. `tree()`, `rock()` and `mountain()`
+gained a lit rim and a cool shade face while drawing FEWER paths, because `beginPath` is what
+the budgets count and a whole canopy fits in one. The battlefield hill stopped being cream
+and became raised ground with a rocky crown.
+
+`beginPath` per 20 frames: world 6480 -> 6840 against a 10000 ceiling; the brief-derived
+river battle 11620 -> 11160 against 13000; the night camp battle 12940 -> 12820 against
+15000. Every battle case fell.
+
+Wall clock had to be argued with. The first version cost the legacy QA runner — the longest
+spec in the gate, closest to the 30 s per-test timeout — over fourteen seconds and turned it
+red. All of it was the grading pass, and the variable was neither the blend mode nor the
+pixel count: a live radial gradient measured 20.3 s against 16.6 s with no grading at all,
+`multiply` 20.0 s, a small bitmap scaled up 19.5 s, a viewport-sized bitmap blitted 1:1
+17.7 s, and a plain flat translucent fillRect 17.1 s. A radial gradient is a square root per
+destination pixel per frame and CI renders in software, so the shipped pass bakes the
+gradient once and blits it. Soil tiles are cached at module level for the same reason: the
+suites construct hundreds of worlds and battles and each was re-baking the same image.
+
+Cost against `main`, one machine: QA runner 15.7 s -> 17.6 s, `npm test` 174 s -> 210 s. One
+extra full-frame paint and one pattern fill in a software rasterizer; not measurable on a
+real GPU, and not hidden.
+
+Two of the twenty-six visual baselines moved past the comparison's tolerance and were
+re-recorded. The other twenty-four are visibly different and still pass: the documented
+tolerance absorbs a low-contrast change spread evenly over a frame, which is worth knowing
+about the instrument — it guards composition and layout, not grading.
+
+Gate: `npm test` 271 passed, tooling 23 passed, release cache verified.
+
+## Plan 049 — read the field
+
+A readability and tactical-clarity pass, driven by a written comparison against Thronefall
+(six asks: less decorative noise, terrain that decides, half the permanent UI, sequential
+command teaching, contrast around the action, feedback on the core interactions).
+
+Decoration is now tiered. `SCATTER` holds every area-per-prop divisor in one place and the
+pure-decoration families are 37-46% thinner; `CLEAN_R` and `clearTacticalGround()` strip the
+removable tiers off both deployment lines, the contact point, the objective and every
+crossing; `DECOR_ALPHA` draws what is left at 0.45-0.8, baked into the static layer so the
+dimming is free. Terrain is deliberately absent from all three.
+
+Terrain got three one-sentence rules, obeyed by both sides: a bow on a hill's SLOPE (the ring
+around the collider, since nobody stands on the disc) reaches 20% further and the apron is
+drawn so the rule is visible; ranged damage under the trees is x0.75, sampled where the shaft
+lands; a mounted man takes another x0.82 there. Overlapping zones take the strongest value,
+not the product — two touching slopes were giving a bow +44%. The balance sweep moved at most
+two points (idle 0, chargeAll +1, split +2, holdLine -1), inside the recorded tolerance, so
+the rules change what a POSITION is worth without moving what an ORDER is worth.
+
+The permanent HUD is a roster now: `SPEARS x4 / BOWS x2`, with a stance only for the squad
+the keys reach or while an order is fresh. The panel is 250x~90 where it was 360x~130, and
+the `TAB pick squad / 1 follow 2 charge 3 hold` legend is gone — it duplicated the deployment
+banner on every frame of every fight. The minimap now draws only where the field is bigger
+than the viewport, gated at unit zoom so a fit-to-action camera cannot make it flicker.
+
+Onboarding teaches one command per battle, derived from `save.battleCount` with no schema
+change — the same rule perk points already follow. Battle 1 offers no commands at all;
+follow, charge and hold arrive one per fight after that. The gate is on the KEYS, not on
+`issueCommand`: the AI, the sweep and the QA runner drive that API directly, and gating it
+turned the camp-raid deadlock fixture red because that fixture issues a held line in what is
+battle 1 for its save.
+
+`drawFocus()` carries the top of the contrast hierarchy on the ground: the field steps back
+while a body is dragged, the picked squad wears a ring, the enemy wears one while their
+commander commits. Placement — the most repeated interaction in the game, which produced no
+feedback whatsoever — gets dust, a ring and a click; the three orders stopped feeling
+identical, with CHARGE the loudest thing a player can do; losing a whole squad now says so.
+
+Not built, and recorded in the plan rather than dropped: authored prototype maps and authored
+tutorial encounters. Every battlefield is sampled from the campaign map around the hero
+(Plan 024), so both would fork the architecture; making the sampled terrain matter is what
+this plan did instead.
+
+`tests/e2e/clarity.spec.js` is new: decoration budgets and clean zones, the three terrain
+rules on both the generated map and a synthetic field, the lesson ladder, and the key gate
+against the still-open command API. Nine battle baselines re-recorded and three HUD copy
+lists updated; the world baselines are untouched.
+
+Gate: `npm test` 278 passed, `npm run test:balance` 4 passed, tooling 23 passed, release
+cache verified.

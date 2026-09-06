@@ -11,14 +11,14 @@
 // It reads no presentation state (never the camera, never a screen-space transform), takes
 // no wall-clock, and draws nothing from `simRng`, so a commander change cannot shift the
 // draw sequence the rest of the battle depends on.
-import { clamp, dist2, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r0254bc45c5c3';
+import { clamp, dist2, makeRng, deriveSeed, RNG_DOMAINS } from '../engine.js?v=r16ad0951ca1b';
 import {
   ENEMY_SQUAD_TYPES, CMD_TICK, CMD_STANDOFF, CMD_ANCHOR_JITTER, CMD_COVER_R, CMD_COVER_PULL,
   CMD_RANK_GAP, CMD_ROW_GAP, CMD_COL_GAP, BLOB_SPREAD, CMD_FLANK_ANGLE,
   CMD_BLOOD_FRAC, CMD_NERVE_MIN, CMD_NERVE_SPAN,
   CMD_FORMED_FRAC, CMD_SLOT_TOL, CMD_FORM_MAX,
   WOLF_ISOLATION_MUL, WOLF_ISOLATION_PAD, ENGAGE_GAP,
-} from './constants.js?v=r0254bc45c5c3';
+} from './constants.js?v=r16ad0951ca1b';
 
 // Which rank of the formed line a type stands in. Only the types that muster appear here;
 // see mustersInLine below for who does and why.
@@ -272,6 +272,10 @@ function decide(battle) {
     // It cannot fire before CMD_TICK, which is why no visual baseline can see it.
     const cry = DOCTRINE_CRY[doctrine];
     battle.commandFlash = { text: cry.text, t: 1.0 };
+    // Plan 049: and the field says it too, for a player watching the line rather than the
+    // banner — a ring under every enemy while the commitment lands. Presentation reads this;
+    // nothing here reads presentation back.
+    battle.enemyAlertT = 1.1;
     battle.game.sfx.horn(cry.horn);
   }
 }
