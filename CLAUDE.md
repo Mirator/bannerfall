@@ -40,6 +40,7 @@ otherwise.
 | Path | Contents |
 | --- | --- |
 | `src/engine.js`, `src/main.js` | fixed-timestep loop, scene switching, input |
+| `src/lighting.js` | the one sun both scenes are lit by: shadow/rim tints, baked ground texture, baked screen grading |
 | `src/world.js`, `src/world/` | campaign map: tick pipeline, party AI, terrain, rendering |
 | `src/battle.js`, `src/battle/` | fight scene: ordered phases, combat, separation, objectives, HUD |
 | `src/region.js` | regional conquest model (ownership, specializations, stronghold power, raid cadence) — pure data, single source |
@@ -89,6 +90,12 @@ replacing a delegator with a direct module call silently disables coverage.
   `CONFIRM` for `CHOICE_ARM_T` after opening (`src/world-screens.js`), because they
   appear unbidden on the tick the aftermath closes. Navigation disarms them. This is
   the guard that makes `E` safe as both the map verb and the confirm key.
+- **One sun, and it is baked.** `src/lighting.js` owns the light both scenes read. Its
+  ground texture and screen grading are baked once and blitted; a live radial gradient there
+  cost the legacy QA suite 3.7s of its 30s timeout, because CI renders in software. Measure
+  `tests/e2e/qa.spec.js`'s wall clock, not only the `beginPath` budgets, before adding
+  anything else that is per-frame and full-screen. And remember `beginPath` is what the
+  budgets count — subpaths are free, so more shape does not have to mean more cost.
 - **Audio must not `console.error`.** No sound before a user gesture, no music
   started on a suspended `AudioContext`, and every file named in `src/audio.js`'s
   manifest must exist — an autoplay violation or a 404 fails every spec that calls

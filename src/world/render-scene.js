@@ -1,18 +1,19 @@
 // Campaign-map scene composition: ground and light grading, terrain, roads and rivers,
 // bridges, settlements and camps, then the actors and HUD on top, then any open modal.
 // `drawScene` is the whole frame — World.draw() delegates to it.
-import { PAL, WORLD } from '../data.js?v=r0254bc45c5c3';
-import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r0254bc45c5c3';
+import { PAL, WORLD } from '../data.js?v=r6d03cd1c99d9';
+import { TAU, shadow, shade, tree, mountain, rrect, rock } from '../engine.js?v=r6d03cd1c99d9';
 import {
   hoverTargetAt, drawHoverPanel, isOverHud, drawBriefPanel, drawAftermathPanel,
   drawSpecPanel, drawPerkPanel, drawSitePanel,
-} from '../world-screens.js?v=r0254bc45c5c3';
+} from '../world-screens.js?v=r6d03cd1c99d9';
 import {
   settlementState, settlementRecord, SPECIALIZATIONS, OWNERSHIP,
   strongholdStateId, STRONGHOLD_POWER_LABELS,
-} from '../region.js?v=r0254bc45c5c3';
-import { drawParty, drawHero, drawHud } from './render-actors.js?v=r0254bc45c5c3';
-import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r0254bc45c5c3';
+} from '../region.js?v=r6d03cd1c99d9';
+import { drawParty, drawHero, drawHud } from './render-actors.js?v=r6d03cd1c99d9';
+import { WORLD_ART, worldRegionAt, worldHudLayout } from './visual-style.js?v=r6d03cd1c99d9';
+import { atmosphere, groundPattern, rimTint } from '../lighting.js?v=r6d03cd1c99d9';
 
 const P = PAL.world;
 
@@ -33,13 +34,24 @@ export function drawScene(world, ctx) {
   } else {
     world.hoverTarget = null;
   }
-  ctx.fillStyle = P.ink;
-  ctx.fillRect(0, 0, cam.w, cam.h);
   cam.apply(ctx);
-  ctx.fillStyle = P.ground;
-  // Camera-safe overscan prevents an empty navy slab at the eastern/western limits on
-  // wide displays. Simulation bounds remain unchanged; this is only backdrop paint.
-  ctx.fillRect(-cam.w, -cam.h, world.W + cam.w * 2, world.H + cam.h * 2);
+  // The ground plane: ONE opaque fill of the whole viewport with the baked soil tile. The
+  // tile carries `P.ground` as its own background, so this is the backdrop clear, the ground
+  // colour and the soil texture in a single pass. It used to be three — a screen-space ink
+  // clear, an overscanned ground rect, and a translucent texture rect over the top — and in
+  // the software rasterizer CI renders with, each full-viewport fill measures about four
+  // milliseconds, which is a third of a campaign-map frame apiece. The ink clear in
+  // particular was painted and then covered every single frame: the ground rect deliberately
+  // overscans a full camera in each direction, so no navy was ever visible under it.
+  if (!world._artFill) {
+    world._artFill = groundPattern(ctx, 'world', {
+      size: WORLD_ART.ground.tile, seed: WORLD_ART.ground.seed,
+      base: P.ground, marks: WORLD_ART.ground.marks,
+    });
+  }
+  const texW = cam.w / cam.zoom, texH = cam.h / cam.zoom;
+  ctx.fillStyle = world._artFill;
+  ctx.fillRect(cam.x - texW / 2 - 2, cam.y - texH / 2 - 2, texW + 4, texH + 4);
   // A slim cartographic edge marks the playable boundary without turning the screen edge
   // into a heavy navy bar when the camera reaches the map limits.
   ctx.strokeStyle = P.ink; ctx.lineWidth = 3; ctx.globalAlpha = 0.22;
@@ -96,6 +108,20 @@ export function drawScene(world, ctx) {
     ctx.globalAlpha = 1; ctx.fillStyle = WORLD_ART.palette.water; ctx.fill(river.water);
     ctx.globalAlpha = 0.18; ctx.fillStyle = WORLD_ART.palette.waterDeep;
     for (const path of river.deepBends) ctx.fill(path);
+    // Depth at the edges, not one flat cyan ribbon: a pale shallow shelf just inside the
+    // waterline, then a thin cool rim ON the waterline where the bank drops away. Both are
+    // strokes of the cached water path, so neither costs a beginPath.
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.globalAlpha = WORLD_ART.rivers.shelfAlpha;
+    ctx.strokeStyle = WORLD_ART.palette.waterLight;
+    ctx.lineWidth = WORLD_ART.rivers.shelfWidth;
+    ctx.stroke(river.water);
+    ctx.globalAlpha = WORLD_ART.rivers.rimAlpha;
+    ctx.strokeStyle = WORLD_ART.palette.waterRim;
+    ctx.lineWidth = WORLD_ART.rivers.rimWidth;
+    ctx.stroke(river.water);
+    ctx.restore();
     ctx.globalAlpha = 0.58; ctx.strokeStyle = WORLD_ART.palette.sand;
     ctx.lineWidth = 7; ctx.lineCap = 'round';
     for (const path of river.sandBanks) ctx.stroke(path);
@@ -235,6 +261,11 @@ export function drawScene(world, ctx) {
 
   // screen-space HUD
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Sun grading: warm key from the sun's corner, cool counter-shade from the opposite one,
+  // and a vignette to settle the frame. Three cached gradients, drawn over the map and its
+  // particles but under every cue and every piece of HUD, so nothing readable is tinted.
+  world._artGrade = world._artGrade || {};
+  atmosphere(ctx, world._artGrade, cam.w, cam.h, WORLD_ART.atmosphere);
   // Plan 023: the frozen-world wash sits OVER the map and its particles but UNDER the
   // cloud vignette, HUD, hover panel and any modal, so HUD text stays fully legible.
   drawFreezeCue(world, ctx, cam);
@@ -384,7 +415,7 @@ export function drawSettlement(world, ctx, s) {
   const town = s.kind === 'town';
   const landmarkScale = town ? WORLD_ART.scale.fort.scale : WORLD_ART.scale.village.scale;
   ctx.translate(s.x, s.y); ctx.scale(landmarkScale, landmarkScale); ctx.translate(-s.x, -s.y);
-  shadow(ctx, s.x, s.y + 12, town ? 70 : 52, town ? 36 : 28, P.groundShade, WORLD_ART.shadow.landmarkAlpha);
+  shadow(ctx, s.x, s.y + 12, town ? 70 : 52, town ? 36 : 28, P.groundShade, WORLD_ART.shadow.landmarkAlpha, WORLD_ART.shadow.landmarkCore);
   const roofColor = town ? '#394B70'
     : s.id === 'ashford' ? '#24569A' : s.id === 'brindle' ? '#326746' : '#D8672B';
   // houses
@@ -400,6 +431,15 @@ export function drawSettlement(world, ctx, s) {
     ctx.fillStyle = shade(roofColor, 0.7);
     ctx.beginPath(); ctx.moveTo(hx, hy - hh - w * 0.55); ctx.lineTo(hx + w / 2 + 3, hy - hh);
     ctx.lineTo(hx + w / 2 + ext, hy - hh - ext * 0.4); ctx.closePath(); ctx.fill();
+    // The sun catches the ridge and the lit eave: one stroke that turns two flat roof
+    // facets into a roof with an edge. Both segments live in one path.
+    ctx.strokeStyle = rimTint(roofColor);
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx - w / 2 - 3, hy - hh); ctx.lineTo(hx, hy - hh - w * 0.55);
+    ctx.moveTo(hx - w / 2, hy - hh); ctx.lineTo(hx + w / 2, hy - hh);
+    ctx.stroke();
     // Tiny amber windows are enough to make each building read as inhabited at map scale.
     ctx.fillStyle = P.accent;
     ctx.fillRect(hx - w * 0.27, hy - hh * 0.55, Math.max(3, w * 0.13), Math.max(3, hh * 0.23));
@@ -601,12 +641,14 @@ export function drawCamp(world, ctx, c, razed) {
   ctx.save();
   const campScale = c.stronghold ? WORLD_ART.scale.fort.scale : WORLD_ART.scale.camp.scale;
   ctx.translate(c.x, c.y); ctx.scale(campScale, campScale); ctx.translate(-c.x, -c.y);
-  shadow(ctx, c.x, c.y + 8, c.stronghold ? 52 : 28, 12, P.groundShade, WORLD_ART.shadow.landmarkAlpha);
+  shadow(ctx, c.x, c.y + 8, c.stronghold ? 52 : 28, 12, P.groundShade, WORLD_ART.shadow.landmarkAlpha, WORLD_ART.shadow.landmarkCore);
   const tent = (tx, ty, s) => {
     ctx.fillStyle = P.enemy;
     ctx.beginPath(); ctx.moveTo(tx - s, ty); ctx.lineTo(tx, ty - s * 1.2); ctx.lineTo(tx + s, ty); ctx.closePath(); ctx.fill();
     ctx.fillStyle = P.ink;
     ctx.beginPath(); ctx.moveTo(tx, ty - s * 1.2); ctx.lineTo(tx + s, ty); ctx.lineTo(tx + s * 0.2, ty); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = rimTint(P.enemy); ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(tx - s, ty); ctx.lineTo(tx, ty - s * 1.2); ctx.stroke();
     // door notch + pennant pole: a POI silhouette, not another tree-cone
     ctx.fillStyle = P.ink;
     ctx.beginPath(); ctx.moveTo(tx - s * 0.28, ty); ctx.lineTo(tx, ty - s * 0.55); ctx.lineTo(tx + s * 0.28, ty); ctx.closePath(); ctx.fill();

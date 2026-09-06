@@ -17,6 +17,7 @@ specific defect or measurement put them there.
 - [Performance budgets](#performance-budgets)
 - [Determinism and RNG domains](#determinism-and-rng-domains)
 - [Visual regression](#visual-regression)
+- [Light and art direction](#light-and-art-direction)
 - [Audio](#audio)
 - [Save schema and persistence](#save-schema-and-persistence)
 - [Campaign lifecycle](#campaign-lifecycle)
@@ -472,6 +473,49 @@ with the suite green. Player-facing STRINGS are gated by
 asserts the complete ordered list per screen. Change a string and its expectation in
 the same commit. Do not answer a copy failure by loosening the list; do not raise
 `maxDiffPixelRatio` to absorb one either.
+
+## Light and art direction
+
+`src/lighting.js` (Plan 048) holds the one sun both scenes are lit by, and imports nothing —
+`engine.js`, both scene renderers and the world's art-direction contract read it, and with no
+bundler an import cycle here would be a real hazard. It owns three things:
+
+- **`LIGHT`** — the sun's direction (`engine.js`'s cast-shadow offsets derive from it, so the
+  shapes and the grading cannot disagree), the warm key, the cool tone a shadow takes, and how
+  far each family is pulled toward those two.
+- **`shadowTint`/`rimTint`/`mix`** — `shadow()` calls `shadowTint` for every cast shadow in the
+  game. It pulls the caller's colour toward the cool tone and then CLAMPS the result so it can
+  never come out brighter than what was asked for. Do not remove the clamp: the night biome's
+  ground shade is darker than the cool tint, and without it every night shadow is a pale blob
+  on dark grass. `rimTint` takes an optional key colour, and the battle scene passes the
+  biome's own lit tone — the night field is lit by a cold moon.
+- **`groundTile`/`groundPattern`/`atmosphere`** — the baked soil texture and the baked screen
+  grading. Both are BAKED, and both caches are deliberate:
+  - Soil tiles are cached at MODULE level, keyed by spec, because the suites construct
+    hundreds of worlds and battles and a per-instance cache re-baked the same image for each.
+    The tile is deterministic from its own local LCG: presentation must never draw on `simRng`
+    or `fxRng`.
+  - The campaign map's tile carries `PAL.world.ground` as its own opaque background, so ONE
+    fill is the backdrop clear, the ground colour and the texture. Do not reintroduce a
+    separate screen-space clear under it — the ground fill overscans a full camera in every
+    direction and the clear was painted and covered every frame.
+  - The battlefield's tile is baked into the static prop tiles in `battle.js`, never painted
+    per frame.
+  - `atmosphere()` bakes its gradient into a VIEWPORT-SIZED bitmap and blits it 1:1. This is
+    measured, not stylistic: a radial gradient costs a square root per destination pixel and
+    CI renders in a software rasterizer, so the live-gradient version cost the legacy QA
+    runner 3.7 s of its 30 s timeout. Plan 048 §3 has the table. Do not replace the blit with
+    a live gradient, a scaled-up small bitmap, or a `multiply` composite without re-running
+    that measurement.
+
+Anything added here is per-frame and full-screen by nature, so it is the most expensive kind
+of change this renderer can take. Measure `tests/e2e/qa.spec.js`'s wall clock before and
+after — it is the spec closest to a timeout — not just the `beginPath` budgets.
+
+`beginPath` is what the structural budgets in `performance.spec.js` count, and SUBPATHS ARE
+FREE. A richer silhouette drawn as one path per face is cheaper than a simpler one drawn as
+four separate paths, which is why the flat-shaded primitives draw a three-tier tree in fewer
+calls than the two-tier one they replaced. Reach for that before reaching for detail.
 
 ## Audio
 

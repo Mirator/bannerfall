@@ -2,42 +2,43 @@
 import {
   BIOMES, UNIT_TYPES, ENEMY_TYPES, HERO, enemyStrength, playerStrength, rankOf, rankMul,
   troopMaxHp,
-} from './data.js?v=r0254bc45c5c3';
-import { perkMods } from './progression.js?v=r0254bc45c5c3';
-import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r0254bc45c5c3';
-import { SpatialGrid } from './battle/spatial-index.js?v=r0254bc45c5c3';
-import { ACTIONS } from './input-actions.js?v=r0254bc45c5c3';
+} from './data.js?v=r6d03cd1c99d9';
+import { perkMods } from './progression.js?v=r6d03cd1c99d9';
+import { TAU, clamp, lerp, dist2, len, makeRng, deriveSeed, RNG_DOMAINS, Particles } from './engine.js?v=r6d03cd1c99d9';
+import { SpatialGrid } from './battle/spatial-index.js?v=r6d03cd1c99d9';
+import { ACTIONS } from './input-actions.js?v=r6d03cd1c99d9';
 import {
   BASE, SQUAD_TYPES, SQUAD_LABELS, FIELD, ENGAGE_GAP, FLANK_GAP,
   BRACE_BONUS, BOW_SPREAD_BRACED, CHARGE_EXPOSURE, CHARGE_RECOVER, CHARGE_SPEED_MUL,
-  DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T,
-} from './battle/constants.js?v=r0254bc45c5c3';
+  DEPLOY_NO_MANS, DEPLOY_PICK_R, DEPLOY_ARM_T, FIELD_ART, fieldGround,
+} from './battle/constants.js?v=r6d03cd1c99d9';
 import {
   buildTerrain, terrainSpeedAt as terrainSpeed, crossingWaypoint as crossingWp,
   hasLineOfSight as losCheck,
-} from './battle/terrain.js?v=r0254bc45c5c3';
-import { drawScene, drawProps } from './battle/render-scene.js?v=r0254bc45c5c3';
+} from './battle/terrain.js?v=r6d03cd1c99d9';
+import { groundTile } from './lighting.js?v=r6d03cd1c99d9';
+import { drawScene, drawProps } from './battle/render-scene.js?v=r6d03cd1c99d9';
 import {
   updateSeparationPhase as separationPhase, getSpatialStats as spatialStats,
-} from './battle/separation.js?v=r0254bc45c5c3';
+} from './battle/separation.js?v=r6d03cd1c99d9';
 import {
   updateHeroPhase as heroPhase, updateTroopPhase as troopPhase,
   updateEnemyPhase as enemyPhase, updateStalematePhase as stalematePhase,
-} from './battle/ai-phases.js?v=r0254bc45c5c3';
+} from './battle/ai-phases.js?v=r6d03cd1c99d9';
 import {
   damageEnemy as applyEnemyDamage, damageFriendly as applyFriendlyDamage,
   fireArrow as spawnArrow, endBattle as finishBattle, resolveBattleResult as resolveResult,
   arrowDamageAgainst as arrowDamage,
-} from './battle/combat.js?v=r0254bc45c5c3';
+} from './battle/combat.js?v=r6d03cd1c99d9';
 import {
   buildObjective as buildObjectiveState, updateObjectivePhase as objectivePhase,
   damageObjective as applyObjectiveDamage,
-} from './battle/objectives.js?v=r0254bc45c5c3';
+} from './battle/objectives.js?v=r6d03cd1c99d9';
 import {
   buildEnemyCommand, updateEnemyCommandPhase as enemyCommandPhase,
   enemyStance as readEnemyStance, assignEnemySlots as assignSlotsForEnemies,
   placeEnemyDeployment as placeEnemyLine,
-} from './battle/enemy-command.js?v=r0254bc45c5c3';
+} from './battle/enemy-command.js?v=r6d03cd1c99d9';
 
 function roundedPath(x, y, w, h, r) {
   const p = new Path2D();
@@ -271,6 +272,16 @@ export class Battle {
         tileCanvas.width = wx1 - wx0; tileCanvas.height = wy1 - wy0;
         const tileCtx = tileCanvas.getContext('2d');
         tileCtx.translate(-wx0, -wy0);
+        // Soil texture is baked in with the props, not painted per frame. Filling a Path2D
+        // with a repeating CanvasPattern over the whole island cost ~7 ms per frame in the
+        // software rasterizer CI runs on — it belongs in the layer that is drawn once.
+        const fieldArt = FIELD_ART[this.biome] || FIELD_ART.rose;
+        tileCtx.save();
+        tileCtx.globalAlpha = fieldArt.texture;
+        tileCtx.fillStyle = tileCtx.createPattern(
+          groundTile(this.biome, fieldGround(this.palette, this.biome)), 'repeat');
+        tileCtx.fill(this._staticPaths.islandGround);
+        tileCtx.restore();
         drawProps(this, tileCtx, false);
         this._staticTiles.push({ canvas: tileCanvas, wx: wx0, wy: wy0, ww: tileCanvas.width, wh: tileCanvas.height });
       }

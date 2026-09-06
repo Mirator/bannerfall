@@ -2,9 +2,44 @@
 // (from step 4 on) the AI phases. Extracted FIRST and depending on nothing but data.js:
 // with no bundler an import cycle is a real hazard, and this module is what prevents one
 // between battle.js and the phase/render modules that need these values.
-import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r0254bc45c5c3';
+import { PAL, UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r6d03cd1c99d9';
 
 export const BASE = Object.freeze(Object.assign({}, PAL.battle));
+
+// Ground texture and screen grading per biome (drawn by src/lighting.js). The texture is
+// one baked, seamless pattern painted over the island in a single Path2D fill, and the
+// grading is three cached gradients — together they cost no beginPath against the battle
+// render budgets in performance.spec.js. Mark colours are DERIVED from the live palette in
+// fieldGround() below, so a biome cannot ship a soil texture that fights its own ground.
+// Only the light itself is authored per biome: the night field is lit by a cold moon, so
+// its key is blue and its counter-shade is the dominant tone, the reverse of a day field.
+export const FIELD_ART = Object.freeze({
+  rose: Object.freeze({ key: 'rose', sun: 0.09, shade: 0.09, vignette: 0.32, texture: 1 }),
+  meadow: Object.freeze({ key: 'meadow', sun: 0.1, shade: 0.08, vignette: 0.3, texture: 1 }),
+  night: Object.freeze({
+    key: 'night', sun: 0.08, shade: 0.14, vignette: 0.46,
+    keyColor: '#A8C0FF', coolColor: '#0D1030',
+    // Half strength: the same marks that read as soil in daylight read as pale soap
+    // bubbles against a dark field, because the eye has far less tonal range to spend there.
+    texture: 0.38,
+  }),
+});
+
+// The soil-mark spec for a field, built from that field's own palette: two broad patches of
+// darker and lighter ground, a scatter of grit, and a sparse dusting of the biome's foliage
+// tone so the bare ground between the props still belongs to the same place.
+export function fieldGround(palette, biome) {
+  return {
+    size: 320,
+    seed: 0x8A11 + biome.length * 977,
+    marks: [
+      { count: 24, r: 40, flat: 0.5, color: palette.groundShade, alpha: 0.18 },
+      { count: 18, r: 28, flat: 0.46, color: palette.cream, alpha: 0.07 },
+      { count: 30, r: 11, flat: 0.42, color: palette.ink, alpha: 0.05 },
+      { count: 20, r: 8, flat: 0.34, color: palette.tree, alpha: 0.07 },
+    ],
+  };
+}
 
 // One squad per unit type, in HUD order. Derived from the unit table so a new unit
 // type can never exist without a squad to command it.

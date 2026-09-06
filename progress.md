@@ -1853,3 +1853,48 @@ for each, which filled CI logs with what look like failures and are not.
 Gate: `npm test` 271 passed, `npm run test:balance` 4 passed, tooling 23 passed, release
 cache verified at `r0254bc45c5c3`.
 
+
+## Plan 048 — one sun for both scenes
+
+Art-direction pass against the Thronefall reference. The gap was light, not detail: both
+scenes painted flat colour on flat colour and cast shadows that were the surface colour a
+little darker. `src/lighting.js` now holds the one sun both scenes read — its direction
+(which `engine.js`'s shadow offsets already derived from), the warm key, the cool tone a
+shadow takes — plus the two shared pieces of machinery: a baked, seamless ground-texture tile
+and a baked screen-grading overlay.
+
+The campaign map's tile carries the ground colour itself, so one fill now does what three
+did: the screen-space ink clear (dead paint — the ground rect overscans a full camera in
+every direction, so no navy was ever visible under it), the ground rect, and a texture layer.
+The battlefield's tile derives from the live biome palette and is baked into the static prop
+layer. `shadow()` pulls its colour toward the cool tone and clamps the result so it can never
+come out brighter than the caller asked — without the clamp the night biome's shadows went
+pale, since its ground shade is darker than the tint. `tree()`, `rock()` and `mountain()`
+gained a lit rim and a cool shade face while drawing FEWER paths, because `beginPath` is what
+the budgets count and a whole canopy fits in one. The battlefield hill stopped being cream
+and became raised ground with a rocky crown.
+
+`beginPath` per 20 frames: world 6480 -> 6840 against a 10000 ceiling; the brief-derived
+river battle 11620 -> 11160 against 13000; the night camp battle 12940 -> 12820 against
+15000. Every battle case fell.
+
+Wall clock had to be argued with. The first version cost the legacy QA runner — the longest
+spec in the gate, closest to the 30 s per-test timeout — over fourteen seconds and turned it
+red. All of it was the grading pass, and the variable was neither the blend mode nor the
+pixel count: a live radial gradient measured 20.3 s against 16.6 s with no grading at all,
+`multiply` 20.0 s, a small bitmap scaled up 19.5 s, a viewport-sized bitmap blitted 1:1
+17.7 s, and a plain flat translucent fillRect 17.1 s. A radial gradient is a square root per
+destination pixel per frame and CI renders in software, so the shipped pass bakes the
+gradient once and blits it. Soil tiles are cached at module level for the same reason: the
+suites construct hundreds of worlds and battles and each was re-baking the same image.
+
+Cost against `main`, one machine: QA runner 15.7 s -> 17.6 s, `npm test` 174 s -> 210 s. One
+extra full-frame paint and one pattern fill in a software rasterizer; not measurable on a
+real GPU, and not hidden.
+
+Two of the twenty-six visual baselines moved past the comparison's tolerance and were
+re-recorded. The other twenty-four are visibly different and still pass: the documented
+tolerance absorbs a low-contrast change spread evenly over a frame, which is worth knowing
+about the instrument — it guards composition and layout, not grading.
+
+Gate: `npm test` 271 passed, tooling 23 passed, release cache verified.

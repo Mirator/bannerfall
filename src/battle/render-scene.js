@@ -1,13 +1,14 @@
 // Battle scene composition: ground, props, the depth-sorted actor pass, HP-bar culling,
 // then the HUD on top. `drawScene` is the whole frame — Battle.draw() delegates to it.
 // `drawProps` is also called once at construction to bake the static prop layer.
-import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r0254bc45c5c3';
-import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r0254bc45c5c3';
-import { stableSortPrefix } from './spatial-index.js?v=r0254bc45c5c3';
-import { SQUAD_TYPES, DEPLOY_NO_MANS } from './constants.js?v=r0254bc45c5c3';
-import { CROSSING_OPEN_HALF } from './terrain.js?v=r0254bc45c5c3';
-import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r0254bc45c5c3';
-import { drawHud } from './hud.js?v=r0254bc45c5c3';
+import { UNIT_TYPES, ENEMY_TYPES } from '../data.js?v=r6d03cd1c99d9';
+import { TAU, clamp, lerp, len, shadow, shade, tree, rock, hpBar, balloon } from '../engine.js?v=r6d03cd1c99d9';
+import { stableSortPrefix } from './spatial-index.js?v=r6d03cd1c99d9';
+import { SQUAD_TYPES, DEPLOY_NO_MANS, FIELD_ART } from './constants.js?v=r6d03cd1c99d9';
+import { atmosphere, mix, rimTint, LIGHT } from '../lighting.js?v=r6d03cd1c99d9';
+import { CROSSING_OPEN_HALF } from './terrain.js?v=r6d03cd1c99d9';
+import { drawTroop, drawEnemy, drawHero } from './render-units.js?v=r6d03cd1c99d9';
+import { drawHud } from './hud.js?v=r6d03cd1c99d9';
 
 // ------------------------------------------------------------- drawing
 
@@ -159,19 +160,26 @@ export function drawScene(battle, ctx) {
   ctx.restore(); // no edge stroke at all: a line across same-biome ground is a seam, not art
   // per-scene light grading: one broad diagonal LIGHT band across the field (the sun falls
   // somewhere) + stepped shade wedges in the far corners — scene lighting, drawn flat
+  // Held deliberately low. These authored wedges used to carry the scene's whole sense of
+  // light on their own; the graded sun pass at the end of the frame now does that, and at
+  // their old strength the two together cut hard diagonal facets across the field.
   ctx.save();
-  ctx.globalAlpha = 0.10;
+  ctx.globalAlpha = 0.05;
   ctx.fillStyle = '#FFF6E0';
   ctx.fill(battle._staticPaths.light);
   ctx.fillStyle = P.ink;
-  ctx.globalAlpha = 0.10;
+  ctx.globalAlpha = 0.06;
   ctx.fill(battle._staticPaths.shadeNear);
-  ctx.globalAlpha = 0.07;
+  ctx.globalAlpha = 0.045;
   ctx.fill(battle._staticPaths.shadeFar);
   ctx.restore();
   // blotches
   ctx.fillStyle = P.groundShade;
   ctx.fill(battle._staticPaths.blotches);
+  // The island's soil texture is baked into the static prop tiles (see battle.js), not
+  // painted here: a full-island pattern fill measured ~7 ms per frame in the software
+  // rasterizer, and it never changes.
+  const fieldArt = FIELD_ART[battle.biome] || FIELD_ART.rose;
   // Plan 024 Phase 6d: the static prop layer is a 2x2 grid of bounded canvases (built once
   // in the Battle constructor), not one arena-sized bitmap. Blit only the tiles the camera
   // can actually see this frame — cheap because there are only ever 4 — using the same
@@ -321,6 +329,12 @@ export function drawScene(battle, ctx) {
 
   // HUD (screen space)
   ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Sun grading: warm key from the sun's corner, cool counter-shade opposite, and a
+  // vignette to settle the frame — the same three cached gradients the campaign map uses,
+  // so both scenes read as one world at one hour. Under the clouds and the HUD, so nothing
+  // the player has to read is tinted. The night field's key is a cold moon instead.
+  battle._artGrade = battle._artGrade || {};
+  atmosphere(ctx, battle._artGrade, battle.game.camera.w, battle.game.camera.h, fieldArt);
   // corner cloud vignette — the same atmosphere motif as the menu, carried into gameplay
   const cw = battle.game.camera.w, ch = battle.game.camera.h;
   ctx.fillStyle = 'rgba(255,246,227,0.92)';
@@ -369,9 +383,11 @@ export function drawCentroidBalloon(battle, ctx, group, icon, ink, paper, lift, 
 export function drawObstacle(battle, ctx, o) {
   const P = battle.palette;
   if (o.kind === 'none') return;
-  if (o.kind === 'tree') tree(ctx, o.x, o.y, o.r * 1.15, P.tree, P.treeShade, P.groundShade);
+  // `P.cream` is the biome's own lit tone, handed on as the rim key: the night field is lit
+  // by a cold moon, and a warm rim there reads as a lighting error rather than a highlight.
+  if (o.kind === 'tree') tree(ctx, o.x, o.y, o.r * 1.15, P.tree, P.treeShade, P.groundShade, 1, P.cream);
   else if (o.kind === 'hill') drawHillTerrain(ctx, o.x, o.y, o.r * 0.7, P);
-  else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot);
+  else rock(ctx, o.x, o.y, o.r, P.rock, P.rockShade, P.groundShade, o.rot, 1, P.cream);
 }
 
 // Plan 024 Phase 6c: a battlefield hill needs to read as TERRAIN units fight around, not a
@@ -393,22 +409,34 @@ function drawHillTerrain(ctx, x, y, s, P) {
   const ax = x - s * 0.12;
   const apex = [ax, y - s], footL = [x - s, y + s * 0.4], footR = [x + s * 1.1, y + s * 0.42];
   const outcropPeak = [x + s * 0.78, y - s * 0.18], outcropL = [x + s * 0.55, y + s * 0.42], outcropR = [x + s * 1.25, y + s * 0.42];
-  // filled rock body
-  ctx.fillStyle = P.rock;
-  ctx.beginPath(); ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(outcropL[0], outcropL[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]); ctx.lineTo(outcropR[0], outcropR[1]); ctx.closePath(); ctx.fill();
-  // sun-side wedge toward the global light (down-right), the ground's own second tone
-  ctx.save();
-  ctx.globalAlpha = 0.55;
-  ctx.fillStyle = P.groundShade;
+  // A hill is RAISED GROUND, so its body is the ground's own colour lifted toward the sun,
+  // not `P.rock`: filled cream, it read as a sand-coloured sticker laid on the grass rather
+  // than as a rise in the field the units are fighting on. Body and outcrop share one path.
+  ctx.fillStyle = mix(P.ground, LIGHT.key, 0.2);
+  ctx.beginPath();
+  ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath();
+  ctx.moveTo(outcropL[0], outcropL[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]); ctx.lineTo(outcropR[0], outcropR[1]); ctx.closePath();
+  ctx.fill();
+  // shade wedge on the face turned away from the sun — a solid computed tone, never alpha
+  ctx.fillStyle = mix(P.groundShade, LIGHT.cool, 0.28);
   ctx.beginPath(); ctx.moveTo(apex[0], apex[1]); ctx.lineTo(footR[0], footR[1]); ctx.lineTo(x + s * 0.28, y + s * 0.42); ctx.closePath(); ctx.fill();
-  ctx.restore();
+  // rocky crown: the one place the bare stone shows through, so the rise still reads as terrain
+  ctx.fillStyle = P.rock;
+  ctx.beginPath();
+  ctx.moveTo(apex[0], apex[1]); ctx.lineTo(ax - s * 0.26, y - s * 0.6); ctx.lineTo(ax + s * 0.1, y - s * 0.52);
+  ctx.lineTo(ax + s * 0.3, y - s * 0.66); ctx.closePath(); ctx.fill();
   // ink rim: outlines the whole silhouette so it holds together as a solid landform
   ctx.strokeStyle = P.ink; ctx.lineWidth = 3; ctx.lineJoin = 'round';
   ctx.beginPath();
   ctx.moveTo(footL[0], footL[1]); ctx.lineTo(apex[0], apex[1]); ctx.lineTo(outcropPeak[0], outcropPeak[1]);
   ctx.lineTo(outcropR[0], outcropR[1]); ctx.lineTo(footR[0], footR[1]); ctx.closePath();
   ctx.stroke();
+  // and the sun rakes the left ridge, the same edge every other standing thing catches it on
+  ctx.save();
+  ctx.globalAlpha *= 0.5;
+  ctx.strokeStyle = rimTint(P.ground); ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(apex[0], apex[1]); ctx.lineTo(x - s * 0.72, y + s * 0.28); ctx.stroke();
+  ctx.restore();
 }
 
 export function drawProps(battle, ctx, dynamicOnly = false) {
